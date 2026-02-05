@@ -16,6 +16,6 @@ versions:
       - Thème sombre type Netflix
       - Page de configuration complète
     targetAbi: 10.11.0.0
-    sourceUrl: https://github.com/peterdu1109/Nouveaut-s--Top-10/releases/download/v1.0.0/JellyfinCarouselPlugin.dll
+    sourceUrl: https://github.com/peterdu1109/MediaCarousel/releases/download/v1.0.0/JellyfinCarouselPlugin.dll
     checksum: TO_BE_GENERATED
     timestamp: 2026-02-05T10:00:00Z

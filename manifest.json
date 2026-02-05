@@ -11,8 +11,8 @@
         "Version": "1.0.0.0",
         "Changelog": "- Version initiale avec intégration aux thèmes natifs Jellyfin\n- Carrousels Nouveautés, Top 10, Continuer à regarder\n- Badges nouveaux épisodes et qualité",
         "TargetAbi": "10.11.0.0",
-        "SourceUrl": "https://github.com/peterdu1109/Nouveaut-s--Top-10/releases/download/v1.0.0/JellyfinCarouselPlugin.dll",
-        "Checksum": "FB714AA1A4098AA2A056F67BEEBEBA8AD",
+        "SourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/v1.0.0/JellyfinCarouselPlugin.zip",
+        "Checksum": "58DB286F7AE9DBCF73CF5477478F54A51",
         "Timestamp": "2026-02-05T10:30:00Z"
       }
     ]
