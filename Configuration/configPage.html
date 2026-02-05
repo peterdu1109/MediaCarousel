@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Configuration - Carousel Layout</title>
+</head>
+<body>
+    <div id="carouselConfigPage" data-role="page" class="page type-interior pluginConfigurationPage" data-require="emby-input,emby-button,emby-checkbox,emby-select">
+        
+        <div data-role="content">
+            <div class="content-primary">
+                <form id="carouselConfigForm">
+                    
+                    <h2>Configuration du Carousel Layout</h2>
+                    
+                    <div class="verticalSection">
+                        <h3>Options générales</h3>
+                        
+                        <div class="checkboxContainer">
+                            <label>
+                                <input is="emby-checkbox" type="checkbox" id="EnableCarouselLayout" />
+                                <span>Activer l'affichage en carrousel</span>
+                            </label>
+                        </div>
+
+                        <div class="checkboxContainer">
+                            <label>
+                                <input is="emby-checkbox" type="checkbox" id="UseDarkTheme" />
+                                <span>Utiliser le thème sombre</span>
+                            </label>
+                        </div>
+
+                        <div class="checkboxContainer">
+                            <label>
+                                <input is="emby-checkbox" type="checkbox" id="EnableHoverAnimations" />
+                                <span>Activer les animations au survol</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="verticalSection">
+                        <h3>Catégories à afficher</h3>
+                        
+                        <div class="checkboxContainer">
+                            <label>
+                                <input is="emby-checkbox" type="checkbox" id="ShowContinueWatching" />
+                                <span>Continuer à regarder</span>
+                            </label>
+                        </div>
+
+                        <div class="checkboxContainer">
+                            <label>
+                                <input is="emby-checkbox" type="checkbox" id="ShowNewReleases" />
+                                <span>Nouveautés</span>
+                            </label>
+                        </div>
+
+                        <div class="checkboxContainer">
+                            <label>
+                                <input is="emby-checkbox" type="checkbox" id="ShowTop10" />
+                                <span>Top 10</span>
+                            </label>
+                        </div>
+
+                        <div class="checkboxContainer">
+                            <label>
+                                <input is="emby-checkbox" type="checkbox" id="ShowRecommended" />
+                                <span>Recommandés pour vous</span>
+                            </label>
+                        </div>
+
+                        <div class="checkboxContainer">
+                            <label>
+                                <input is="emby-checkbox" type="checkbox" id="ShowGenreCategories" />
+                                <span>Catégories par genre</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="verticalSection">
+                        <h3>Badges et indicateurs</h3>
+                        
+                        <div class="checkboxContainer">
+                            <label>
+                                <input is="emby-checkbox" type="checkbox" id="ShowNewEpisodesBadge" />
+                                <span>Badge "NOUVEAUX ÉPISODES"</span>
+                            </label>
+                        </div>
+
+                        <div class="checkboxContainer">
+                            <label>
+                                <input is="emby-checkbox" type="checkbox" id="ShowQualityBadge" />
+                                <span>Badge de qualité (4K, HD)</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="verticalSection">
+                        <h3>Paramètres avancés</h3>
+                        
+                        <div class="inputContainer">
+                            <label for="ItemsPerCarousel">Nombre d'éléments par carrousel (max)</label>
+                            <input is="emby-input" type="number" id="ItemsPerCarousel" min="5" max="50" step="5" />
+                        </div>
+                    </div>
+
+                    <div>
+                        <button is="emby-button" type="submit" class="raised button-submit block">
+                            <span>Sauvegarder</span>
+                        </button>
+                    </div>
+                    
+                </form>
+            </div>
+        </div>
+
+        <script type="text/javascript">
+            var CarouselConfigPage = {
+                pluginId: "a1b2c3d4-e5f6-4789-a1b2-c3d4e5f67890",
+
+                loadConfiguration: function() {
+                    Dashboard.showLoadingMsg();
+
+                    ApiClient.getPluginConfiguration(CarouselConfigPage.pluginId).then(function(config) {
+                        document.querySelector('#EnableCarouselLayout').checked = config.EnableCarouselLayout;
+                        document.querySelector('#UseDarkTheme').checked = config.UseDarkTheme;
+                        document.querySelector('#EnableHoverAnimations').checked = config.EnableHoverAnimations;
+                        document.querySelector('#ShowContinueWatching').checked = config.ShowContinueWatching;
+                        document.querySelector('#ShowNewReleases').checked = config.ShowNewReleases;
+                        document.querySelector('#ShowTop10').checked = config.ShowTop10;
+                        document.querySelector('#ShowRecommended').checked = config.ShowRecommended;
+                        document.querySelector('#ShowGenreCategories').checked = config.ShowGenreCategories;
+                        document.querySelector('#ShowNewEpisodesBadge').checked = config.ShowNewEpisodesBadge;
+                        document.querySelector('#ShowQualityBadge').checked = config.ShowQualityBadge;
+                        document.querySelector('#ItemsPerCarousel').value = config.ItemsPerCarousel;
+
+                        Dashboard.hideLoadingMsg();
+                    });
+                },
+
+                saveConfiguration: function() {
+                    Dashboard.showLoadingMsg();
+
+                    var config = {
+                        EnableCarouselLayout: document.querySelector('#EnableCarouselLayout').checked,
+                        UseDarkTheme: document.querySelector('#UseDarkTheme').checked,
+                        EnableHoverAnimations: document.querySelector('#EnableHoverAnimations').checked,
+                        ShowContinueWatching: document.querySelector('#ShowContinueWatching').checked,
+                        ShowNewReleases: document.querySelector('#ShowNewReleases').checked,
+                        ShowTop10: document.querySelector('#ShowTop10').checked,
+                        ShowRecommended: document.querySelector('#ShowRecommended').checked,
+                        ShowGenreCategories: document.querySelector('#ShowGenreCategories').checked,
+                        ShowNewEpisodesBadge: document.querySelector('#ShowNewEpisodesBadge').checked,
+                        ShowQualityBadge: document.querySelector('#ShowQualityBadge').checked,
+                        ItemsPerCarousel: parseInt(document.querySelector('#ItemsPerCarousel').value)
+                    };
+
+                    ApiClient.updatePluginConfiguration(CarouselConfigPage.pluginId, config).then(function() {
+                        Dashboard.processPluginConfigurationUpdateResult();
+                    });
+                }
+            };
+
+            document.getElementById('carouselConfigForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                CarouselConfigPage.saveConfiguration();
+                return false;
+            });
+
+            document.addEventListener('DOMContentLoaded', function() {
+                CarouselConfigPage.loadConfiguration();
+            });
+        </script>
+    </div>
+</body>
+</html>
