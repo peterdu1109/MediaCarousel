@@ -1,22 +1,25 @@
 <!DOCTYPE html>
 <html lang="fr">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Configuration - Carousel Layout</title>
 </head>
+
 <body>
-    <div id="carouselConfigPage" data-role="page" class="page type-interior pluginConfigurationPage" data-require="emby-input,emby-button,emby-checkbox,emby-select">
-        
+    <div id="carouselConfigPage" data-role="page" class="page type-interior pluginConfigurationPage"
+        data-require="emby-input,emby-button,emby-checkbox,emby-select">
+
         <div data-role="content">
             <div class="content-primary">
                 <form id="carouselConfigForm">
-                    
+
                     <h2>Configuration du Carousel Layout</h2>
-                    
+
                     <div class="verticalSection">
                         <h3>Options générales</h3>
-                        
+
                         <div class="checkboxContainer">
                             <label>
                                 <input is="emby-checkbox" type="checkbox" id="EnableCarouselLayout" />
@@ -24,12 +27,7 @@
                             </label>
                         </div>
 
-                        <div class="checkboxContainer">
-                            <label>
-                                <input is="emby-checkbox" type="checkbox" id="UseDarkTheme" />
-                                <span>Utiliser le thème sombre</span>
-                            </label>
-                        </div>
+
 
                         <div class="checkboxContainer">
                             <label>
@@ -41,7 +39,7 @@
 
                     <div class="verticalSection">
                         <h3>Catégories à afficher</h3>
-                        
+
                         <div class="checkboxContainer">
                             <label>
                                 <input is="emby-checkbox" type="checkbox" id="ShowContinueWatching" />
@@ -80,7 +78,7 @@
 
                     <div class="verticalSection">
                         <h3>Badges et indicateurs</h3>
-                        
+
                         <div class="checkboxContainer">
                             <label>
                                 <input is="emby-checkbox" type="checkbox" id="ShowNewEpisodesBadge" />
@@ -98,7 +96,7 @@
 
                     <div class="verticalSection">
                         <h3>Paramètres avancés</h3>
-                        
+
                         <div class="inputContainer">
                             <label for="ItemsPerCarousel">Nombre d'éléments par carrousel (max)</label>
                             <input is="emby-input" type="number" id="ItemsPerCarousel" min="5" max="50" step="5" />
@@ -110,7 +108,7 @@
                             <span>Sauvegarder</span>
                         </button>
                     </div>
-                    
+
                 </form>
             </div>
         </div>
@@ -119,12 +117,11 @@
             var CarouselConfigPage = {
                 pluginId: "a1b2c3d4-e5f6-4789-a1b2-c3d4e5f67890",
 
-                loadConfiguration: function() {
+                loadConfiguration: function () {
                     Dashboard.showLoadingMsg();
 
-                    ApiClient.getPluginConfiguration(CarouselConfigPage.pluginId).then(function(config) {
+                    ApiClient.getPluginConfiguration(CarouselConfigPage.pluginId).then(function (config) {
                         document.querySelector('#EnableCarouselLayout').checked = config.EnableCarouselLayout;
-                        document.querySelector('#UseDarkTheme').checked = config.UseDarkTheme;
                         document.querySelector('#EnableHoverAnimations').checked = config.EnableHoverAnimations;
                         document.querySelector('#ShowContinueWatching').checked = config.ShowContinueWatching;
                         document.querySelector('#ShowNewReleases').checked = config.ShowNewReleases;
@@ -139,12 +136,11 @@
                     });
                 },
 
-                saveConfiguration: function() {
+                saveConfiguration: function () {
                     Dashboard.showLoadingMsg();
 
                     var config = {
                         EnableCarouselLayout: document.querySelector('#EnableCarouselLayout').checked,
-                        UseDarkTheme: document.querySelector('#UseDarkTheme').checked,
                         EnableHoverAnimations: document.querySelector('#EnableHoverAnimations').checked,
                         ShowContinueWatching: document.querySelector('#ShowContinueWatching').checked,
                         ShowNewReleases: document.querySelector('#ShowNewReleases').checked,
@@ -156,22 +152,23 @@
                         ItemsPerCarousel: parseInt(document.querySelector('#ItemsPerCarousel').value)
                     };
 
-                    ApiClient.updatePluginConfiguration(CarouselConfigPage.pluginId, config).then(function() {
+                    ApiClient.updatePluginConfiguration(CarouselConfigPage.pluginId, config).then(function () {
                         Dashboard.processPluginConfigurationUpdateResult();
                     });
                 }
             };
 
-            document.getElementById('carouselConfigForm').addEventListener('submit', function(e) {
+            document.getElementById('carouselConfigForm').addEventListener('submit', function (e) {
                 e.preventDefault();
                 CarouselConfigPage.saveConfiguration();
                 return false;
             });
 
-            document.addEventListener('DOMContentLoaded', function() {
+            document.addEventListener('DOMContentLoaded', function () {
                 CarouselConfigPage.loadConfiguration();
             });
         </script>
     </div>
 </body>
+
 </html>

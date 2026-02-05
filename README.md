@@ -36,7 +36,7 @@ Transforme l'interface web Jellyfin en un layout type Netflix avec des carrousel
 3. Ajoutez le repository :
    ```
    Nom: Carousel Layout
-   URL: https://raw.githubusercontent.com/peterdu1109/Nouveaut-s--Top-10/main/build.yaml
+   URL: https://raw.githubusercontent.com/peterdu1109/Nouveaut-s--Top-10/main/manifest.json
    ```
 4. Allez dans **Catalogue** et installez "Carousel Layout"
 5. Redémarrez le serveur Jellyfin

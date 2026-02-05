@@ -48,11 +48,6 @@ public class PluginConfiguration : BasePluginConfiguration
     public bool ShowQualityBadge { get; set; } = true;
 
     /// <summary>
-    /// Utilise le thème sombre
-    /// </summary>
-    public bool UseDarkTheme { get; set; } = true;
-
-    /// <summary>
     /// Nombre d'éléments par carrousel
     /// </summary>
     public int ItemsPerCarousel { get; set; } = 20;
