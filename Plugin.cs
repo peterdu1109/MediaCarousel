@@ -30,7 +30,7 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
     public override string Name => "Carousel Layout";
 
     /// <inheritdoc />
-    public override Guid Id => Guid.Parse("a1b2c3d4-e5f6-4789-a1b2-c3d4e5f67890");
+    public override Guid Id => Guid.Parse("191bd290-1054-4b55-a137-46c72181266b");
 
     /// <summary>
     /// Instance statique du plugin
