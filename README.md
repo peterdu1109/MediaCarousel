@@ -1,9 +1,17 @@
-# Jellyfin Carousel Layout Plugin
+<div align="center">
+  <img src="icon.png" alt="Logo Media Carousel" width="128" height="128" />
+  <h1>Media Carousel Plugin</h1>
+  <p>
+    <b>Transformez votre Jellyfin en une expérience de streaming moderne.</b>
+  </p>
 
-[![Jellyfin](https://img.shields.io/badge/Jellyfin-10.11.x-blue.svg)](https://jellyfin.org/)
-[![.NET](https://img.shields.io/badge/.NET-9.0-purple.svg)](https://dotnet.microsoft.com/)
+  [![Jellyfin](https://img.shields.io/badge/Jellyfin-10.11.x-blue.svg)](https://jellyfin.org/)
+  [![.NET](https://img.shields.io/badge/.NET-9.0-purple.svg)](https://dotnet.microsoft.com/)
+</div>
 
-Transforme l'interface web Jellyfin en un layout type Netflix avec des carrousels horizontaux pour une expérience utilisateur moderne et intuitive.
+---
+
+Transforme l'interface web Jellyfin en un layout type Netflix avec des carrousels horizontaux modernes, des animations fluides et une intégration native à vos thèmes.
 
 ## 🎬 Fonctionnalités
 
