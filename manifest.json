@@ -13,7 +13,8 @@
         "TargetAbi": "10.11.0.0",
         "SourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/1.0.0/JellyfinCarouselPlugin.zip",
         "Checksum": "F48594A96BA11C14DA6EEC66CE80BDCBE",
-        "Timestamp": "2026-02-05T10:30:00Z"
+        "Timestamp": "2026-02-05T10:30:00Z",
+        "ImageUrl": "https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/icon.png"
       }
     ]
   }
