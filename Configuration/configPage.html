@@ -74,6 +74,13 @@
                                 <span>Catégories par genre</span>
                             </label>
                         </div>
+
+                        <div class="checkboxContainer">
+                            <label>
+                                <input is="emby-checkbox" type="checkbox" id="ShowCollections" />
+                                <span>Collections (Boxsets)</span>
+                            </label>
+                        </div>
                     </div>
 
                     <div class="verticalSection">
@@ -92,13 +99,34 @@
                                 <span>Badge de qualité (4K, HD)</span>
                             </label>
                         </div>
+
+                        <div class="checkboxContainer">
+                            <label>
+                                <input is="emby-checkbox" type="checkbox" id="EnableFavoritesButton" />
+                                <span>Bouton "Ajouter aux favoris" au survol</span>
+                            </label>
+                        </div>
                     </div>
 
                     <div class="verticalSection">
                         <h3>Paramètres avancés</h3>
 
+                        <div class="selectContainer">
+                            <label class="selectLabel" for="HeroMode">Mode d'affichage de la bannière (Hero)</label>
+                            <select is="emby-select" id="HeroMode">
+                                <option value="Random">Aléatoire</option>
+                                <option value="Latest">Dernier ajout</option>
+                                <option value="Resume">Reprendre la lecture</option>
+                            </select>
+                        </div>
+
                         <div class="inputContainer">
-                            <label for="ItemsPerCarousel">Nombre d'éléments par carrousel (max)</label>
+                            <label for="HighlightColor">Couleur de surbrillance (Code Hex)</label>
+                            <input is="emby-input" type="color" id="HighlightColor" />
+                        </div>
+
+                        <div class="inputContainer">
+                            <label for="ItemsPerCarousel">Nombre d'elements par carrousel (max)</label>
                             <input is="emby-input" type="number" id="ItemsPerCarousel" min="5" max="50" step="5" />
                         </div>
                     </div>
@@ -115,7 +143,7 @@
 
         <script type="text/javascript">
             var CarouselConfigPage = {
-                pluginId: "a1b2c3d4-e5f6-4789-a1b2-c3d4e5f67890",
+                pluginId: "191bd290-1054-4b55-a137-46c72181266b",
 
                 loadConfiguration: function () {
                     Dashboard.showLoadingMsg();
@@ -128,9 +156,17 @@
                         document.querySelector('#ShowTop10').checked = config.ShowTop10;
                         document.querySelector('#ShowRecommended').checked = config.ShowRecommended;
                         document.querySelector('#ShowGenreCategories').checked = config.ShowGenreCategories;
+                        document.querySelector('#ShowCollections').checked = config.ShowCollections !== false; // Default true if undefined
                         document.querySelector('#ShowNewEpisodesBadge').checked = config.ShowNewEpisodesBadge;
                         document.querySelector('#ShowQualityBadge').checked = config.ShowQualityBadge;
+                        document.querySelector('#EnableFavoritesButton').checked = config.EnableFavoritesButton !== false;
                         document.querySelector('#ItemsPerCarousel').value = config.ItemsPerCarousel;
+
+                        var heroModeSelect = document.querySelector('#HeroMode');
+                        if (heroModeSelect) heroModeSelect.value = config.HeroMode || 'Random';
+
+                        var highlightColorInput = document.querySelector('#HighlightColor');
+                        if (highlightColorInput) highlightColorInput.value = config.HighlightColor || '#00a4dc';
 
                         Dashboard.hideLoadingMsg();
                     });
@@ -147,9 +183,13 @@
                         ShowTop10: document.querySelector('#ShowTop10').checked,
                         ShowRecommended: document.querySelector('#ShowRecommended').checked,
                         ShowGenreCategories: document.querySelector('#ShowGenreCategories').checked,
+                        ShowCollections: document.querySelector('#ShowCollections').checked,
                         ShowNewEpisodesBadge: document.querySelector('#ShowNewEpisodesBadge').checked,
                         ShowQualityBadge: document.querySelector('#ShowQualityBadge').checked,
-                        ItemsPerCarousel: parseInt(document.querySelector('#ItemsPerCarousel').value)
+                        EnableFavoritesButton: document.querySelector('#EnableFavoritesButton').checked,
+                        ItemsPerCarousel: parseInt(document.querySelector('#ItemsPerCarousel').value),
+                        HeroMode: document.querySelector('#HeroMode').value,
+                        HighlightColor: document.querySelector('#HighlightColor').value
                     };
 
                     ApiClient.updatePluginConfiguration(CarouselConfigPage.pluginId, config).then(function () {

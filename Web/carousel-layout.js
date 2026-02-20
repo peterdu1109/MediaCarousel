@@ -3,17 +3,36 @@
  * Transforme l'interface Jellyfin en layout type Netflix avec carrousels
  */
 
-(function() {
+(function () {
     'use strict';
 
-    // Configuration
+    const PLUGIN_ID = "191bd290-1054-4b55-a137-46c72181266b";
+    let pluginConfig = null;
+
+    // Configuration par défaut
+    const DEFAULT_CONFIG = {
+        ItemsPerCarousel: 20,
+        ShowContinueWatching: true,
+        ShowNewReleases: true,
+        ShowTop10: true,
+        ShowRecommended: true,
+        ShowGenreCategories: true,
+        ShowCollections: true,
+        ShowNewEpisodesBadge: true,
+        ShowQualityBadge: true,
+        EnableFavoritesButton: true,
+        EnableHoverAnimations: true,
+        HeroMode: 'Random', // 'Random', 'Latest', 'Resume'
+        HighlightColor: '#00a4dc'
+    };
+
     const CONFIG = {
-        itemsPerRow: 6,
         categories: [
-            { id: 'continue', name: 'Continuer à regarder', filter: 'IsResumable' },
-            { id: 'latest', name: 'Nouveautés', filter: 'Latest' },
-            { id: 'top10', name: 'Top 10', filter: 'MostPlayed' },
-            { id: 'recommended', name: 'Recommandés pour vous', filter: 'Recommended' }
+            { id: 'continue', name: 'Continuer à regarder', filter: 'IsResumable', configKey: 'ShowContinueWatching' },
+            { id: 'latest', name: 'Nouveautés', filter: 'Latest', configKey: 'ShowNewReleases' },
+            { id: 'top10', name: 'Top 10', filter: 'MostPlayed', configKey: 'ShowTop10' },
+            { id: 'recommended', name: 'Recommandés pour vous', filter: 'Recommended', configKey: 'ShowRecommended' },
+            { id: 'collections', name: 'Collections', filter: 'BoxSets', configKey: 'ShowCollections' }
         ],
         genres: ['Action', 'Comédie', 'Drame', 'Science-Fiction', 'Animation', 'Horreur']
     };
@@ -27,122 +46,199 @@
         }
     }
 
-    // Obtenir l'URL de l'image
+    async function ensureConfigLoaded() {
+        if (!pluginConfig) {
+            try {
+                const config = await ApiClient.getPluginConfiguration(PLUGIN_ID);
+                pluginConfig = { ...DEFAULT_CONFIG, ...config };
+            } catch (e) {
+                console.warn('MediaCarousel: Erreur lors du chargement de la configuration, utilisation des valeurs par défaut.', e);
+                pluginConfig = DEFAULT_CONFIG;
+            }
+
+            // Appliquer la couleur de surbrillance
+            if (pluginConfig.HighlightColor) {
+                document.documentElement.style.setProperty('--carousel-highlight', pluginConfig.HighlightColor);
+            }
+        }
+        return pluginConfig;
+    }
+
     function getImageUrl(item, type = 'Primary') {
         if (!item.Id) return '';
-        const serverId = ApiClient.serverId();
         return `${ApiClient.getUrl('/Items/' + item.Id + '/Images/' + type)}?maxWidth=500`;
     }
 
-    // Obtenir le badge de qualité
     function getQualityBadge(item) {
+        if (!pluginConfig.ShowQualityBadge) return null;
         if (item.MediaStreams && item.MediaStreams.length > 0) {
             const videoStream = item.MediaStreams.find(s => s.Type === 'Video');
             if (videoStream) {
-                if (videoStream.Width >= 3840) return '<span class="carousel-badge badge-4k">4K</span>';
-                if (videoStream.Width >= 1920) return '<span class="carousel-badge badge-hd">HD</span>';
+                const span = document.createElement('span');
+                span.className = 'carousel-badge';
+                if (videoStream.Width >= 3840) {
+                    span.classList.add('badge-4k');
+                    span.textContent = '4K';
+                    return span;
+                }
+                if (videoStream.Width >= 1920) {
+                    span.classList.add('badge-hd');
+                    span.textContent = 'HD';
+                    return span;
+                }
             }
         }
-        return '';
+        return null;
     }
 
-    // Vérifier si l'item a de nouveaux épisodes
     function hasNewEpisodes(item) {
-        return item.Type === 'Series' && item.UserData && item.UserData.UnplayedItemCount > 0;
+        return pluginConfig.ShowNewEpisodesBadge && item.Type === 'Series' && item.UserData && item.UserData.UnplayedItemCount > 0;
     }
 
-    // Créer une carte de média
+    async function toggleFavorite(e, item, btn) {
+        e.stopPropagation(); // Ne pas déclencher le clic sur la carte
+        const userId = ApiClient.getCurrentUserId();
+        try {
+            const isFav = await ApiClient.FavoriteManager.updateFavoriteStatus(userId, item.Id, !item.UserData.IsFavorite);
+            item.UserData.IsFavorite = isFav.IsFavorite;
+            if (isFav.IsFavorite) {
+                btn.classList.add('is-favorite');
+                btn.innerHTML = '♥';
+            } else {
+                btn.classList.remove('is-favorite');
+                btn.innerHTML = '♡';
+            }
+        } catch (error) {
+            console.error('Erreur lors du changement de favori:', error);
+        }
+    }
+
     function createMediaCard(item) {
-        const imageUrl = getImageUrl(item, 'Primary') || getImageUrl(item, 'Backdrop');
-        const title = item.Name || 'Sans titre';
-        const year = item.ProductionYear || '';
+        const card = document.createElement('div');
+        card.className = 'carousel-item';
+        card.dataset.id = item.Id;
+        card.dataset.type = item.Type;
+
+        if (hasNewEpisodes(item)) {
+            const newBadge = document.createElement('div');
+            newBadge.className = 'badge-new-episodes';
+            newBadge.textContent = 'Nouveaux épisodes';
+            card.appendChild(newBadge);
+        }
+
+        if (pluginConfig.EnableFavoritesButton && item.UserData) {
+            const favBtn = document.createElement('button');
+            favBtn.className = 'carousel-favorite-btn';
+            const isFav = item.UserData.IsFavorite;
+            if (isFav) {
+                favBtn.classList.add('is-favorite');
+                favBtn.innerHTML = '♥';
+            } else {
+                favBtn.innerHTML = '♡';
+            }
+            favBtn.title = isFav ? "Retirer des favoris" : "Ajouter aux favoris";
+            favBtn.onclick = (e) => toggleFavorite(e, item, favBtn);
+            card.appendChild(favBtn);
+        }
+
+        const img = document.createElement('img');
+        img.className = 'carousel-item-image';
+        img.src = getImageUrl(item, 'Primary') || getImageUrl(item, 'Backdrop');
+        img.alt = item.Name || 'Sans titre';
+        img.loading = 'lazy';
+        card.appendChild(img);
+
+        const overlay = document.createElement('div');
+        overlay.className = 'carousel-item-overlay';
+
+        const title = document.createElement('div');
+        title.className = 'carousel-item-title';
+        title.textContent = item.Name || 'Sans titre';
+        overlay.appendChild(title);
+
+        const meta = document.createElement('div');
+        meta.className = 'carousel-item-meta';
+        if (item.ProductionYear) {
+            const year = document.createElement('span');
+            year.textContent = item.ProductionYear;
+            meta.appendChild(year);
+        }
         const qualityBadge = getQualityBadge(item);
-        const newEpisodesBadge = hasNewEpisodes(item) ? 
-            '<div class="badge-new-episodes">Nouveaux épisodes</div>' : '';
+        if (qualityBadge) meta.appendChild(qualityBadge);
+        overlay.appendChild(meta);
 
-        return `
-            <div class="carousel-item" data-id="${item.Id}" data-type="${item.Type}">
-                ${newEpisodesBadge}
-                <img class="carousel-item-image" src="${imageUrl}" alt="${title}" loading="lazy">
-                <div class="carousel-item-overlay">
-                    <div class="carousel-item-title">${title}</div>
-                    <div class="carousel-item-meta">
-                        ${year ? `<span>${year}</span>` : ''}
-                        ${qualityBadge}
-                    </div>
-                </div>
-            </div>
-        `;
-    }
+        card.appendChild(overlay);
 
-    // Créer un carrousel
-    function createCarousel(title, items) {
-        const carouselId = 'carousel-' + Math.random().toString(36).substr(2, 9);
-        const cardsHtml = items.map(item => createMediaCard(item)).join('');
-
-        return `
-            <div class="carousel-category">
-                <h2 class="carousel-category-title">${title}</h2>
-                <div class="carousel-container" id="${carouselId}">
-                    <button class="carousel-nav-button prev" aria-label="Précédent">‹</button>
-                    <div class="carousel-wrapper">
-                        ${cardsHtml}
-                    </div>
-                    <button class="carousel-nav-button next" aria-label="Suivant">›</button>
-                </div>
-            </div>
-        `;
-    }
-
-    // Ajouter les événements de navigation
-    function addNavigationEvents(carouselId) {
-        const container = document.getElementById(carouselId);
-        if (!container) return;
-
-        const wrapper = container.querySelector('.carousel-wrapper');
-        const prevBtn = container.querySelector('.prev');
-        const nextBtn = container.querySelector('.next');
-
-        if (prevBtn && wrapper) {
-            prevBtn.addEventListener('click', () => {
-                wrapper.scrollBy({ left: -wrapper.offsetWidth * 0.8, behavior: 'smooth' });
-            });
-        }
-
-        if (nextBtn && wrapper) {
-            nextBtn.addEventListener('click', () => {
-                wrapper.scrollBy({ left: wrapper.offsetWidth * 0.8, behavior: 'smooth' });
-            });
-        }
-    }
-
-    // Ajouter les événements de clic sur les cartes
-    function addCardClickEvents() {
-        document.querySelectorAll('.carousel-item').forEach(card => {
-            card.addEventListener('click', function() {
-                const itemId = this.dataset.id;
-                const itemType = this.dataset.type;
-                if (itemId) {
-                    // Naviguer vers la page de détails de l'item
-                    Dashboard.navigate('details?id=' + itemId);
-                }
-            });
+        card.addEventListener('click', function () {
+            Dashboard.navigate('details?id=' + item.Id);
         });
+
+        return card;
     }
 
-    // Charger les items pour une catégorie
+    function createCarouselDOM(title, items) {
+        if (!items || items.length === 0) return null;
+
+        const container = document.createElement('div');
+        container.className = 'carousel-category';
+
+        const h2 = document.createElement('h2');
+        h2.className = 'carousel-category-title';
+        h2.textContent = title;
+        container.appendChild(h2);
+
+        const carouselWrapper = document.createElement('div');
+        carouselWrapper.className = 'carousel-container';
+
+        const prevBtn = document.createElement('button');
+        prevBtn.className = 'carousel-nav-button prev';
+        prevBtn.setAttribute('aria-label', 'Précédent');
+        prevBtn.textContent = '‹';
+
+        const nextBtn = document.createElement('button');
+        nextBtn.className = 'carousel-nav-button next';
+        nextBtn.setAttribute('aria-label', 'Suivant');
+        nextBtn.textContent = '›';
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'carousel-wrapper';
+
+        items.forEach(item => {
+            wrapper.appendChild(createMediaCard(item));
+        });
+
+        prevBtn.addEventListener('click', () => {
+            wrapper.scrollBy({ left: -wrapper.offsetWidth * 0.8, behavior: 'smooth' });
+        });
+
+        nextBtn.addEventListener('click', () => {
+            wrapper.scrollBy({ left: wrapper.offsetWidth * 0.8, behavior: 'smooth' });
+        });
+
+        carouselWrapper.appendChild(prevBtn);
+        carouselWrapper.appendChild(wrapper);
+        carouselWrapper.appendChild(nextBtn);
+
+        container.appendChild(carouselWrapper);
+        return container;
+    }
+
     async function loadCategoryItems(category, userId) {
         try {
             const params = {
                 UserId: userId,
-                Limit: 20,
+                Limit: pluginConfig.ItemsPerCarousel || 20,
                 Fields: 'PrimaryImageAspectRatio,MediaStreams,UserData',
                 ImageTypeLimit: 1,
-                EnableImageTypes: 'Primary,Backdrop',
-                IncludeItemTypes: 'Movie,Series'
+                EnableImageTypes: 'Primary,Backdrop'
             };
 
-            // Filtres spécifiques selon la catégorie
+            if (category.id === 'collections') {
+                params.IncludeItemTypes = 'BoxSet';
+            } else {
+                params.IncludeItemTypes = 'Movie,Series';
+            }
+
             if (category.id === 'continue') {
                 params.Filters = 'IsResumable';
                 params.SortBy = 'DatePlayed';
@@ -154,6 +250,9 @@
                 params.SortBy = 'PlayCount';
                 params.SortOrder = 'Descending';
                 params.Limit = 10;
+            } else if (category.id === 'collections') {
+                params.SortBy = 'SortName';
+                params.SortOrder = 'Ascending';
             }
 
             const result = await ApiClient.getItems(userId, params);
@@ -164,13 +263,12 @@
         }
     }
 
-    // Charger les items par genre
     async function loadGenreItems(genre, userId) {
         try {
             const result = await ApiClient.getItems(userId, {
                 UserId: userId,
                 Genres: genre,
-                Limit: 20,
+                Limit: pluginConfig.ItemsPerCarousel || 20,
                 Fields: 'PrimaryImageAspectRatio,MediaStreams,UserData',
                 ImageTypeLimit: 1,
                 EnableImageTypes: 'Primary,Backdrop',
@@ -185,18 +283,30 @@
         }
     }
 
-    // Créer le hero (grand bandeau en haut)
     async function createHero(userId) {
         try {
-            const result = await ApiClient.getItems(userId, {
+            const params = {
                 UserId: userId,
                 Limit: 1,
                 Fields: 'Overview,PrimaryImageAspectRatio',
                 ImageTypeLimit: 1,
                 EnableImageTypes: 'Backdrop',
-                IncludeItemTypes: 'Movie,Series',
-                SortBy: 'Random'
-            });
+                IncludeItemTypes: 'Movie,Series'
+            };
+
+            if (pluginConfig.HeroMode === 'Latest') {
+                params.SortBy = 'DateCreated';
+                params.SortOrder = 'Descending';
+            } else if (pluginConfig.HeroMode === 'Resume') {
+                params.Filters = 'IsResumable';
+                params.SortBy = 'DatePlayed';
+                params.SortOrder = 'Descending';
+            } else {
+                // Random
+                params.SortBy = 'Random';
+            }
+
+            const result = await ApiClient.getItems(userId, params);
 
             if (result.Items && result.Items.length > 0) {
                 const item = result.Items[0];
@@ -204,41 +314,63 @@
                 const title = item.Name || '';
                 const overview = item.Overview || '';
 
-                return `
-                    <div class="carousel-hero" style="background-image: url('${backdropUrl}');">
-                        <div class="carousel-hero-content">
-                            <h1 class="carousel-hero-title">${title}</h1>
-                            <p class="carousel-hero-description">${overview.substring(0, 200)}${overview.length > 200 ? '...' : ''}</p>
-                            <div class="carousel-hero-buttons">
-                                <button class="carousel-hero-button play" onclick="Dashboard.navigate('details?id=${item.Id}')">
-                                    ▶ Lecture
-                                </button>
-                                <button class="carousel-hero-button info" onclick="Dashboard.navigate('details?id=${item.Id}')">
-                                    ⓘ Plus d'infos
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                `;
+                const hero = document.createElement('div');
+                hero.className = 'carousel-hero';
+                hero.style.backgroundImage = `url('${backdropUrl}')`;
+
+                const content = document.createElement('div');
+                content.className = 'carousel-hero-content';
+
+                const h1 = document.createElement('h1');
+                h1.className = 'carousel-hero-title';
+                h1.textContent = title;
+                content.appendChild(h1);
+
+                const p = document.createElement('p');
+                p.className = 'carousel-hero-description';
+                p.textContent = overview.length > 200 ? overview.substring(0, 200) + '...' : overview;
+                content.appendChild(p);
+
+                const buttons = document.createElement('div');
+                buttons.className = 'carousel-hero-buttons';
+
+                const playBtn = document.createElement('button');
+                playBtn.className = 'carousel-hero-button play';
+                playBtn.textContent = '▶ Lecture';
+                playBtn.onclick = () => Dashboard.navigate('details?id=' + item.Id);
+                buttons.appendChild(playBtn);
+
+                const infoBtn = document.createElement('button');
+                infoBtn.className = 'carousel-hero-button info';
+                infoBtn.textContent = 'ⓘ Plus d\'infos';
+                infoBtn.onclick = () => Dashboard.navigate('details?id=' + item.Id);
+                buttons.appendChild(infoBtn);
+
+                content.appendChild(buttons);
+                hero.appendChild(content);
+
+                return hero;
             }
         } catch (error) {
             console.error('Erreur lors de la création du hero:', error);
         }
-        return '';
+        return null;
     }
 
-    // Initialiser le layout carrousel
     async function initCarouselLayout() {
-        console.log('Initialisation du Carousel Layout Plugin...');
+        console.log('Initialisation du Carousel Layout Plugin avec conf:', pluginConfig);
 
-        // Obtenir l'utilisateur actuel
+        if (pluginConfig && pluginConfig.EnableCarouselLayout === false) {
+            console.log('Carousel Layout est désactivé dans la configuration.');
+            return;
+        }
+
         const userId = ApiClient.getCurrentUserId();
         if (!userId) {
             console.error('Aucun utilisateur connecté');
             return;
         }
 
-        // Trouver le container principal
         const mainContent = document.querySelector('.mainAnimatedPage, #indexPage, .page');
         if (!mainContent) {
             console.log('Container principal non trouvé, retentative...');
@@ -246,90 +378,99 @@
             return;
         }
 
-        // Créer le container carrousel
         const carouselContainer = document.createElement('div');
         carouselContainer.className = 'carousel-main-container';
         carouselContainer.id = 'jellyfin-carousel-layout';
 
-        // Ajouter le hero
-        const heroHtml = await createHero(userId);
-        carouselContainer.innerHTML = heroHtml;
+        // Add hero
+        const heroDOM = await createHero(userId);
+        if (heroDOM) carouselContainer.appendChild(heroDOM);
 
-        // Charger et ajouter les catégories
+        // Add main categories synchronously for immediate display
         for (const category of CONFIG.categories) {
-            const items = await loadCategoryItems(category, userId);
-            if (items.length > 0) {
-                const carouselHtml = createCarousel(category.name, items);
-                carouselContainer.innerHTML += carouselHtml;
+            if (pluginConfig[category.configKey] !== false) { // Default true if undefined
+                const items = await loadCategoryItems(category, userId);
+                const carousel = createCarouselDOM(category.name, items);
+                if (carousel) carouselContainer.appendChild(carousel);
             }
         }
 
-        // Charger et ajouter les genres
-        for (const genre of CONFIG.genres) {
-            const items = await loadGenreItems(genre, userId);
-            if (items.length > 0) {
-                const carouselHtml = createCarousel(genre, items);
-                carouselContainer.innerHTML += carouselHtml;
-            }
-        }
+        // Add a container for genres that will be lazy-loaded
+        const genresContainer = document.createElement('div');
+        genresContainer.id = 'carousel-genres-lazy';
+        carouselContainer.appendChild(genresContainer);
 
-        // Remplacer le contenu existant
+        // Set layout in UI
         mainContent.innerHTML = '';
         mainContent.appendChild(carouselContainer);
 
-        // Ajouter les événements de navigation
-        document.querySelectorAll('.carousel-container').forEach(container => {
-            addNavigationEvents(container.id);
-        });
-
-        // Ajouter les événements de clic
-        addCardClickEvents();
+        // Setup Intersection Observer for Lazy Loading Genres
+        if (pluginConfig.ShowGenreCategories !== false) {
+            setupLazyGenres(userId, genresContainer);
+        }
 
         console.log('Carousel Layout initialisé avec succès!');
     }
 
-    // Observer les changements de page
+    function setupLazyGenres(userId, container) {
+        let genresLoaded = false;
+        const observer = new IntersectionObserver(async (entries, obs) => {
+            if (entries[0].isIntersecting && !genresLoaded) {
+                genresLoaded = true;
+                obs.disconnect(); // Stop observing once loaded
+
+                for (const genre of CONFIG.genres) {
+                    const items = await loadGenreItems(genre, userId);
+                    const carousel = createCarouselDOM(genre, items);
+                    if (carousel) container.appendChild(carousel);
+                }
+            }
+        }, { rootMargin: '200px' }); // Load a bit before it enters the screen
+
+        observer.observe(container);
+    }
+
     function observePageChanges() {
+        // Prevent multiple initializations
+        let initTimeout = null;
+
         const observer = new MutationObserver((mutations) => {
-            for (const mutation of mutations) {
-                if (mutation.addedNodes.length > 0) {
-                    const pageContainer = document.querySelector('.mainAnimatedPage, #indexPage');
-                    if (pageContainer && !document.getElementById('jellyfin-carousel-layout')) {
-                        // Vérifier si on est sur la page d'accueil
-                        if (window.location.hash === '#/home.html' || 
-                            window.location.hash === '' || 
-                            window.location.pathname.includes('home.html')) {
-                            initCarouselLayout();
-                        }
-                    }
+            const isHomePage = window.location.hash === '#/home.html' ||
+                window.location.hash === '' ||
+                window.location.pathname.includes('home.html');
+
+            if (isHomePage && !document.getElementById('jellyfin-carousel-layout')) {
+                // Ensure page container is available
+                if (document.querySelector('.mainAnimatedPage, #indexPage')) {
+                    if (initTimeout) clearTimeout(initTimeout);
+                    initTimeout = setTimeout(() => {
+                        ensureConfigLoaded().then(() => initCarouselLayout());
+                    }, 500);
                 }
             }
         });
 
-        observer.observe(document.body, {
-            childList: true,
-            subtree: true
-        });
+        observer.observe(document.body, { childList: true, subtree: true });
     }
 
-    // Point d'entrée principal
     waitForJellyfin(() => {
         console.log('Jellyfin détecté, initialisation du plugin...');
-        
-        // Injecter les styles
+
         const link = document.createElement('link');
         link.rel = 'stylesheet';
         link.href = '/plugins/JellyfinCarouselPlugin/Web/carousel-styles.css';
         document.head.appendChild(link);
 
-        // Initialiser sur la page actuelle
-        if (window.location.hash === '#/home.html' || 
-            window.location.hash === '' || 
-            window.location.pathname.includes('home.html')) {
-            setTimeout(initCarouselLayout, 1000);
-        }
+        const isHomePage = window.location.hash === '#/home.html' ||
+            window.location.hash === '' ||
+            window.location.pathname.includes('home.html');
 
-        // Observer les changements de page
-        observePageChanges();
+        ensureConfigLoaded().then(() => {
+            if (isHomePage) {
+                setTimeout(initCarouselLayout, 1000); // Give JS framework time to render default page
+            }
+            // Ensure observation starts after checking config
+            observePageChanges();
+        });
     });
 })();

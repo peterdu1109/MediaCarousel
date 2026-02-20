@@ -56,4 +56,24 @@ public class PluginConfiguration : BasePluginConfiguration
     /// Active les animations de hover
     /// </summary>
     public bool EnableHoverAnimations { get; set; } = true;
+
+    /// <summary>
+    /// Active la catégorie "Collections"
+    /// </summary>
+    public bool ShowCollections { get; set; } = true;
+
+    /// <summary>
+    /// Mode d'affichage du Hero (Random, Latest, Resume)
+    /// </summary>
+    public string HeroMode { get; set; } = "Random";
+
+    /// <summary>
+    /// Active le bouton Favoris sur les cartes
+    /// </summary>
+    public bool EnableFavoritesButton { get; set; } = true;
+
+    /// <summary>
+    /// Couleur de surbrillance (ex: #e50914)
+    /// </summary>
+    public string HighlightColor { get; set; } = "#00a4dc";
 }
