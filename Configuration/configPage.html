@@ -143,69 +143,62 @@
 
         <script type="text/javascript">
             var CarouselConfigPage = {
-                pluginId: "191bd290-1054-4b55-a137-46c72181266b",
-
-                loadConfiguration: function () {
-                    Dashboard.showLoadingMsg();
-
-                    ApiClient.getPluginConfiguration(CarouselConfigPage.pluginId).then(function (config) {
-                        document.querySelector('#EnableCarouselLayout').checked = config.EnableCarouselLayout;
-                        document.querySelector('#EnableHoverAnimations').checked = config.EnableHoverAnimations;
-                        document.querySelector('#ShowContinueWatching').checked = config.ShowContinueWatching;
-                        document.querySelector('#ShowNewReleases').checked = config.ShowNewReleases;
-                        document.querySelector('#ShowTop10').checked = config.ShowTop10;
-                        document.querySelector('#ShowRecommended').checked = config.ShowRecommended;
-                        document.querySelector('#ShowGenreCategories').checked = config.ShowGenreCategories;
-                        document.querySelector('#ShowCollections').checked = config.ShowCollections !== false; // Default true if undefined
-                        document.querySelector('#ShowNewEpisodesBadge').checked = config.ShowNewEpisodesBadge;
-                        document.querySelector('#ShowQualityBadge').checked = config.ShowQualityBadge;
-                        document.querySelector('#EnableFavoritesButton').checked = config.EnableFavoritesButton !== false;
-                        document.querySelector('#ItemsPerCarousel').value = config.ItemsPerCarousel;
-
-                        var heroModeSelect = document.querySelector('#HeroMode');
-                        if (heroModeSelect) heroModeSelect.value = config.HeroMode || 'Random';
-
-                        var highlightColorInput = document.querySelector('#HighlightColor');
-                        if (highlightColorInput) highlightColorInput.value = config.HighlightColor || '#00a4dc';
-
-                        Dashboard.hideLoadingMsg();
-                    });
-                },
-
-                saveConfiguration: function () {
-                    Dashboard.showLoadingMsg();
-
-                    var config = {
-                        EnableCarouselLayout: document.querySelector('#EnableCarouselLayout').checked,
-                        EnableHoverAnimations: document.querySelector('#EnableHoverAnimations').checked,
-                        ShowContinueWatching: document.querySelector('#ShowContinueWatching').checked,
-                        ShowNewReleases: document.querySelector('#ShowNewReleases').checked,
-                        ShowTop10: document.querySelector('#ShowTop10').checked,
-                        ShowRecommended: document.querySelector('#ShowRecommended').checked,
-                        ShowGenreCategories: document.querySelector('#ShowGenreCategories').checked,
-                        ShowCollections: document.querySelector('#ShowCollections').checked,
-                        ShowNewEpisodesBadge: document.querySelector('#ShowNewEpisodesBadge').checked,
-                        ShowQualityBadge: document.querySelector('#ShowQualityBadge').checked,
-                        EnableFavoritesButton: document.querySelector('#EnableFavoritesButton').checked,
-                        ItemsPerCarousel: parseInt(document.querySelector('#ItemsPerCarousel').value),
-                        HeroMode: document.querySelector('#HeroMode').value,
-                        HighlightColor: document.querySelector('#HighlightColor').value
-                    };
-
-                    ApiClient.updatePluginConfiguration(CarouselConfigPage.pluginId, config).then(function () {
-                        Dashboard.processPluginConfigurationUpdateResult();
-                    });
-                }
+                pluginId: "191bd290-1054-4b55-a137-46c72181266b"
             };
 
-            document.getElementById('carouselConfigForm').addEventListener('submit', function (e) {
-                e.preventDefault();
-                CarouselConfigPage.saveConfiguration();
-                return false;
+            document.querySelector('#carouselConfigPage').addEventListener('pageshow', function () {
+                Dashboard.showLoadingMsg();
+                ApiClient.getPluginConfiguration(CarouselConfigPage.pluginId).then(function (config) {
+                    document.querySelector('#EnableCarouselLayout').checked = config.EnableCarouselLayout;
+                    document.querySelector('#EnableHoverAnimations').checked = config.EnableHoverAnimations;
+                    document.querySelector('#ShowContinueWatching').checked = config.ShowContinueWatching;
+                    document.querySelector('#ShowNewReleases').checked = config.ShowNewReleases;
+                    document.querySelector('#ShowTop10').checked = config.ShowTop10;
+                    document.querySelector('#ShowRecommended').checked = config.ShowRecommended;
+                    document.querySelector('#ShowGenreCategories').checked = config.ShowGenreCategories;
+                    document.querySelector('#ShowCollections').checked = config.ShowCollections !== false; // Default true if undefined
+                    document.querySelector('#ShowNewEpisodesBadge').checked = config.ShowNewEpisodesBadge;
+                    document.querySelector('#ShowQualityBadge').checked = config.ShowQualityBadge;
+                    document.querySelector('#EnableFavoritesButton').checked = config.EnableFavoritesButton !== false;
+                    document.querySelector('#ItemsPerCarousel').value = config.ItemsPerCarousel;
+
+                    var heroModeSelect = document.querySelector('#HeroMode');
+                    if (heroModeSelect) heroModeSelect.value = config.HeroMode || 'Random';
+
+                    var highlightColorInput = document.querySelector('#HighlightColor');
+                    if (highlightColorInput) highlightColorInput.value = config.HighlightColor || '#00a4dc';
+
+                    Dashboard.hideLoadingMsg();
+                });
             });
 
-            document.addEventListener('DOMContentLoaded', function () {
-                CarouselConfigPage.loadConfiguration();
+            document.querySelector('#carouselConfigForm').addEventListener('submit', function (e) {
+                e.preventDefault();
+
+                Dashboard.showLoadingMsg();
+
+                var config = {
+                    EnableCarouselLayout: document.querySelector('#EnableCarouselLayout').checked,
+                    EnableHoverAnimations: document.querySelector('#EnableHoverAnimations').checked,
+                    ShowContinueWatching: document.querySelector('#ShowContinueWatching').checked,
+                    ShowNewReleases: document.querySelector('#ShowNewReleases').checked,
+                    ShowTop10: document.querySelector('#ShowTop10').checked,
+                    ShowRecommended: document.querySelector('#ShowRecommended').checked,
+                    ShowGenreCategories: document.querySelector('#ShowGenreCategories').checked,
+                    ShowCollections: document.querySelector('#ShowCollections').checked,
+                    ShowNewEpisodesBadge: document.querySelector('#ShowNewEpisodesBadge').checked,
+                    ShowQualityBadge: document.querySelector('#ShowQualityBadge').checked,
+                    EnableFavoritesButton: document.querySelector('#EnableFavoritesButton').checked,
+                    ItemsPerCarousel: parseInt(document.querySelector('#ItemsPerCarousel').value),
+                    HeroMode: document.querySelector('#HeroMode').value,
+                    HighlightColor: document.querySelector('#HighlightColor').value
+                };
+
+                ApiClient.updatePluginConfiguration(CarouselConfigPage.pluginId, config).then(function () {
+                    Dashboard.processPluginConfigurationUpdateResult();
+                });
+
+                return false;
             });
         </script>
     </div>

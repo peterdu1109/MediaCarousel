@@ -358,3 +358,31 @@
         font-size: 1.5rem;
     }
 }
+
+/* =========================================================================
+   COMPATIBILITÉ ET MASQUAGE DES SECTIONS NATIVES/ENHANCED
+   ========================================================================= */
+
+/* Masquer les sections natives et plugin Enhanced quand notre plugin est actif */
+body.media-carousel-active .homePage .sections,
+body.media-carousel-active .homePage .verticalSection,
+body.media-carousel-active .homePage .hss-section,
+body.media-carousel-active .homePage .section0,
+body.media-carousel-active .homePage .section1,
+body.media-carousel-active .homePage .section2,
+body.media-carousel-active .homePage .section3,
+body.media-carousel-active .homePage .section4,
+body.media-carousel-active .homePage .section5,
+body.media-carousel-active .homePage .section6,
+body.media-carousel-active .homePage .section7,
+body.media-carousel-active .homePage .section8,
+body.media-carousel-active .homePage .section9,
+body.media-carousel-active .homePage .homePageSection {
+    display: none !important;
+}
+
+/* Cache tout le reste de l'accueil pour forcer l'exclusivité du carrousel */
+body.media-carousel-active .homePage>div:not(#jellyfin-carousel-layout),
+body.media-carousel-active #indexPage>div:not(#jellyfin-carousel-layout) {
+    display: none !important;
+}

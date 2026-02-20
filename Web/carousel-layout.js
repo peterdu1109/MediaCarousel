@@ -371,7 +371,7 @@
             return;
         }
 
-        const mainContent = document.querySelector('.mainAnimatedPage, #indexPage, .page');
+        const mainContent = document.querySelector('.homePage') || document.querySelector('#indexPage .scrollSlider') || document.querySelector('#indexPage');
         if (!mainContent) {
             console.log('Container principal non trouvé, retentative...');
             setTimeout(initCarouselLayout, 500);
@@ -400,9 +400,13 @@
         genresContainer.id = 'carousel-genres-lazy';
         carouselContainer.appendChild(genresContainer);
 
-        // Set layout in UI
-        mainContent.innerHTML = '';
-        mainContent.appendChild(carouselContainer);
+        // Set layout in UI (Prepend inside the home scroll container)
+        const existingContainer = document.getElementById('jellyfin-carousel-layout');
+        if (existingContainer) {
+            existingContainer.remove(); // Remove old one if any
+        }
+        mainContent.insertBefore(carouselContainer, mainContent.firstChild);
+        document.body.classList.add('media-carousel-active');
 
         // Setup Intersection Observer for Lazy Loading Genres
         if (pluginConfig.ShowGenreCategories !== false) {
@@ -430,23 +434,55 @@
         observer.observe(container);
     }
 
-    function observePageChanges() {
-        // Prevent multiple initializations
-        let initTimeout = null;
+    function isCurrentPageHome() {
+        return window.location.hash === '#/home.html' ||
+            window.location.hash === '' ||
+            window.location.pathname.includes('home.html');
+    }
 
-        const observer = new MutationObserver((mutations) => {
-            const isHomePage = window.location.hash === '#/home.html' ||
-                window.location.hash === '' ||
-                window.location.pathname.includes('home.html');
+    function triggerLayout() {
+        if (!isCurrentPageHome()) {
+            document.body.classList.remove('media-carousel-active');
+            return;
+        }
 
-            if (isHomePage && !document.getElementById('jellyfin-carousel-layout')) {
-                // Ensure page container is available
-                if (document.querySelector('.mainAnimatedPage, #indexPage')) {
-                    if (initTimeout) clearTimeout(initTimeout);
-                    initTimeout = setTimeout(() => {
-                        ensureConfigLoaded().then(() => initCarouselLayout());
-                    }, 500);
+        ensureConfigLoaded().then(() => {
+            if (!document.getElementById('jellyfin-carousel-layout')) {
+                // Ensure page container is available before injecting
+                if (document.querySelector('.homePage') || document.querySelector('#indexPage')) {
+                    initCarouselLayout();
+                } else {
+                    // Retry slightly after
+                    setTimeout(initCarouselLayout, 300);
                 }
+            } else {
+                // Already exists, just ensure active class is there
+                document.body.classList.add('media-carousel-active');
+            }
+        });
+    }
+
+    function observePageChanges() {
+        // Method 1: Jellyfin native routing events (Emby Router)
+        document.addEventListener('viewshow', function (e) {
+            const view = e.detail ? e.detail.view : e.target;
+            if (view && (view.id === 'indexPage' || view.classList.contains('homePage'))) {
+                setTimeout(triggerLayout, 100);
+            } else {
+                document.body.classList.remove('media-carousel-active');
+            }
+        });
+
+        // Method 2: MutationObserver Fallback for dynamic navigation
+        let initTimeout = null;
+        const observer = new MutationObserver((mutations) => {
+            if (isCurrentPageHome()) {
+                if (!document.getElementById('jellyfin-carousel-layout') && document.querySelector('#indexPage')) {
+                    if (initTimeout) clearTimeout(initTimeout);
+                    initTimeout = setTimeout(triggerLayout, 500);
+                }
+            } else {
+                document.body.classList.remove('media-carousel-active');
             }
         });
 
@@ -454,23 +490,15 @@
     }
 
     waitForJellyfin(() => {
-        console.log('Jellyfin détecté, initialisation du plugin...');
+        console.log('Jellyfin détecté, initialisation du plugin Carousel...');
 
         const link = document.createElement('link');
         link.rel = 'stylesheet';
         link.href = '/plugins/JellyfinCarouselPlugin/Web/carousel-styles.css';
         document.head.appendChild(link);
 
-        const isHomePage = window.location.hash === '#/home.html' ||
-            window.location.hash === '' ||
-            window.location.pathname.includes('home.html');
-
-        ensureConfigLoaded().then(() => {
-            if (isHomePage) {
-                setTimeout(initCarouselLayout, 1000); // Give JS framework time to render default page
-            }
-            // Ensure observation starts after checking config
-            observePageChanges();
-        });
+        // First load
+        setTimeout(triggerLayout, 800);
+        observePageChanges();
     });
 })();

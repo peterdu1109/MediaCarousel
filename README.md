@@ -1,8 +1,8 @@
 <div align="center">
-  <img src="icon.png" alt="Logo Media Carousel" width="128" height="128" />
+  <img src="Web/icon.png" alt="Logo Media Carousel" width="128" height="128" />
   <h1>Media Carousel Plugin</h1>
   <p>
-    <b>Transformez votre Jellyfin en une expérience de streaming moderne.</b>
+    <b>Transformez votre Jellyfin en une expérience de streaming moderne et immersive.</b>
   </p>
 
   [![Jellyfin](https://img.shields.io/badge/Jellyfin-10.11.x-blue.svg)](https://jellyfin.org/)
@@ -11,163 +11,73 @@
 
 ---
 
-Transforme l'interface web Jellyfin en un layout type Netflix avec des carrousels horizontaux modernes, des animations fluides et une intégration native à vos thèmes.
+Transforme complètement l'interface web de votre page d'accueil Jellyfin pour adopter un layout **type Netflix** avec des carrousels horizontaux modernes, des animations fluides, des favoris rapides, et une bannière Hero.
 
 ## 🎬 Fonctionnalités
 
-- ✨ **Carrousels horizontaux** organisés par catégories
-- 🎯 **Catégories intelligentes** :
-  - Continuer à regarder
-  - Nouveautés
-  - Top 10 (les plus regardés)
-  - Recommandés pour vous
-  - Catégories par genre (Action, Comédie, Drame, etc.)
+- ✨ **Carrousels horizontaux** rapides et fluides organisés par catégories
+- 🎯 **Catégories Intelligentes** :
+  - **Continuer à regarder** (Reprise de lecture)
+  - **Derniers Ajouts** (Nouveautés)
+  - **Collections (Boxsets)** (Sagas complètes type Marvel, Harry Potter, etc.)
+  - **Top 10** (Les médias les plus regardés sur le serveur)
+  - **Recommandés pour vous**
+  - **Carrousels par Genre** (Action, Comédie, etc.) avec chargement différé (Lazy Loading).
+- 🖼️ **Bannière "Héros" (Hero) Personnalisable** :
+  - Choisissez le mode d'affichage de la grande tuile d'accueil : **Aléatoire**, **Dernier ajout**, ou le média en cours (**Reprendre la lecture**).
+- ♥️ **Interactions Avancées au survol** :
+  - **Bouton Favori (Cœur)** : Ajoutez ou retirez le média de vos favoris sans même ouvrir sa fiche !
+  - Effets d'échelle de carte type Netflix.
 - 🏷️ **Badges dynamiques** :
-  - "NOUVEAUX ÉPISODES" pour les séries
-  - Qualité vidéo (4K, HD)
-- 🌙 **Thème sombre** inspiré de Netflix
-- 📱 **Responsive** : fonctionne sur desktop, tablette et mobile
-- ⚙️ **Configuration flexible** via l'interface Jellyfin
+  - Indicateurs "NOUVEAUX ÉPISODES" pour les séries en cours.
+  - Indicateur de qualité vidéo (4K, HD).
+- 🎨 **Personnalisation** : Modifiez la couleur de surbrillance/boutons directement avec un sélecteur dans les réglages (ex: Rouge Netflix, Bleu primaire, etc).
+- ⚡ **Haute Performance** : Le plugin repousse le chargement des genres jusqu'au défilement de la page (IntersectionObserver).
+
+## 🤝 Compatibilité Inter-Plugins (Enhanced Home)
+
+Ce plugin est conçu être robuste. 
+**Problème des doublons / "Layout de base" résolu** : 
+Désormais, le JS n'écrase plus brutalement le DOM du client Jellyfin. Les sections d'accueil natives (ou celles ajoutées par le plugin tiers **"Enhanced Home Screen Sections"**) sont repérées et **masquées propement** via CSS dès l'initialisation de Media Carousel. Seuls vos jolis carrousels seront visibles, sans aucun conflit visuel et sans casser votre navigation !
 
 ## 📋 Prérequis
 
 - Jellyfin Server **10.11.x** ou supérieur
-- .NET **9.0** SDK (pour la compilation)
-- Accès aux clients web Jellyfin
+- .NET **9.0** SDK (pour compiler soi-même)
 
 ## 🚀 Installation
 
-### Option 1 : Installation depuis le repository de plugins (Recommandé)
+### Option 1 : Installation rapide (Build pré-compilé)
 
-1. Ouvrez le **Dashboard Jellyfin**
-2. Allez dans **Plugins** → **Repositories**
-3. Ajoutez le repository :
-   ```
-   Nom: Carousel Layout
-   URL: https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/manifest.json
-   ```
-4. Allez dans **Catalogue** et installez "Carousel Layout"
-5. Redémarrez le serveur Jellyfin
+1. **Téléchargez** l'archive `JellyfinCarouselPlugin.zip` la plus récente.
+2. Extrayez le contenu dans votre dossier `plugins` de Jellyfin (sous la forme d'un dossier nommé `CarouselLayout`).
+3. Redémarrez le serveur Jellyfin.
+4. Activez et configurez le plugin depuis `Dashboard -> Plugins -> Carousel Layout`.
 
-### Option 2 : Installation manuelle
+### Option 2 : Compilation locale
 
-1. **Téléchargez** le dernier fichier DLL depuis les [Releases](https://github.com/peterdu1109/Nouveaut-s--Top-10/releases)
-
-2. **Copiez** le fichier dans le dossier plugins de Jellyfin :
-   - Windows : `C:\ProgramData\Jellyfin\Server\plugins\CarouselLayout\`
-   - Linux : `/var/lib/jellyfin/plugins/CarouselLayout/`
-   - Docker : `/config/plugins/CarouselLayout/`
-
-3. **Redémarrez** le serveur Jellyfin
-
-4. **Vérifiez** l'installation :
-   - Dashboard → Plugins
-   - "Carousel Layout" doit apparaître dans la liste
-
-## 🛠️ Compilation depuis les sources
+Si vous souhaitez recompiler vous-même les sources C# après modifications :
 
 ```powershell
-# Cloner le repository
-git clone https://github.com/peterdu1109/Nouveaut-s--Top-10.git
-cd Nouveaut-s--Top-10
-
-# Compiler le plugin
+# S'assurer d'être à la racine de MediaCarousel
 dotnet build -c Release
 
-# Le fichier DLL sera dans : bin/Release/net9.0/JellyfinCarouselPlugin.dll
+# Empaqueter tous les fichiers générés dans un zip
+Compress-Archive -Path "bin\Release\net9.0\*" -DestinationPath "JellyfinCarouselPlugin.zip" -Force
 ```
 
 ## ⚙️ Configuration
 
 1. Ouvrez le **Dashboard Jellyfin**
-2. Allez dans **Plugins** → **Carousel Layout**
-3. Cliquez sur les **trois points** → **Settings**
-4. Configurez selon vos préférences :
-   - Activer/désactiver les catégories
-   - Activer/désactiver les badges
-   - Nombre d'éléments par carrousel
-   - Thème et animations
+2. Allez dans **Plugins** → **Carousel Layout** -> **Settings** (roue crantée)
+3. Modifiez tous les nouveaux paramètres :
+   - Mode d'affichage de la bannière (HeroMode)
+   - Couleur du thème custom (HighlightColor)
+   - Carrousel des Collections (Boxsets)
+   - Bouton Favoris au survol ...
+4. **Sauvegardez**, la page va enregistrer les modifications dans le serveur.
+5. **Rechargez l'accueil (F5)** de l'interface Jellyfin.
 
-5. **Sauvegardez** et **rechargez** la page web
+## 📄 Licence & Crédits
 
-## 📸 Captures d'écran
-
-_À venir après les tests..._
-
-## 🔧 Dépannage
-
-### Le plugin n'apparaît pas dans la liste
-
-- Vérifiez que le dossier `CarouselLayout` existe dans le répertoire plugins
-- Vérifiez les permissions du fichier DLL
-- Consultez les logs Jellyfin : Dashboard → Logs
-
-### Les carrousels ne s'affichent pas
-
-- Ouvrez la console du navigateur (F12)
-- Vérifiez qu'il n'y a pas d'erreurs JavaScript
-- Assurez-vous que le plugin est activé dans la configuration
-- Videz le cache du navigateur (Ctrl + F5)
-
-### Erreur "Plugin target ABI mismatch"
-
-- Vérifiez la version de votre serveur Jellyfin (doit être 10.11.x)
-- Téléchargez la version compatible du plugin
-
-### Les styles ne s'appliquent pas
-
-- Vérifiez que le fichier `carousel-styles.css` est présent dans `Web/`
-- Assurez-vous que le chemin du plugin est correct
-- Redémarrez le serveur Jellyfin
-
-## 🌐 Compatibilité
-
-### ✅ Compatible
-- Interface web Jellyfin (navigateurs modernes)
-- Jellyfin Desktop (basé sur Electron)
-- Clients mobiles utilisant webview
-
-### ❌ Non compatible
-- Applications natives Android TV
-- Applications natives iOS/tvOS
-- Clients tiers (Kodi, Plex, etc.)
-
-## 🤝 Contribution
-
-Les contributions sont les bienvenues ! N'hésitez pas à :
-
-1. Fork le projet
-2. Créer une branche (`git checkout -b feature/amelioration`)
-3. Commit vos changements (`git commit -m 'Ajout fonctionnalité'`)
-4. Push vers la branche (`git push origin feature/amelioration`)
-5. Ouvrir une Pull Request
-
-## 📝 Changelog
-
-### Version 1.0.0 (2026-02-05)
-
-- 🎉 Version initiale
-- Affichage en carrousels horizontaux
-- Catégories prédéfinies et par genre
-- Badges dynamiques
-- Thème sombre Netflix-style
-- Page de configuration
-
-## 📄 Licence
-
-Ce projet est sous licence MIT. Voir le fichier `LICENSE` pour plus de détails.
-
-## 🙏 Remerciements
-
-- Équipe Jellyfin pour leur excellent travail sur le serveur média
-- Inspiration design : Netflix
-
-## 📧 Support
-
-Pour toute question ou problème :
-- Ouvrez une [Issue](https://github.com/peterdu1109/Nouveaut-s--Top-10/issues)
-- Consultez la [documentation Jellyfin](https://jellyfin.org/docs/)
-
----
-
-**Note** : Ce plugin modifie l'interface web Jellyfin côté client. Il n'affecte pas les fonctionnalités du serveur.
+Ce projet est sous licence MIT. Code source par peterdu1109, optimisé avec amour pour de meilleures performances et la tolérance aux plugins communautaires !
