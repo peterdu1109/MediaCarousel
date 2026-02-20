@@ -97,6 +97,14 @@
 
     async function toggleFavorite(e, item, btn) {
         e.stopPropagation(); // Ne pas déclencher le clic sur la carte
+
+        // Prevent concurrent clicks
+        if (btn.disabled || btn.classList.contains('is-loading')) return;
+
+        btn.disabled = true;
+        btn.classList.add('is-loading');
+        btn.style.opacity = '0.5';
+
         const userId = ApiClient.getCurrentUserId();
         try {
             const isFav = await ApiClient.FavoriteManager.updateFavoriteStatus(userId, item.Id, !item.UserData.IsFavorite);
@@ -110,6 +118,10 @@
             }
         } catch (error) {
             console.error('Erreur lors du changement de favori:', error);
+        } finally {
+            btn.disabled = false;
+            btn.classList.remove('is-loading');
+            btn.style.opacity = '';
         }
     }
 
@@ -492,10 +504,398 @@
     waitForJellyfin(() => {
         console.log('Jellyfin détecté, initialisation du plugin Carousel...');
 
-        const link = document.createElement('link');
-        link.rel = 'stylesheet';
-        link.href = '/plugins/JellyfinCarouselPlugin/Web/carousel-styles.css';
-        document.head.appendChild(link);
+        const style = document.createElement('style');
+        style.textContent = `
+/* Carousel Layout Plugin - Styles Netflix-like */
+/* Thème sombre avec carrousels horizontaux */
+
+:root {
+    /* Utilisation des variables natives Jellyfin */
+    --carousel-bg: transparent;
+    --carousel-text: var(--theme-text);
+    --carousel-hover: var(--theme-text);
+    --carousel-card-bg: var(--theme-background-secondary, #202020);
+    --carousel-highlight: var(--theme-primary, #00a4dc);
+    --carousel-shadow: rgba(0, 0, 0, 0.7);
+    --carousel-transition: all 0.3s ease;
+}
+
+/* Container principal */
+.carousel-main-container {
+    background-color: transparent;
+    color: var(--theme-text);
+    padding: 20px 4%;
+    min-height: 100vh;
+}
+
+/* En-tête de catégorie */
+.carousel-category {
+    margin-bottom: 3rem;
+}
+
+.carousel-category-title {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--theme-text);
+    margin-bottom: 1rem;
+    padding-left: 4%;
+}
+
+/* Container du carrousel */
+.carousel-container {
+    position: relative;
+    overflow: hidden;
+}
+
+/* Wrapper scrollable */
+.carousel-wrapper {
+    display: flex;
+    gap: 0.5rem;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-behavior: smooth;
+    padding: 1rem 4%;
+    scrollbar-width: none;
+    /* Firefox */
+    -ms-overflow-style: none;
+    /* IE/Edge */
+}
+
+.carousel-wrapper::-webkit-scrollbar {
+    display: none;
+    /* Chrome/Safari */
+}
+
+/* Carte de média */
+.carousel-item {
+    position: relative;
+    min-width: 250px;
+    max-width: 250px;
+    height: 140px;
+    border-radius: 4px;
+    overflow: hidden;
+    cursor: pointer;
+    transition: var(--carousel-transition);
+    background-color: var(--carousel-card-bg);
+}
+
+.carousel-item:hover {
+    transform: scale(1.05);
+    z-index: 10;
+    box-shadow: 0 8px 24px var(--carousel-shadow);
+}
+
+/* Image de la carte */
+.carousel-item-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: var(--carousel-transition);
+}
+
+.carousel-item:hover .carousel-item-image {
+    filter: brightness(0.7);
+}
+
+/* Overlay avec informations */
+.carousel-item-overlay {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.9) 0%, transparent 100%);
+    padding: 1rem;
+    transform: translateY(100%);
+    transition: var(--carousel-transition);
+}
+
+.carousel-item:hover .carousel-item-overlay {
+    transform: translateY(0);
+}
+
+/* Titre du média */
+.carousel-item-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--theme-text);
+    margin-bottom: 0.5rem;
+    text-overflow: ellipsis;
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+/* Métadonnées */
+.carousel-item-meta {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    font-size: 0.85rem;
+    color: var(--theme-text-secondary, #b3b3b3);
+}
+
+/* Badges */
+.carousel-badge {
+    display: inline-block;
+    padding: 0.2rem 0.5rem;
+    border-radius: 3px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.badge-new {
+    background-color: var(--carousel-highlight);
+    color: #fff;
+}
+
+.badge-4k {
+    background-color: #46d369;
+    color: white;
+}
+
+.badge-hd {
+    background-color: #0080ff;
+    color: white;
+}
+
+/* Badge "NOUVEAUX ÉPISODES" */
+.badge-new-episodes {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    background-color: var(--carousel-highlight);
+    color: white;
+    padding: 0.3rem 0.6rem;
+    border-radius: 3px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    z-index: 2;
+    text-transform: uppercase;
+}
+
+/* Bouton Favori */
+.carousel-favorite-btn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: rgba(0, 0, 0, 0.6);
+    border: none;
+    color: white;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 5;
+    opacity: 0;
+    transition: var(--carousel-transition);
+    font-size: 1.2rem;
+}
+
+.carousel-item:hover .carousel-favorite-btn {
+    opacity: 1;
+}
+
+.carousel-favorite-btn:hover {
+    background: rgba(0, 0, 0, 0.9);
+    color: var(--carousel-highlight);
+    transform: scale(1.1);
+}
+
+.carousel-favorite-btn.is-favorite {
+    color: var(--carousel-highlight);
+    opacity: 1;
+}
+
+/* Boutons de navigation */
+.carousel-nav-button {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    background-color: rgba(0, 0, 0, 0.8);
+    color: white;
+    border: none;
+    width: 50px;
+    height: 140px;
+    cursor: pointer;
+    z-index: 5;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    font-size: 2rem;
+}
+
+.carousel-container:hover .carousel-nav-button {
+    opacity: 1;
+}
+
+.carousel-nav-button:hover {
+    background-color: rgba(0, 0, 0, 0.95);
+}
+
+.carousel-nav-button.prev {
+    left: 0;
+}
+
+.carousel-nav-button.next {
+    right: 0;
+}
+
+/* Hero section (premier élément en grand) */
+.carousel-hero {
+    height: 56.25vw;
+    max-height: 600px;
+    position: relative;
+    margin-bottom: 2rem;
+    background-size: cover;
+    background-position: center;
+}
+
+.carousel-hero-content {
+    position: absolute;
+    bottom: 35%;
+    left: 4%;
+    width: 36%;
+    z-index: 2;
+}
+
+.carousel-hero-title {
+    font-size: 3rem;
+    font-weight: 700;
+    margin-bottom: 1rem;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.9);
+}
+
+.carousel-hero-description {
+    font-size: 1.2rem;
+    line-height: 1.4;
+    margin-bottom: 1.5rem;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.9);
+}
+
+.carousel-hero-buttons {
+    display: flex;
+    gap: 1rem;
+}
+
+.carousel-hero-button {
+    padding: 0.75rem 2rem;
+    font-size: 1.2rem;
+    font-weight: 600;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: var(--carousel-transition);
+}
+
+.carousel-hero-button.play {
+    background-color: white;
+    color: black;
+}
+
+.carousel-hero-button.play:hover {
+    background-color: rgba(255, 255, 255, 0.8);
+}
+
+.carousel-hero-button.info {
+    background-color: rgba(109, 109, 110, 0.7);
+    color: white;
+}
+
+.carousel-hero-button.info:hover {
+    background-color: rgba(109, 109, 110, 0.4);
+}
+
+/* Gradient overlay pour hero */
+.carousel-hero::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 14.7vw;
+    background: linear-gradient(to top, var(--theme-background, #141414) 0%, transparent 100%);
+}
+
+/* Responsive design */
+@media (max-width: 1400px) {
+    .carousel-item {
+        min-width: 200px;
+        max-width: 200px;
+        height: 112px;
+    }
+}
+
+@media (max-width: 800px) {
+    .carousel-item {
+        min-width: 150px;
+        max-width: 150px;
+        height: 84px;
+    }
+
+    .carousel-category-title {
+        font-size: 1.2rem;
+    }
+
+    .carousel-hero-content {
+        width: 50%;
+    }
+
+    .carousel-hero-title {
+        font-size: 2rem;
+    }
+
+    .carousel-hero-description {
+        font-size: 1rem;
+    }
+}
+
+@media (max-width: 500px) {
+    .carousel-item {
+        min-width: 120px;
+        max-width: 120px;
+        height: 67px;
+    }
+
+    .carousel-hero-content {
+        width: 80%;
+    }
+
+    .carousel-hero-title {
+        font-size: 1.5rem;
+    }
+}
+
+/* =========================================================================
+   COMPATIBILITÉ ET MASQUAGE DES SECTIONS NATIVES/ENHANCED
+   ========================================================================= */
+
+/* Masquer les sections natives et plugin Enhanced quand notre plugin est actif */
+body.media-carousel-active .homePage .sections,
+body.media-carousel-active .homePage .verticalSection,
+body.media-carousel-active .homePage .hss-section,
+body.media-carousel-active .homePage .section0,
+body.media-carousel-active .homePage .section1,
+body.media-carousel-active .homePage .section2,
+body.media-carousel-active .homePage .section3,
+body.media-carousel-active .homePage .section4,
+body.media-carousel-active .homePage .section5,
+body.media-carousel-active .homePage .section6,
+body.media-carousel-active .homePage .section7,
+body.media-carousel-active .homePage .section8,
+body.media-carousel-active .homePage .section9,
+body.media-carousel-active .homePage .homePageSection {
+    display: none !important;
+}
+
+/* Cache tout le reste de l'accueil pour forcer l'exclusivité du carrousel */
+body.media-carousel-active .homePage>div:not(#jellyfin-carousel-layout),
+body.media-carousel-active #indexPage>div:not(#jellyfin-carousel-layout) {
+    display: none !important;
+}
+`;
+        document.head.appendChild(style);
 
         // First load
         setTimeout(triggerLayout, 800);

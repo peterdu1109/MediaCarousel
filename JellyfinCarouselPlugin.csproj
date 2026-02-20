@@ -10,14 +10,11 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Jellyfin.Controller" Version="10.11.6">
-      <PrivateAssets>all</PrivateAssets>
-      <ExcludeAssets>runtime</ExcludeAssets>
-    </PackageReference>
     <PackageReference Include="Jellyfin.Model" Version="10.11.6">
       <PrivateAssets>all</PrivateAssets>
       <ExcludeAssets>runtime</ExcludeAssets>
     </PackageReference>
+    <PackageReference Include="MediaBrowser.Server.Core" Version="4.9.1.90" />
   </ItemGroup>
 
   <ItemGroup>
