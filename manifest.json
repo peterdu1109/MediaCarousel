@@ -8,7 +8,7 @@
     "Category": "General",
     "Versions": [
       {
-        "Version": "1.1.0.0",
+        "Version": "1.1.0",
         "Changelog": "- Page de configuration complète (HeroMode, couleur accent, toggles par catégorie)\n- Bannière Hero personnalisable : Aléatoire, Dernier ajout, En cours\n- Bouton Favoris (cœur) au survol sans ouvrir la fiche\n- Badges dynamiques : qualité vidéo (4K/HD) et nouveaux épisodes\n- Carrousel Collections (Boxsets)\n- Chargement différé des genres (IntersectionObserver)\n- Compatibilité renforcée avec le plugin Enhanced Home Screen Sections\n- README revu et documentation CLAUDE.md ajoutée",
         "TargetAbi": "10.11.0.0",
         "SourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/1.1.0/JellyfinCarouselPlugin.zip",
@@ -17,7 +17,7 @@
         "ImageUrl": "https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/icon.png"
       },
       {
-        "Version": "1.0.0.0",
+        "Version": "1.0.0",
         "Changelog": "- Version initiale avec intégration aux thèmes natifs Jellyfin\n- Carrousels Nouveautés, Top 10, Continuer à regarder\n- Badges nouveaux épisodes et qualité",
         "TargetAbi": "10.11.0.0",
         "SourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/1.0.0/JellyfinCarouselPlugin.zip",
