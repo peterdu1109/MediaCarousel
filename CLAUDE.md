@@ -42,8 +42,10 @@ MediaCarousel/
 The backend has a single runtime responsibility: at server startup, `InjectionService.Run()` finds Jellyfin's `index.html` and splices in a `<script>` tag before `</head>`. The injection is idempotent (checks for the tag before inserting). After that, all behavior is frontend.
 
 **Path resolution order in `InjectionService`:**
-1. `{IApplicationPaths.ProgramDataPath}/jellyfin-web/index.html`
-2. `{AppDomain.CurrentDomain.BaseDirectory}/jellyfin-web/index.html`
+1. `{IApplicationPaths.WebPath}/index.html` — chemin officiel Jellyfin (priorité absolue)
+2. `{IApplicationPaths.ProgramDataPath}/jellyfin-web/index.html`
+3. `{AppDomain.CurrentDomain.BaseDirectory}/jellyfin-web/index.html`
+4. `{AppDomain.CurrentDomain.BaseDirectory}/web/index.html` — certaines installations Linux
 
 `Plugin.cs` exposes the config page as an embedded resource (`JellyfinCarouselPlugin.Configuration.configPage.html`) and provides `GetWebPath()` so Jellyfin knows where to serve `Web/` assets from.
 
