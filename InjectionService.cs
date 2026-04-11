@@ -1,6 +1,5 @@
 using System;
 using System.IO;
-using System.Threading.Tasks;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Controller.Plugins;
 using Microsoft.Extensions.Logging;
@@ -25,7 +24,7 @@ public class InjectionService : IServerEntryPoint
     }
 
     /// <inheritdoc />
-    public Task Run()
+    public void Run()
     {
         try
         {
@@ -58,8 +57,6 @@ public class InjectionService : IServerEntryPoint
         {
             _logger.LogError(ex, "MediaCarousel: Échec de l'injection dans index.html.");
         }
-
-        return Task.CompletedTask;
     }
 
     private string? FindIndexHtml()
