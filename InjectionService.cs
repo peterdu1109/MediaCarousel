@@ -32,10 +32,10 @@ public class InjectionService : IServerEntryPoint
 
             if (indexFile == null)
             {
-                _logger.LogWarning("MediaCarousel: index.html introuvable. Chemins essayés : WebPath={WebPath}, ProgramData={ProgramData}, BaseDir={BaseDir}",
-                    _appPaths.WebPath,
-                    Path.Combine(_appPaths.ProgramDataPath, "jellyfin-web"),
-                    Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "jellyfin-web"));
+                _logger.LogWarning("MediaCarousel: index.html introuvable. Chemins essayés : {Path1}, {Path2}, {Path3}",
+                    Path.Combine(_appPaths.ProgramDataPath, "jellyfin-web", "index.html"),
+                    Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "jellyfin-web", "index.html"),
+                    Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "web", "index.html"));
                 return;
             }
 
@@ -61,24 +61,17 @@ public class InjectionService : IServerEntryPoint
 
     private string? FindIndexHtml()
     {
-        // Priorité 1 : WebPath — chemin officiel Jellyfin vers les fichiers web
-        if (!string.IsNullOrEmpty(_appPaths.WebPath))
+        string[] candidates = new[]
         {
-            var candidate = Path.Combine(_appPaths.WebPath, "index.html");
-            if (File.Exists(candidate)) return candidate;
+            Path.Combine(_appPaths.ProgramDataPath, "jellyfin-web", "index.html"),
+            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "jellyfin-web", "index.html"),
+            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "web", "index.html")
+        };
+
+        foreach (var path in candidates)
+        {
+            if (File.Exists(path)) return path;
         }
-
-        // Priorité 2 : jellyfin-web dans ProgramDataPath
-        candidate = Path.Combine(_appPaths.ProgramDataPath, "jellyfin-web", "index.html");
-        if (File.Exists(candidate)) return candidate;
-
-        // Priorité 3 : jellyfin-web dans le répertoire de base
-        candidate = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "jellyfin-web", "index.html");
-        if (File.Exists(candidate)) return candidate;
-
-        // Priorité 4 : web/ dans le répertoire de base (certaines installations Linux)
-        candidate = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "web", "index.html");
-        if (File.Exists(candidate)) return candidate;
 
         return null;
     }
