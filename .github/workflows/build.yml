@@ -35,32 +35,33 @@ jobs:
           cd bin/Release/net9.0
           zip -r ../../../JellyfinCarouselPlugin.zip .
 
-      - name: Update manifest.json (sourceUrl + checksum)
+      - name: Update manifest.json
         run: |
           VERSION=$(python3 -c "import json; d=json.load(open('manifest.json')); print(d[0]['versions'][0]['version'])")
           MD5=$(md5sum JellyfinCarouselPlugin.zip | awk '{print $1}')
           SOURCE_URL="https://github.com/peterdu1109/MediaCarousel/releases/download/${VERSION}/JellyfinCarouselPlugin.zip"
-          echo "Version : $VERSION | MD5 : $MD5"
-          SOURCE_URL="$SOURCE_URL" MD5_VAL="$MD5" python3 -c "
+          echo "Version=$VERSION  MD5=$MD5"
+          python3 -c "
 import json, os
 with open('manifest.json') as f:
     data = json.load(f)
-data[0]['versions'][0]['sourceUrl'] = os.environ['SOURCE_URL']
-data[0]['versions'][0]['checksum']   = os.environ['MD5_VAL']
+data[0]['versions'][0]['sourceUrl'] = '${SOURCE_URL}'
+data[0]['versions'][0]['checksum']  = '${MD5}'
 with open('manifest.json', 'w') as f:
     json.dump(data, f, indent=2, ensure_ascii=False)
     f.write('\n')
+print('manifest.json mis a jour')
 "
 
-      - name: Commit manifest.json si modifié
+      - name: Commit manifest.json
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add manifest.json
           if git diff --cached --quiet; then
-            echo "manifest.json inchangé"
+            echo "Aucun changement"
           else
-            git commit -m "chore: mise à jour sourceUrl et checksum [skip ci]"
+            git commit -m "chore: sourceUrl + checksum [skip ci]"
             git push origin main
           fi
 
@@ -71,18 +72,14 @@ with open('manifest.json', 'w') as f:
           path: JellyfinCarouselPlugin.zip
           retention-days: 30
 
-      - name: Générer le changelog et publier la release
+      - name: Publish Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VERSION=$(python3 -c "import json; d=json.load(open('manifest.json')); print(d[0]['versions'][0]['version'])")
 
-          # Tag précédent (exclure le tag courant)
-          PREV_TAG=$(git tag --sort=-version:refname \
-            | grep -E '^[0-9]+\.[0-9]+\.[0-9]+' \
-            | grep -v "^${VERSION}$" \
-            | head -1)
-          echo "Tag précédent : ${PREV_TAG:-aucun}"
+          PREV_TAG=$(git tag --sort=-version:refname | grep -E '^[0-9]+\.[0-9]+\.[0-9]+' | grep -v "^${VERSION}$" | head -1)
+          echo "Prev tag: ${PREV_TAG:-none}"
 
           if [ -z "$PREV_TAG" ]; then
             RAW=$(git log --no-merges --pretty=format:"%s" | head -20)
@@ -90,80 +87,49 @@ with open('manifest.json', 'w') as f:
             RAW=$(git log "${PREV_TAG}..HEAD" --no-merges --pretty=format:"%s")
           fi
 
-          FEATS=$(echo "$RAW"  | grep -i  "^feat"  | sed 's/^feat[^:]*: //' | grep -v '^$' | sed 's/^/- /' || true)
-          FIXES=$(echo "$RAW"  | grep -i  "^fix"   | sed 's/^fix[^:]*: //'  | grep -v '^$' | sed 's/^/- /' || true)
-          OTHERS=$(echo "$RAW" | grep -Eiv "^feat|^fix|^chore|^docs|^refactor|^Merge" \
-            | grep -v '^$' | sed 's/^/- /' | head -10 || true)
+          FEATS=$(echo "$RAW" | grep -i "^feat" | sed 's/^feat[^:]*: //' | grep -v '^$' | sed 's/^/- /' || true)
+          FIXES=$(echo "$RAW" | grep -i "^fix"  | sed 's/^fix[^:]*: //'  | grep -v '^$' | sed 's/^/- /' || true)
 
-          # Construire le changelog formaté
-          CHANGELOG=""
+          NOTES_FILE=/tmp/release-notes.md
+          printf '## Media Carousel v%s\n\n' "$VERSION"                                                          > "$NOTES_FILE"
+          printf 'Transformez votre Jellyfin en une experience de streaming moderne et immersive.\n\n'           >> "$NOTES_FILE"
+          printf -- '---\n\n'                                                                                    >> "$NOTES_FILE"
+
           if [ -n "$FEATS" ]; then
-            CHANGELOG="${CHANGELOG}### ✨ Nouvelles fonctionnalités\n${FEATS}\n\n"
+            printf '### Nouvelles fonctionnalites\n%s\n\n' "$FEATS"                                             >> "$NOTES_FILE"
           fi
           if [ -n "$FIXES" ]; then
-            CHANGELOG="${CHANGELOG}### 🐛 Corrections\n${FIXES}\n\n"
+            printf '### Corrections\n%s\n\n' "$FIXES"                                                           >> "$NOTES_FILE"
           fi
-          if [ -n "$OTHERS" ]; then
-            CHANGELOG="${CHANGELOG}### 🔧 Améliorations\n${OTHERS}\n\n"
-          fi
-          if [ -z "$CHANGELOG" ]; then
-            CHANGELOG="- Mise à jour et corrections diverses\n"
+          if [ -z "$FEATS" ] && [ -z "$FIXES" ]; then
+            printf '- Mise a jour et corrections diverses\n\n'                                                   >> "$NOTES_FILE"
           fi
 
-          # Écrire les notes de release dans un fichier (Python pour éviter les problèmes d'échappement)
-          VERSION="$VERSION" CHANGELOG="$CHANGELOG" python3 - << 'PYEOF'
-import os
+          printf -- '---\n\n'                                                                                    >> "$NOTES_FILE"
+          printf '## Installation\n\n'                                                                           >> "$NOTES_FILE"
+          printf '### Via le catalogue Jellyfin\n\n'                                                            >> "$NOTES_FILE"
+          printf '1. Dashboard -> Plugins -> Catalogues -> +\n'                                                  >> "$NOTES_FILE"
+          printf '2. Ajoute cette URL :\n'                                                                       >> "$NOTES_FILE"
+          printf '```\nhttps://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/manifest.json\n```\n'   >> "$NOTES_FILE"
+          printf '3. Installe Carousel Layout puis redémarre Jellyfin\n\n'                                       >> "$NOTES_FILE"
+          printf '### Installation manuelle\n\n'                                                                 >> "$NOTES_FILE"
+          printf '1. Telecharge JellyfinCarouselPlugin.zip ci-dessous\n'                                        >> "$NOTES_FILE"
+          printf '2. Extrais dans plugins/CarouselLayout/ de Jellyfin\n'                                        >> "$NOTES_FILE"
+          printf '3. Redemarre Jellyfin\n\n'                                                                    >> "$NOTES_FILE"
+          printf -- '---\n\n'                                                                                    >> "$NOTES_FILE"
+          printf '## Prerequis\n\n'                                                                              >> "$NOTES_FILE"
+          printf '- Jellyfin 10.11.x\n'                                                                         >> "$NOTES_FILE"
+          printf '- Client navigateur web ou app Android\n'                                                     >> "$NOTES_FILE"
 
-version  = os.environ['VERSION']
-changelog = os.environ['CHANGELOG'].replace('\\n', '\n')
-
-notes  = f"## 🎬 Media Carousel v{version}\n\n"
-notes += "Transformez votre Jellyfin en une expérience de streaming moderne et immersive.\n\n"
-notes += "---\n\n"
-notes += changelog
-notes += "---\n\n"
-notes += "## 🚀 Installation\n\n"
-notes += "### Via le catalogue Jellyfin (recommandé)\n\n"
-notes += "1. **Dashboard → Plugins → Catalogues → +**\n"
-notes += "2. Colle cette URL :\n"
-notes += "```\nhttps://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/manifest.json\n```\n"
-notes += "3. **Dashboard → Plugins → Catalogue** → installe **Carousel Layout** → redémarre Jellyfin\n\n"
-notes += "### Installation manuelle\n\n"
-notes += "1. Télécharge `JellyfinCarouselPlugin.zip` ci-dessous\n"
-notes += "2. Extrais dans un dossier `CarouselLayout` dans le répertoire `plugins` de Jellyfin\n"
-notes += "3. Redémarre Jellyfin\n\n"
-notes += "---\n\n"
-notes += "## ⚙️ Configuration\n\n"
-notes += "**Dashboard → Plugins → Carousel Layout → Paramètres**, puis recharge la page (F5).\n\n"
-notes += "---\n\n"
-notes += "## 📋 Prérequis\n\n"
-notes += "- Jellyfin **10.11.x**\n"
-notes += "- Client **navigateur web** ou **app Android** (l'app iOS Swiftfin est native, non compatible)\n"
-
-with open('/tmp/release-notes.md', 'w') as f:
-    f.write(notes)
-print("Notes de release écrites.")
-PYEOF
-
-          # Créer ou déplacer le tag sur le commit courant
           git tag -f "$VERSION"
           git push origin "$VERSION" --force
 
-          # Créer la release si elle n'existe pas, la mettre à jour sinon
           if gh release view "$VERSION" > /dev/null 2>&1; then
-            echo "Release $VERSION existante — mise à jour..."
-            gh release edit "$VERSION" \
-              --title "Media Carousel v${VERSION}" \
-              --notes-file /tmp/release-notes.md \
-              --latest
+            echo "Mise a jour release $VERSION..."
+            gh release edit "$VERSION" --title "Media Carousel v${VERSION}" --notes-file "$NOTES_FILE" --latest
             gh release upload "$VERSION" JellyfinCarouselPlugin.zip --clobber
           else
-            echo "Création de la release $VERSION..."
-            gh release create "$VERSION" \
-              --title "Media Carousel v${VERSION}" \
-              --notes-file /tmp/release-notes.md \
-              --latest \
-              JellyfinCarouselPlugin.zip
+            echo "Creation release $VERSION..."
+            gh release create "$VERSION" --title "Media Carousel v${VERSION}" --notes-file "$NOTES_FILE" --latest JellyfinCarouselPlugin.zip
           fi
-
-          echo "✅ Release v${VERSION} publiée avec succès."
+          echo "Release v${VERSION} publiee."
