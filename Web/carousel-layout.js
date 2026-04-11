@@ -227,6 +227,29 @@
             wrapper.scrollBy({ left: wrapper.offsetWidth * 0.8, behavior: 'smooth' });
         });
 
+        // Support tactile : glisser horizontalement pour naviguer
+        let touchStartX = 0;
+        let touchStartScrollLeft = 0;
+        let isDragging = false;
+
+        wrapper.addEventListener('touchstart', (e) => {
+            touchStartX = e.touches[0].clientX;
+            touchStartScrollLeft = wrapper.scrollLeft;
+            isDragging = false;
+        }, { passive: true });
+
+        wrapper.addEventListener('touchmove', (e) => {
+            const dx = touchStartX - e.touches[0].clientX;
+            if (Math.abs(dx) > 5) isDragging = true;
+            wrapper.scrollLeft = touchStartScrollLeft + dx;
+        }, { passive: true });
+
+        wrapper.addEventListener('touchend', (e) => {
+            if (isDragging) {
+                e.preventDefault();
+            }
+        });
+
         carouselWrapper.appendChild(prevBtn);
         carouselWrapper.appendChild(wrapper);
         carouselWrapper.appendChild(nextBtn);
@@ -839,7 +862,7 @@
     }
 
     .carousel-hero-content {
-        width: 50%;
+        width: 60%;
     }
 
     .carousel-hero-title {
@@ -847,6 +870,11 @@
     }
 
     .carousel-hero-description {
+        font-size: 1rem;
+    }
+
+    .carousel-hero-button {
+        padding: 0.6rem 1.2rem;
         font-size: 1rem;
     }
 }
@@ -858,12 +886,62 @@
         height: 67px;
     }
 
+    .carousel-main-container {
+        padding: 10px 2%;
+    }
+
+    .carousel-hero {
+        height: 70vw;
+        max-height: 280px;
+    }
+
     .carousel-hero-content {
-        width: 80%;
+        width: 90%;
+        bottom: 20%;
     }
 
     .carousel-hero-title {
-        font-size: 1.5rem;
+        font-size: 1.4rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .carousel-hero-description {
+        display: none;
+    }
+
+    .carousel-hero-button {
+        padding: 0.5rem 1rem;
+        font-size: 0.9rem;
+    }
+
+    .carousel-category-title {
+        font-size: 1rem;
+        padding-left: 2%;
+    }
+
+    .carousel-wrapper {
+        padding: 0.5rem 2%;
+        gap: 0.4rem;
+    }
+}
+
+/* Appareils tactiles : toujours afficher overlay, favori et boutons de navigation */
+@media (hover: none) {
+    .carousel-item-overlay {
+        transform: translateY(0);
+        background: linear-gradient(to top, rgba(0, 0, 0, 0.8) 0%, transparent 70%);
+    }
+
+    .carousel-favorite-btn {
+        opacity: 1;
+    }
+
+    .carousel-nav-button {
+        display: none;
+    }
+
+    .carousel-item:hover {
+        transform: none;
     }
 }
 
