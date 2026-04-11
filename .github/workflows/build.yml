@@ -27,7 +27,9 @@ jobs:
       - name: Bump version
         id: ver
         run: |
-          CURRENT=$(python3 -c "import json; d=json.load(open('manifest.json')); print(d[0]['versions'][0]['version'])")
+          # Lire la version (peut etre 1.2.0 ou 1.2.0.0), normaliser en 3 parties
+          RAW_VER=$(python3 -c "import json; d=json.load(open('manifest.json')); print(d[0]['versions'][0]['version'])")
+          CURRENT=$(echo "$RAW_VER" | cut -d. -f1-3)
           IFS='.' read -r MAJ MIN PAT <<< "$CURRENT"
 
           LAST_TAG=$(git tag --sort=-version:refname | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | head -1 || true)
@@ -46,13 +48,14 @@ jobs:
             PAT=$((PAT+1))
           fi
 
-          NEW="${MAJ}.${MIN}.${PAT}"
+          NEW="${MAJ}.${MIN}.${PAT}"        # tag GitHub : 1.2.0
+          NEW_FULL="${NEW}.0"               # version interne : 1.2.0.0 (requis par Jellyfin + .NET)
           echo "version=$NEW" >> $GITHUB_OUTPUT
-          echo "$CURRENT -> $NEW"
+          echo "$CURRENT -> $NEW_FULL"
 
-          jq --arg v "$NEW" '.[0].versions[0].version = $v' manifest.json > manifest.tmp && mv manifest.tmp manifest.json
-          sed -i "s|<AssemblyVersion>.*</AssemblyVersion>|<AssemblyVersion>${NEW}.0</AssemblyVersion>|" JellyfinCarouselPlugin.csproj
-          sed -i "s|<FileVersion>.*</FileVersion>|<FileVersion>${NEW}.0</FileVersion>|" JellyfinCarouselPlugin.csproj
+          jq --arg v "$NEW_FULL" '.[0].versions[0].version = $v' manifest.json > manifest.tmp && mv manifest.tmp manifest.json
+          sed -i "s|<AssemblyVersion>.*</AssemblyVersion>|<AssemblyVersion>${NEW_FULL}</AssemblyVersion>|" JellyfinCarouselPlugin.csproj
+          sed -i "s|<FileVersion>.*</FileVersion>|<FileVersion>${NEW_FULL}</FileVersion>|" JellyfinCarouselPlugin.csproj
 
       - name: Build
         run: |
