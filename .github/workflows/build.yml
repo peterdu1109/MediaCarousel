@@ -35,7 +35,40 @@ jobs:
           cd bin/Release/net9.0
           zip -r ../../../JellyfinCarouselPlugin.zip .
           cd ../../..
-          echo "MD5: $(md5sum JellyfinCarouselPlugin.zip | awk '{print $1}')"
+
+      - name: Update manifest.json (sourceUrl + checksum)
+        run: |
+          VERSION=$(python3 -c "import json; d=json.load(open('manifest.json')); print(d[0]['versions'][0]['version'])")
+          MD5=$(md5sum JellyfinCarouselPlugin.zip | awk '{print $1}')
+          SOURCE_URL="https://github.com/peterdu1109/MediaCarousel/releases/download/${VERSION}/JellyfinCarouselPlugin.zip"
+
+          echo "Version : $VERSION"
+          echo "MD5     : $MD5"
+          echo "URL     : $SOURCE_URL"
+
+          SOURCE_URL="$SOURCE_URL" MD5_VAL="$MD5" python3 - <<'PYEOF'
+import json, os
+with open('manifest.json') as f:
+    data = json.load(f)
+data[0]['versions'][0]['sourceUrl'] = os.environ['SOURCE_URL']
+data[0]['versions'][0]['checksum']   = os.environ['MD5_VAL']
+with open('manifest.json', 'w') as f:
+    json.dump(data, f, indent=2, ensure_ascii=False)
+    f.write('\n')
+print("manifest.json mis à jour")
+PYEOF
+
+      - name: Commit manifest.json si modifié
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add manifest.json
+          if git diff --cached --quiet; then
+            echo "manifest.json inchangé, rien à commiter"
+          else
+            git commit -m "chore: mise à jour sourceUrl et checksum manifest.json [skip ci]"
+            git push origin main
+          fi
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -47,24 +80,28 @@ jobs:
       - name: Get version and changelog
         id: release_info
         run: |
-          # Version depuis manifest.json
           VERSION=$(python3 -c "import json; d=json.load(open('manifest.json')); print(d[0]['versions'][0]['version'])")
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Version détectée : $VERSION"
 
-          # Trouver le dernier tag de release pour générer le changelog depuis ce point
-          LAST_TAG=$(git tag --sort=-version:refname | grep -E '^[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+          # Tag PRÉCÉDENT (exclure le tag courant qui vient d'être créé)
+          PREV_TAG=$(git tag --sort=-version:refname \
+            | grep -E '^[0-9]+\.[0-9]+\.[0-9]+' \
+            | grep -v "^${VERSION}$" \
+            | head -1)
 
-          if [ -z "$LAST_TAG" ]; then
-            RAW=$(git log --no-merges --pretty=format:"%s" | head -30)
+          echo "Tag précédent : ${PREV_TAG:-aucun}"
+
+          if [ -z "$PREV_TAG" ]; then
+            RAW=$(git log --no-merges --pretty=format:"%s" | head -20)
           else
-            RAW=$(git log "${LAST_TAG}..HEAD" --no-merges --pretty=format:"%s")
+            RAW=$(git log "${PREV_TAG}..HEAD" --no-merges --pretty=format:"%s")
           fi
 
-          # Catégoriser les commits par type (Conventional Commits)
-          FEATS=$(echo "$RAW" | grep -i "^feat" | sed 's/^feat[:(][^)]*[):]*//' | sed 's/^[: ]*//' | sed 's/^/- /' || true)
-          FIXES=$(echo "$RAW" | grep -i "^fix" | sed 's/^fix[:(][^)]*[):]*//' | sed 's/^[: ]*//' | sed 's/^/- /' || true)
-          OTHERS=$(echo "$RAW" | grep -iv "^feat\|^fix\|^chore\|^docs\|Merge" | sed 's/^/- /' | head -10 || true)
+          # Catégoriser par type — sed 's/^feat[^:]*: //' retire "feat: " ou "feat(scope): "
+          FEATS=$(echo "$RAW"  | grep -i  "^feat"   | sed 's/^feat[^:]*: //'  | grep -v '^$' | sed 's/^/- /' || true)
+          FIXES=$(echo "$RAW"  | grep -i  "^fix"    | sed 's/^fix[^:]*: //'   | grep -v '^$' | sed 's/^/- /' || true)
+          OTHERS=$(echo "$RAW" | grep -Eiv "^feat|^fix|^chore|^docs|^refactor|^Merge" \
+            | grep -v '^$' | sed 's/^/- /' | head -10 || true)
 
           {
             echo "CHANGELOG<<EOF"
