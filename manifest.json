@@ -13,7 +13,7 @@
         "changelog": "- Page de configuration complète (HeroMode, couleur accent, toggles par catégorie)\n- Bannière Hero personnalisable : Aléatoire, Dernier ajout, En cours\n- Bouton Favoris (cœur) au survol sans ouvrir la fiche\n- Badges dynamiques : qualité vidéo (4K/HD) et nouveaux épisodes\n- Carrousel Collections (Boxsets)\n- Chargement différé des genres (IntersectionObserver)\n- Compatibilité renforcée avec le plugin Enhanced Home Screen Sections",
         "targetAbi": "10.11.0.0",
         "sourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/1.1.0/JellyfinCarouselPlugin.zip",
-        "checksum": "c482f27263a175c261e040a76e68cc56",
+        "checksum": "c72df3e915bbf089c26e1cddac0c7bb9",
         "timestamp": "2026-04-10T00:00:00Z"
       },
       {
