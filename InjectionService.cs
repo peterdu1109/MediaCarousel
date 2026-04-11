@@ -62,8 +62,11 @@ public class InjectionService : IServerEntryPoint
     private string? FindIndexHtml()
     {
         // Priorité 1 : WebPath — chemin officiel Jellyfin vers les fichiers web
-        var candidate = Path.Combine(_appPaths.WebPath, "index.html");
-        if (File.Exists(candidate)) return candidate;
+        if (!string.IsNullOrEmpty(_appPaths.WebPath))
+        {
+            var candidate = Path.Combine(_appPaths.WebPath, "index.html");
+            if (File.Exists(candidate)) return candidate;
+        }
 
         // Priorité 2 : jellyfin-web dans ProgramDataPath
         candidate = Path.Combine(_appPaths.ProgramDataPath, "jellyfin-web", "index.html");
