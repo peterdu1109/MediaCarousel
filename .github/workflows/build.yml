@@ -4,8 +4,6 @@ on:
   push:
     branches:
       - main
-    tags:
-      - '[0-9]+.[0-9]+.[0-9]+'
   workflow_dispatch:
 
 permissions:
@@ -18,6 +16,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # historique complet pour le changelog automatique
 
       - name: Setup .NET 9.0
         uses: actions/setup-dotnet@v4
@@ -44,37 +44,66 @@ jobs:
           path: JellyfinCarouselPlugin.zip
           retention-days: 30
 
-      - name: Get version from manifest
-        id: version
+      - name: Get version and changelog
+        id: release_info
         run: |
-          VERSION=$(python3 -c "import json; data=json.load(open('manifest.json')); print(data[0]['versions'][0]['version'])")
+          # Version depuis manifest.json
+          VERSION=$(python3 -c "import json; d=json.load(open('manifest.json')); print(d[0]['versions'][0]['version'])")
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Version détectée : $VERSION"
 
-      - name: Create GitHub Release
+          # Trouver le dernier tag de release pour générer le changelog depuis ce point
+          LAST_TAG=$(git tag --sort=-version:refname | grep -E '^[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+
+          if [ -z "$LAST_TAG" ]; then
+            RAW=$(git log --no-merges --pretty=format:"%s" | head -30)
+          else
+            RAW=$(git log "${LAST_TAG}..HEAD" --no-merges --pretty=format:"%s")
+          fi
+
+          # Catégoriser les commits par type (Conventional Commits)
+          FEATS=$(echo "$RAW" | grep -i "^feat" | sed 's/^feat[:(][^)]*[):]*//' | sed 's/^[: ]*//' | sed 's/^/- /' || true)
+          FIXES=$(echo "$RAW" | grep -i "^fix" | sed 's/^fix[:(][^)]*[):]*//' | sed 's/^[: ]*//' | sed 's/^/- /' || true)
+          OTHERS=$(echo "$RAW" | grep -iv "^feat\|^fix\|^chore\|^docs\|Merge" | sed 's/^/- /' | head -10 || true)
+
+          {
+            echo "CHANGELOG<<EOF"
+            if [ -n "$FEATS" ]; then
+              echo "### ✨ Nouvelles fonctionnalités"
+              echo "$FEATS"
+              echo ""
+            fi
+            if [ -n "$FIXES" ]; then
+              echo "### 🐛 Corrections"
+              echo "$FIXES"
+              echo ""
+            fi
+            if [ -n "$OTHERS" ]; then
+              echo "### 🔧 Améliorations"
+              echo "$OTHERS"
+              echo ""
+            fi
+            if [ -z "$FEATS" ] && [ -z "$FIXES" ] && [ -z "$OTHERS" ]; then
+              echo "- Mise à jour et corrections diverses"
+            fi
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
+
+      - name: Create or update GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.version.outputs.version }}
-          name: "Media Carousel ${{ steps.version.outputs.version }}"
+          tag_name: ${{ steps.release_info.outputs.version }}
+          name: "Media Carousel v${{ steps.release_info.outputs.version }}"
           files: JellyfinCarouselPlugin.zip
-          generate_release_notes: false
+          make_latest: true
           body: |
-            ## 🎬 Media Carousel ${{ steps.version.outputs.version }}
+            ## 🎬 Media Carousel v${{ steps.release_info.outputs.version }}
 
             Transformez votre Jellyfin en une expérience de streaming moderne et immersive.
 
             ---
 
-            ## ✨ Nouveautés
-
-            - **Page de configuration complète** — HeroMode, couleur accent, toggles par catégorie
-            - **Bannière Hero personnalisable** — Aléatoire, Dernier ajout ou En cours de lecture
-            - **Bouton Favoris** — Ajout/retrait au survol sans ouvrir la fiche
-            - **Badges dynamiques** — Qualité vidéo (4K / HD) et nouveaux épisodes
-            - **Carrousel Collections** — Boxsets et sagas complètes
-            - **Chargement différé des genres** — Performances améliorées via IntersectionObserver
-            - **Compatibilité renforcée** — Plus de conflits avec Enhanced Home Screen Sections
-            - **Correction injection** — Détection automatique du chemin `index.html` sur toutes les installations (Windows, Linux, Docker)
+            ${{ steps.release_info.outputs.CHANGELOG }}
 
             ---
 
@@ -97,13 +126,13 @@ jobs:
 
             ---
 
-            ## ⚙️ Après installation
+            ## ⚙️ Configuration
 
-            Configure le plugin depuis **Dashboard → Plugins → Carousel Layout → Paramètres**
-            puis recharge la page d'accueil **(F5)**.
+            **Dashboard → Plugins → Carousel Layout → Paramètres**, puis recharge la page (F5).
 
             ---
 
             ## 📋 Prérequis
 
             - Jellyfin **10.11.x**
+            - Client **navigateur web** ou **app Android** (l'app iOS Swiftfin est native, non compatible)

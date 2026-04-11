@@ -438,8 +438,17 @@
         // Set layout in UI (Prepend inside the home scroll container)
         const existingContainer = document.getElementById('jellyfin-carousel-layout');
         if (existingContainer) {
-            existingContainer.remove(); // Remove old one if any
+            existingContainer.remove();
         }
+
+        // Masquer les enfants natifs de mainContent via data-attribute pour
+        // pouvoir les restaurer proprement (sans casser d'autres plugins)
+        Array.from(mainContent.children).forEach(child => {
+            if (child !== carouselContainer) {
+                child.setAttribute('data-jc-hidden', 'true');
+            }
+        });
+
         mainContent.insertBefore(carouselContainer, mainContent.firstChild);
         document.body.classList.add('media-carousel-active');
 
@@ -475,9 +484,17 @@
             window.location.pathname.includes('home.html');
     }
 
+    function deactivateCarousel() {
+        document.body.classList.remove('media-carousel-active');
+        // Restaurer les éléments masqués pour que les autres plugins/pages fonctionnent normalement
+        document.querySelectorAll('[data-jc-hidden="true"]').forEach(el => {
+            el.removeAttribute('data-jc-hidden');
+        });
+    }
+
     function triggerLayout() {
         if (!isCurrentPageHome()) {
-            document.body.classList.remove('media-carousel-active');
+            deactivateCarousel();
             return;
         }
 
@@ -504,7 +521,7 @@
             if (view && (view.id === 'indexPage' || view.classList.contains('homePage'))) {
                 setTimeout(triggerLayout, 100);
             } else {
-                document.body.classList.remove('media-carousel-active');
+                deactivateCarousel();
             }
         });
 
@@ -517,7 +534,7 @@
                     initTimeout = setTimeout(triggerLayout, 500);
                 }
             } else {
-                document.body.classList.remove('media-carousel-active');
+                deactivateCarousel();
             }
         });
 
@@ -533,14 +550,16 @@
 /* Thème sombre avec carrousels horizontaux */
 
 :root {
-    /* Utilisation des variables natives Jellyfin */
+    /* Variables avec fallbacks multi-couches pour compatibilité tous thèmes */
     --carousel-bg: transparent;
-    --carousel-text: var(--theme-text);
-    --carousel-hover: var(--theme-text);
-    --carousel-card-bg: var(--theme-background-secondary, #202020);
-    --carousel-highlight: var(--theme-primary, #00a4dc);
+    --carousel-text: var(--theme-text, var(--body-color, var(--body-text-color, #e5e5e5)));
+    --carousel-hover: var(--theme-text, var(--body-color, #ffffff));
+    --carousel-text-secondary: var(--theme-text-secondary, var(--secondary-text-color, var(--body-muted-color, #b3b3b3)));
+    --carousel-card-bg: var(--theme-background-secondary, var(--card-background-color, var(--paper-background-color, #202020)));
+    --carousel-highlight: var(--theme-primary, var(--accent-color, var(--link-color, #00a4dc)));
     --carousel-shadow: rgba(0, 0, 0, 0.7);
     --carousel-transition: all 0.3s ease;
+    --carousel-overlay-bg: var(--theme-background, var(--background-color, #141414));
 }
 
 /* Container principal */
@@ -559,7 +578,7 @@
 .carousel-category-title {
     font-size: 1.4rem;
     font-weight: 700;
-    color: var(--theme-text);
+    color: var(--carousel-text);
     margin-bottom: 1rem;
     padding-left: 4%;
 }
@@ -640,7 +659,7 @@
 .carousel-item-title {
     font-size: 1rem;
     font-weight: 600;
-    color: var(--theme-text);
+    color: var(--carousel-text);
     margin-bottom: 0.5rem;
     text-overflow: ellipsis;
     overflow: hidden;
@@ -653,7 +672,7 @@
     gap: 0.5rem;
     align-items: center;
     font-size: 0.85rem;
-    color: var(--theme-text-secondary, #b3b3b3);
+    color: var(--carousel-text-secondary);
 }
 
 /* Badges */
@@ -838,7 +857,7 @@
     left: 0;
     right: 0;
     height: 14.7vw;
-    background: linear-gradient(to top, var(--theme-background, #141414) 0%, transparent 100%);
+    background: linear-gradient(to top, var(--carousel-overlay-bg) 0%, transparent 100%);
 }
 
 /* Responsive design */
@@ -949,27 +968,17 @@
    COMPATIBILITÉ ET MASQUAGE DES SECTIONS NATIVES/ENHANCED
    ========================================================================= */
 
-/* Masquer les sections natives et plugin Enhanced quand notre plugin est actif */
-body.media-carousel-active .homePage .sections,
-body.media-carousel-active .homePage .verticalSection,
-body.media-carousel-active .homePage .hss-section,
-body.media-carousel-active .homePage .section0,
-body.media-carousel-active .homePage .section1,
-body.media-carousel-active .homePage .section2,
-body.media-carousel-active .homePage .section3,
-body.media-carousel-active .homePage .section4,
-body.media-carousel-active .homePage .section5,
-body.media-carousel-active .homePage .section6,
-body.media-carousel-active .homePage .section7,
-body.media-carousel-active .homePage .section8,
-body.media-carousel-active .homePage .section9,
-body.media-carousel-active .homePage .homePageSection {
+/* Masquer uniquement les éléments explicitement marqués par le plugin via JS.
+   Cette approche ciblée évite de cacher les éléments injectés par d'autres plugins. */
+[data-jc-hidden="true"] {
     display: none !important;
 }
 
-/* Cache tout le reste de l'accueil pour forcer l'exclusivité du carrousel */
-body.media-carousel-active .homePage>div:not(#jellyfin-carousel-layout),
-body.media-carousel-active #indexPage>div:not(#jellyfin-carousel-layout) {
+/* Filet de sécurité : masquer les sections natives Jellyfin par classe */
+body.media-carousel-active .homePage .sections,
+body.media-carousel-active .homePage .verticalSection,
+body.media-carousel-active .homePage .hss-section,
+body.media-carousel-active .homePage .homePageSection {
     display: none !important;
 }
 `;
