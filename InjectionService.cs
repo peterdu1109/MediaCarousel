@@ -1,7 +1,9 @@
 using System;
 using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 using MediaBrowser.Common.Configuration;
-using MediaBrowser.Controller.Plugins;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
 namespace JellyfinCarouselPlugin;
@@ -9,7 +11,7 @@ namespace JellyfinCarouselPlugin;
 /// <summary>
 /// Service d'injection du script carousel dans l'interface web Jellyfin au démarrage
 /// </summary>
-public class InjectionService : IServerEntryPoint
+public class InjectionService : IHostedService
 {
     private readonly IApplicationPaths _appPaths;
     private readonly ILogger<InjectionService> _logger;
@@ -24,7 +26,7 @@ public class InjectionService : IServerEntryPoint
     }
 
     /// <inheritdoc />
-    public void Run()
+    public Task StartAsync(CancellationToken cancellationToken)
     {
         try
         {
@@ -32,11 +34,12 @@ public class InjectionService : IServerEntryPoint
 
             if (indexFile == null)
             {
-                _logger.LogWarning("MediaCarousel: index.html introuvable. Chemins essayés : {Path1}, {Path2}, {Path3}",
+                _logger.LogWarning("MediaCarousel: index.html introuvable. Chemins essayés : {Path1}, {Path2}, {Path3}, {Path4}",
+                    Path.Combine(_appPaths.WebPath, "index.html"),
                     Path.Combine(_appPaths.ProgramDataPath, "jellyfin-web", "index.html"),
                     Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "jellyfin-web", "index.html"),
                     Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "web", "index.html"));
-                return;
+                return Task.CompletedTask;
             }
 
             var content = File.ReadAllText(indexFile);
@@ -53,16 +56,26 @@ public class InjectionService : IServerEntryPoint
                 _logger.LogInformation("MediaCarousel: Script déjà présent dans {Path}", indexFile);
             }
         }
+        catch (UnauthorizedAccessException ex)
+        {
+            _logger.LogWarning(ex, "MediaCarousel: Accès refusé à index.html. Le plugin fonctionnera en mode chargement manuel.");
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "MediaCarousel: Échec de l'injection dans index.html.");
         }
+
+        return Task.CompletedTask;
     }
+
+    /// <inheritdoc />
+    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
     private string? FindIndexHtml()
     {
         string[] candidates = new[]
         {
+            Path.Combine(_appPaths.WebPath, "index.html"),
             Path.Combine(_appPaths.ProgramDataPath, "jellyfin-web", "index.html"),
             Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "jellyfin-web", "index.html"),
             Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "web", "index.html")
@@ -75,7 +88,4 @@ public class InjectionService : IServerEntryPoint
 
         return null;
     }
-
-    /// <inheritdoc />
-    public void Dispose() { }
 }
