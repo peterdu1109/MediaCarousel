@@ -69,59 +69,61 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VERSION=$(python3 -c "import json; d=json.load(open('manifest.json')); print(d[0]['versions'][0]['version'])")
+          echo "Version: $VERSION"
 
-          PREV_TAG=$(git tag --sort=-version:refname | grep -E '^[0-9]+\.[0-9]+\.[0-9]+' | grep -v "^${VERSION}$" | head -1)
-          echo "Prev tag: ${PREV_TAG:-none}"
-
+          # Changelog depuis le tag precedent
+          PREV_TAG=$(git tag --sort=-version:refname | grep -E '^[0-9]+\.[0-9]+\.[0-9]+' | grep -v "^${VERSION}$" | head -1 || true)
+          echo "Tag precedent: ${PREV_TAG:-aucun}"
           if [ -z "$PREV_TAG" ]; then
-            RAW=$(git log --no-merges --pretty=format:"%s" | head -20)
+            RAW=$(git log --no-merges --pretty=format:"- %s" | head -20 || true)
           else
-            RAW=$(git log "${PREV_TAG}..HEAD" --no-merges --pretty=format:"%s")
+            RAW=$(git log "${PREV_TAG}..HEAD" --no-merges --pretty=format:"- %s" || true)
           fi
+          [ -z "$RAW" ] && RAW="- Mise a jour et corrections diverses"
 
-          FEATS=$(echo "$RAW" | grep -i "^feat" | sed 's/^feat[^:]*: //' | grep -v '^$' | sed 's/^/- /' || true)
-          FIXES=$(echo "$RAW" | grep -i "^fix"  | sed 's/^fix[^:]*: //'  | grep -v '^$' | sed 's/^/- /' || true)
+          # Ecrire les notes de release
+          N=/tmp/release-notes.md
+          echo "## Media Carousel v${VERSION}"                                                                    > "$N"
+          echo ""                                                                                                 >> "$N"
+          echo "Transformez votre Jellyfin en une experience de streaming moderne et immersive."                 >> "$N"
+          echo ""                                                                                                 >> "$N"
+          echo "---"                                                                                             >> "$N"
+          echo ""                                                                                                 >> "$N"
+          echo "### Changements"                                                                                 >> "$N"
+          echo ""                                                                                                 >> "$N"
+          echo "$RAW"                                                                                            >> "$N"
+          echo ""                                                                                                 >> "$N"
+          echo "---"                                                                                             >> "$N"
+          echo ""                                                                                                 >> "$N"
+          echo "## Installation"                                                                                 >> "$N"
+          echo ""                                                                                                 >> "$N"
+          echo "### Via le catalogue Jellyfin (recommande)"                                                      >> "$N"
+          echo ""                                                                                                 >> "$N"
+          echo "1. Dashboard > Plugins > Catalogues > +"                                                        >> "$N"
+          echo "2. Ajoute cette URL :"                                                                           >> "$N"
+          echo '```'                                                                                             >> "$N"
+          echo "https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/manifest.json"                 >> "$N"
+          echo '```'                                                                                             >> "$N"
+          echo "3. Installe Carousel Layout puis redemarre Jellyfin"                                             >> "$N"
+          echo ""                                                                                                 >> "$N"
+          echo "### Installation manuelle"                                                                       >> "$N"
+          echo ""                                                                                                 >> "$N"
+          echo "1. Telecharge JellyfinCarouselPlugin.zip ci-dessous"                                            >> "$N"
+          echo "2. Extrais dans plugins/CarouselLayout/ de Jellyfin"                                            >> "$N"
+          echo "3. Redemarre Jellyfin"                                                                           >> "$N"
+          echo ""                                                                                                 >> "$N"
+          echo "---"                                                                                             >> "$N"
+          echo ""                                                                                                 >> "$N"
+          echo "**Prerequis :** Jellyfin 10.11.x — navigateur web ou app Android"                               >> "$N"
 
-          NOTES_FILE=/tmp/release-notes.md
-          printf '## Media Carousel v%s\n\n' "$VERSION"                                                          > "$NOTES_FILE"
-          printf 'Transformez votre Jellyfin en une experience de streaming moderne et immersive.\n\n'           >> "$NOTES_FILE"
-          printf -- '---\n\n'                                                                                    >> "$NOTES_FILE"
-
-          if [ -n "$FEATS" ]; then
-            printf '### Nouvelles fonctionnalites\n%s\n\n' "$FEATS"                                             >> "$NOTES_FILE"
-          fi
-          if [ -n "$FIXES" ]; then
-            printf '### Corrections\n%s\n\n' "$FIXES"                                                           >> "$NOTES_FILE"
-          fi
-          if [ -z "$FEATS" ] && [ -z "$FIXES" ]; then
-            printf '- Mise a jour et corrections diverses\n\n'                                                   >> "$NOTES_FILE"
-          fi
-
-          printf -- '---\n\n'                                                                                    >> "$NOTES_FILE"
-          printf '## Installation\n\n'                                                                           >> "$NOTES_FILE"
-          printf '### Via le catalogue Jellyfin\n\n'                                                            >> "$NOTES_FILE"
-          printf '1. Dashboard -> Plugins -> Catalogues -> +\n'                                                  >> "$NOTES_FILE"
-          printf '2. Ajoute cette URL :\n'                                                                       >> "$NOTES_FILE"
-          printf '```\nhttps://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/manifest.json\n```\n'   >> "$NOTES_FILE"
-          printf '3. Installe Carousel Layout puis redémarre Jellyfin\n\n'                                       >> "$NOTES_FILE"
-          printf '### Installation manuelle\n\n'                                                                 >> "$NOTES_FILE"
-          printf '1. Telecharge JellyfinCarouselPlugin.zip ci-dessous\n'                                        >> "$NOTES_FILE"
-          printf '2. Extrais dans plugins/CarouselLayout/ de Jellyfin\n'                                        >> "$NOTES_FILE"
-          printf '3. Redemarre Jellyfin\n\n'                                                                    >> "$NOTES_FILE"
-          printf -- '---\n\n'                                                                                    >> "$NOTES_FILE"
-          printf '## Prerequis\n\n'                                                                              >> "$NOTES_FILE"
-          printf '- Jellyfin 10.11.x\n'                                                                         >> "$NOTES_FILE"
-          printf '- Client navigateur web ou app Android\n'                                                     >> "$NOTES_FILE"
-
-          git tag -f "$VERSION"
-          git push origin "$VERSION" --force
-
+          # Supprimer la release existante si elle existe, puis recreer proprement
           if gh release view "$VERSION" > /dev/null 2>&1; then
-            echo "Mise a jour release $VERSION..."
-            gh release edit "$VERSION" --title "Media Carousel v${VERSION}" --notes-file "$NOTES_FILE" --latest
-            gh release upload "$VERSION" JellyfinCarouselPlugin.zip --clobber
-          else
-            echo "Creation release $VERSION..."
-            gh release create "$VERSION" --title "Media Carousel v${VERSION}" --notes-file "$NOTES_FILE" --latest JellyfinCarouselPlugin.zip
+            echo "Suppression release existante $VERSION..."
+            gh release delete "$VERSION" --yes --cleanup-tag
           fi
-          echo "Release v${VERSION} publiee."
+          echo "Creation release $VERSION..."
+          gh release create "$VERSION" \
+            --title "Media Carousel v${VERSION}" \
+            --notes-file "$N" \
+            JellyfinCarouselPlugin.zip
+          echo "Release v${VERSION} publiee avec succes."
