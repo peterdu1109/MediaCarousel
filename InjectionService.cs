@@ -1,1 +1,88 @@
-using System; using System.IO; using System.Linq; using System.Threading.Tasks; using MediaBrowser.Common.Configuration; using MediaBrowser.Controller.Plugins; using Microsoft.Extensions.Logging; namespace JellyfinCarouselPlugin; public class InjectionService : IServerEntryPoint { private readonly IApplicationPaths _appPaths; private readonly ILogger<InjectionService> _logger; public InjectionService(IApplicationPaths appPaths, ILogger<InjectionService> logger) { _appPaths = appPaths; _logger = logger; } public Task Run() { try { var jellyfinWebDir = Path.Combine(_appPaths.ProgramDataPath, "jellyfin-web"); if (!Directory.Exists(jellyfinWebDir)) { _logger.LogWarning("Jellyfin-web directory not found at {Path}. Will try other paths.", jellyfinWebDir); jellyfinWebDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "jellyfin-web"); } if (Directory.Exists(jellyfinWebDir)) { var indexFile = Path.Combine(jellyfinWebDir, "index.html"); if (File.Exists(indexFile)) { var content = File.ReadAllText(indexFile); string injectionTag = "<script src=\"/plugins/JellyfinCarouselPlugin/Web/carousel-layout.js\"></script>"; if (!content.Contains(injectionTag)) { content = content.Replace("</head>", $"    {injectionTag}\n</head>"); File.WriteAllText(indexFile, content); _logger.LogInformation("Successfully injected Media Carousel script into Jellyfin web UI."); } } } } catch (Exception ex) { _logger.LogError(ex, "Failed to inject Media Carousel script into index.html."); } return Task.CompletedTask; } public void Dispose() { } }
+using System;
+using System.IO;
+using System.Threading.Tasks;
+using MediaBrowser.Common.Configuration;
+using MediaBrowser.Controller.Plugins;
+using Microsoft.Extensions.Logging;
+
+namespace JellyfinCarouselPlugin;
+
+/// <summary>
+/// Service d'injection du script carousel dans l'interface web Jellyfin au démarrage
+/// </summary>
+public class InjectionService : IServerEntryPoint
+{
+    private readonly IApplicationPaths _appPaths;
+    private readonly ILogger<InjectionService> _logger;
+
+    /// <summary>
+    /// Initialise une nouvelle instance de <see cref="InjectionService"/>
+    /// </summary>
+    public InjectionService(IApplicationPaths appPaths, ILogger<InjectionService> logger)
+    {
+        _appPaths = appPaths;
+        _logger = logger;
+    }
+
+    /// <inheritdoc />
+    public Task Run()
+    {
+        try
+        {
+            var indexFile = FindIndexHtml();
+
+            if (indexFile == null)
+            {
+                _logger.LogWarning("MediaCarousel: index.html introuvable. Chemins essayés : WebPath={WebPath}, ProgramData={ProgramData}, BaseDir={BaseDir}",
+                    _appPaths.WebPath,
+                    Path.Combine(_appPaths.ProgramDataPath, "jellyfin-web"),
+                    Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "jellyfin-web"));
+                return Task.CompletedTask;
+            }
+
+            var content = File.ReadAllText(indexFile);
+            const string injectionTag = "<script src=\"/plugins/JellyfinCarouselPlugin/Web/carousel-layout.js\"></script>";
+
+            if (!content.Contains(injectionTag))
+            {
+                content = content.Replace("</head>", $"    {injectionTag}\n</head>");
+                File.WriteAllText(indexFile, content);
+                _logger.LogInformation("MediaCarousel: Script injecté avec succès dans {Path}", indexFile);
+            }
+            else
+            {
+                _logger.LogInformation("MediaCarousel: Script déjà présent dans {Path}", indexFile);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "MediaCarousel: Échec de l'injection dans index.html.");
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private string? FindIndexHtml()
+    {
+        // Priorité 1 : WebPath — chemin officiel Jellyfin vers les fichiers web
+        var candidate = Path.Combine(_appPaths.WebPath, "index.html");
+        if (File.Exists(candidate)) return candidate;
+
+        // Priorité 2 : jellyfin-web dans ProgramDataPath
+        candidate = Path.Combine(_appPaths.ProgramDataPath, "jellyfin-web", "index.html");
+        if (File.Exists(candidate)) return candidate;
+
+        // Priorité 3 : jellyfin-web dans le répertoire de base
+        candidate = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "jellyfin-web", "index.html");
+        if (File.Exists(candidate)) return candidate;
+
+        // Priorité 4 : web/ dans le répertoire de base (certaines installations Linux)
+        candidate = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "web", "index.html");
+        if (File.Exists(candidate)) return candidate;
+
+        return null;
+    }
+
+    /// <inheritdoc />
+    public void Dispose() { }
+}
