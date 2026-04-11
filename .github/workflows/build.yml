@@ -40,18 +40,10 @@ jobs:
           VERSION=$(python3 -c "import json; d=json.load(open('manifest.json')); print(d[0]['versions'][0]['version'])")
           MD5=$(md5sum JellyfinCarouselPlugin.zip | awk '{print $1}')
           SOURCE_URL="https://github.com/peterdu1109/MediaCarousel/releases/download/${VERSION}/JellyfinCarouselPlugin.zip"
-          echo "Version=$VERSION  MD5=$MD5"
-          python3 -c "
-import json, os
-with open('manifest.json') as f:
-    data = json.load(f)
-data[0]['versions'][0]['sourceUrl'] = '${SOURCE_URL}'
-data[0]['versions'][0]['checksum']  = '${MD5}'
-with open('manifest.json', 'w') as f:
-    json.dump(data, f, indent=2, ensure_ascii=False)
-    f.write('\n')
-print('manifest.json mis a jour')
-"
+          echo "Version=$VERSION  MD5=$MD5  URL=$SOURCE_URL"
+          jq --arg url "$SOURCE_URL" --arg md5 "$MD5" '.[0].versions[0].sourceUrl = $url | .[0].versions[0].checksum = $md5' manifest.json > manifest.tmp
+          mv manifest.tmp manifest.json
+          echo "manifest.json mis a jour"
 
       - name: Commit manifest.json
         run: |
