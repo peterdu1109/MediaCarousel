@@ -44,15 +44,22 @@ jobs:
           path: JellyfinCarouselPlugin.zip
           retention-days: 30
 
+      - name: Get version from manifest
+        id: version
+        run: |
+          VERSION=$(python3 -c "import json; data=json.load(open('manifest.json')); print(data[0]['versions'][0]['version'])")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version détectée : $VERSION"
+
       - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          name: "Media Carousel ${{ github.ref_name }}"
+          tag_name: ${{ steps.version.outputs.version }}
+          name: "Media Carousel ${{ steps.version.outputs.version }}"
           files: JellyfinCarouselPlugin.zip
           generate_release_notes: false
           body: |
-            ## 🎬 Media Carousel ${{ github.ref_name }}
+            ## 🎬 Media Carousel ${{ steps.version.outputs.version }}
 
             Transformez votre Jellyfin en une expérience de streaming moderne et immersive.
 

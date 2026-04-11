@@ -36,7 +36,7 @@ public class InjectionService : IServerEntryPoint
                     _appPaths.WebPath,
                     Path.Combine(_appPaths.ProgramDataPath, "jellyfin-web"),
                     Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "jellyfin-web"));
-                return Task.CompletedTask;
+                return;
             }
 
             var content = File.ReadAllText(indexFile);
