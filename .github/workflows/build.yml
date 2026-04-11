@@ -46,16 +46,55 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
+          name: "Media Carousel ${{ github.ref_name }}"
           files: JellyfinCarouselPlugin.zip
           generate_release_notes: false
           body: |
-            ## Installation via le catalogue Jellyfin
+            ## 🎬 Media Carousel ${{ github.ref_name }}
 
-            Ajoute ce lien dans **Dashboard → Plugins → Catalogues** :
+            Transformez votre Jellyfin en une expérience de streaming moderne et immersive.
+
+            ---
+
+            ## ✨ Nouveautés
+
+            - **Page de configuration complète** — HeroMode, couleur accent, toggles par catégorie
+            - **Bannière Hero personnalisable** — Aléatoire, Dernier ajout ou En cours de lecture
+            - **Bouton Favoris** — Ajout/retrait au survol sans ouvrir la fiche
+            - **Badges dynamiques** — Qualité vidéo (4K / HD) et nouveaux épisodes
+            - **Carrousel Collections** — Boxsets et sagas complètes
+            - **Chargement différé des genres** — Performances améliorées via IntersectionObserver
+            - **Compatibilité renforcée** — Plus de conflits avec Enhanced Home Screen Sections
+            - **Correction injection** — Détection automatique du chemin `index.html` sur toutes les installations (Windows, Linux, Docker)
+
+            ---
+
+            ## 🚀 Installation
+
+            ### Via le catalogue Jellyfin (recommandé)
+
+            1. **Dashboard → Plugins → Catalogues → +**
+            2. Colle cette URL :
             ```
             https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/manifest.json
             ```
+            3. **Dashboard → Plugins → Catalogue** → installe **Carousel Layout** → redémarre Jellyfin
 
-            ## Installation manuelle
+            ### Installation manuelle
 
-            Télécharge `JellyfinCarouselPlugin.zip` ci-dessous et extrais-le dans `plugins/CarouselLayout/`.
+            1. Télécharge `JellyfinCarouselPlugin.zip` ci-dessous
+            2. Extrais dans un dossier `CarouselLayout` dans le répertoire `plugins` de Jellyfin
+            3. Redémarre Jellyfin
+
+            ---
+
+            ## ⚙️ Après installation
+
+            Configure le plugin depuis **Dashboard → Plugins → Carousel Layout → Paramètres**
+            puis recharge la page d'accueil **(F5)**.
+
+            ---
+
+            ## 📋 Prérequis
+
+            - Jellyfin **10.11.x**
