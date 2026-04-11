@@ -1,0 +1,57 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - '[0-9]+.[0-9]+.[0-9]+'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 9.0
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build -c Release --no-restore
+
+      - name: Package ZIP
+        run: |
+          cd bin/Release/net9.0
+          zip -r ../../../JellyfinCarouselPlugin.zip .
+          cd ../../..
+          echo "Checksum: $(md5sum JellyfinCarouselPlugin.zip | awk '{print $1}')"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: JellyfinCarouselPlugin
+          path: JellyfinCarouselPlugin.zip
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: JellyfinCarouselPlugin.zip
+          generate_release_notes: false
+          body: |
+            ## Installation via le catalogue Jellyfin
+
+            Ajoute ce lien dans **Dashboard → Plugins → Catalogues** :
+            ```
+            https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/manifest.json
+            ```
+
+            ## Installation manuelle
+
+            Télécharge `JellyfinCarouselPlugin.zip` ci-dessous et extrais-le dans `plugins/CarouselLayout/`.
