@@ -131,6 +131,35 @@
                         </div>
                     </div>
 
+                    <div class="verticalSection">
+                        <h3>🤖 IA — Recommandations Groq</h3>
+                        <p style="color:var(--text-color-secondary);margin-bottom:1rem;">
+                            Obtenez une clé API gratuite sur <strong>console.groq.com</strong>.
+                            L'IA analyse votre historique et personnalise les carrousels.
+                        </p>
+
+                        <div class="checkboxContainer">
+                            <label>
+                                <input is="emby-checkbox" type="checkbox" id="EnableGroqAi" />
+                                <span>Activer les recommandations IA</span>
+                            </label>
+                        </div>
+
+                        <div class="inputContainer">
+                            <label for="GroqApiKey">Clé API Groq</label>
+                            <input is="emby-input" type="password" id="GroqApiKey" placeholder="gsk_..." />
+                        </div>
+
+                        <div class="selectContainer">
+                            <label class="selectLabel" for="GroqModel">Modèle IA</label>
+                            <select is="emby-select" id="GroqModel">
+                                <option value="llama3-8b-8192">LLaMA 3 8B (rapide)</option>
+                                <option value="llama3-70b-8192">LLaMA 3 70B (précis)</option>
+                                <option value="mixtral-8x7b-32768">Mixtral 8x7B</option>
+                            </select>
+                        </div>
+                    </div>
+
                     <div>
                         <button is="emby-button" type="submit" class="raised button-submit block">
                             <span>Sauvegarder</span>
@@ -168,6 +197,11 @@
                     var highlightColorInput = document.querySelector('#HighlightColor');
                     if (highlightColorInput) highlightColorInput.value = config.HighlightColor || '#00a4dc';
 
+                    document.querySelector('#EnableGroqAi').checked = config.EnableGroqAi === true;
+                    document.querySelector('#GroqApiKey').value = config.GroqApiKey || '';
+                    var groqModelSelect = document.querySelector('#GroqModel');
+                    if (groqModelSelect) groqModelSelect.value = config.GroqModel || 'llama3-8b-8192';
+
                     Dashboard.hideLoadingMsg();
                 });
             });
@@ -191,7 +225,10 @@
                     EnableFavoritesButton: document.querySelector('#EnableFavoritesButton').checked,
                     ItemsPerCarousel: parseInt(document.querySelector('#ItemsPerCarousel').value),
                     HeroMode: document.querySelector('#HeroMode').value,
-                    HighlightColor: document.querySelector('#HighlightColor').value
+                    HighlightColor: document.querySelector('#HighlightColor').value,
+                    EnableGroqAi: document.querySelector('#EnableGroqAi').checked,
+                    GroqApiKey: document.querySelector('#GroqApiKey').value,
+                    GroqModel: document.querySelector('#GroqModel').value
                 };
 
                 ApiClient.updatePluginConfiguration(CarouselConfigPage.pluginId, config).then(function () {

@@ -22,8 +22,11 @@
         ShowQualityBadge: true,
         EnableFavoritesButton: true,
         EnableHoverAnimations: true,
-        HeroMode: 'Random', // 'Random', 'Latest', 'Resume'
-        HighlightColor: '#00a4dc'
+        HeroMode: 'Random',
+        HighlightColor: '#00a4dc',
+        EnableGroqAi: false,
+        GroqApiKey: '',
+        GroqModel: 'llama3-8b-8192'
     };
 
     const CONFIG = {
@@ -34,7 +37,11 @@
             { id: 'recommended', name: 'Recommandés pour vous', filter: 'Recommended', configKey: 'ShowRecommended' },
             { id: 'collections', name: 'Collections', filter: 'BoxSets', configKey: 'ShowCollections' }
         ],
-        genres: ['Action', 'Comédie', 'Drame', 'Science-Fiction', 'Animation', 'Horreur']
+        genres: [
+            'Action', 'Aventure', 'Animation', 'Comédie', 'Crime',
+            'Documentaire', 'Drame', 'Enfants', 'Fantaisie', 'Horreur',
+            'Musique', 'Mystère', 'Romance', 'Science-Fiction', 'Thriller', 'Western'
+        ]
     };
 
     // Attendre que Jellyfin soit chargé
@@ -318,6 +325,61 @@
         }
     }
 
+    async function loadAiRecommendations(userId) {
+        if (!pluginConfig.EnableGroqAi || !pluginConfig.GroqApiKey) return null;
+        try {
+            const recent = await ApiClient.getItems(userId, {
+                SortBy: 'DatePlayed', SortOrder: 'Descending',
+                Filters: 'IsPlayed', Limit: 10,
+                Fields: 'Genres', IncludeItemTypes: 'Movie,Series'
+            });
+            const history = (recent.Items || []).map(i =>
+                `${i.Name} (${(i.Genres || []).slice(0, 2).join('/')})`
+            );
+            if (history.length === 0) return null;
+
+            const prompt = `L'utilisateur a regardé récemment : ${history.join(', ')}. ` +
+                `Genres disponibles dans la bibliothèque : ${CONFIG.genres.join(', ')}. ` +
+                `Recommande exactement 3 genres à mettre en avant et écris un message d'accueil court et chaleureux (max 60 mots, tutoie l'utilisateur, en français). ` +
+                `Réponds UNIQUEMENT en JSON valide sans markdown : {"genres":["g1","g2","g3"],"message":"..."}`;
+
+            const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${pluginConfig.GroqApiKey}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    model: pluginConfig.GroqModel || 'llama3-8b-8192',
+                    messages: [
+                        { role: 'system', content: 'Tu es un assistant de recommandation de films et séries. Réponds toujours en JSON valide, sans balises markdown.' },
+                        { role: 'user', content: prompt }
+                    ],
+                    max_tokens: 200,
+                    temperature: 0.7
+                })
+            });
+
+            if (!resp.ok) { console.warn('MediaCarousel: Groq API error', resp.status); return null; }
+            const data = await resp.json();
+            const text = data.choices?.[0]?.message?.content?.trim() || '{}';
+            // Extraire JSON même si du texte entoure la réponse
+            const jsonMatch = text.match(/\{[\s\S]*\}/);
+            if (!jsonMatch) return null;
+            return JSON.parse(jsonMatch[0]);
+        } catch (e) {
+            console.warn('MediaCarousel: Groq indisponible', e);
+            return null;
+        }
+    }
+
+    function createAiBanner(message) {
+        const banner = document.createElement('div');
+        banner.className = 'carousel-ai-banner';
+        banner.innerHTML = `<span class="carousel-ai-icon">🤖</span><span class="carousel-ai-text">${message}</span>`;
+        return banner;
+    }
+
     async function createHero(userId) {
         try {
             const params = {
@@ -393,53 +455,69 @@
     }
 
     async function initCarouselLayout() {
-        console.log('Initialisation du Carousel Layout Plugin avec conf:', pluginConfig);
+        console.log('[MediaCarousel] Initialisation, config:', pluginConfig);
 
         if (pluginConfig && pluginConfig.EnableCarouselLayout === false) {
-            console.log('Carousel Layout est désactivé dans la configuration.');
+            console.log('[MediaCarousel] Désactivé dans la configuration.');
             return;
         }
 
         const userId = ApiClient.getCurrentUserId();
-        if (!userId) {
-            console.error('Aucun utilisateur connecté');
+        if (!userId) { console.error('[MediaCarousel] Aucun utilisateur connecté'); return; }
+
+        // Cherche le container avec plusieurs sélecteurs possibles
+        let mainContent = document.querySelector('.homePage')
+            || document.querySelector('#indexPage .scrollSlider')
+            || document.querySelector('#indexPage')
+            || document.querySelector('[data-type="home"]');
+
+        if (!mainContent) {
+            console.log('[MediaCarousel] Container non trouvé, retentative dans 600ms...');
+            setTimeout(initCarouselLayout, 600);
             return;
         }
 
-        const mainContent = document.querySelector('.homePage') || document.querySelector('#indexPage .scrollSlider') || document.querySelector('#indexPage');
-        if (!mainContent) {
-            console.log('Container principal non trouvé, retentative...');
-            setTimeout(initCarouselLayout, 500);
-            return;
+        // Éviter la double initialisation
+        const existingContainer = document.getElementById('jellyfin-carousel-layout');
+        if (existingContainer) {
+            existingContainer.remove();
         }
 
         const carouselContainer = document.createElement('div');
         carouselContainer.className = 'carousel-main-container';
         carouselContainer.id = 'jellyfin-carousel-layout';
 
-        // Add hero
+        // Hero
         const heroDOM = await createHero(userId);
         if (heroDOM) carouselContainer.appendChild(heroDOM);
 
-        // Add main categories synchronously for immediate display
+        // IA Groq — bannière + genres prioritaires
+        let aiPriorityGenres = [];
+        const aiReco = await loadAiRecommendations(userId);
+        if (aiReco && aiReco.message) {
+            carouselContainer.appendChild(createAiBanner(aiReco.message));
+            aiPriorityGenres = aiReco.genres || [];
+            // Charger immédiatement les genres recommandés par l'IA
+            for (const genre of aiPriorityGenres) {
+                const items = await loadGenreItems(genre, userId);
+                const el = createCarouselDOM('🤖 ' + genre, items);
+                if (el) carouselContainer.appendChild(el);
+            }
+        }
+
+        // Catégories principales
         for (const category of CONFIG.categories) {
-            if (pluginConfig[category.configKey] !== false) { // Default true if undefined
+            if (pluginConfig[category.configKey] !== false) {
                 const items = await loadCategoryItems(category, userId);
                 const carousel = createCarouselDOM(category.name, items);
                 if (carousel) carouselContainer.appendChild(carousel);
             }
         }
 
-        // Add a container for genres that will be lazy-loaded
+        // Container pour genres (lazy-loaded)
         const genresContainer = document.createElement('div');
         genresContainer.id = 'carousel-genres-lazy';
         carouselContainer.appendChild(genresContainer);
-
-        // Set layout in UI (Prepend inside the home scroll container)
-        const existingContainer = document.getElementById('jellyfin-carousel-layout');
-        if (existingContainer) {
-            existingContainer.remove();
-        }
 
         // Masquer les enfants natifs de mainContent via data-attribute pour
         // pouvoir les restaurer proprement (sans casser d'autres plugins)
@@ -452,36 +530,44 @@
         mainContent.insertBefore(carouselContainer, mainContent.firstChild);
         document.body.classList.add('media-carousel-active');
 
-        // Setup Intersection Observer for Lazy Loading Genres
+        // Setup Intersection Observer for Lazy Loading Genres (skip genres déjà chargés par l'IA)
         if (pluginConfig.ShowGenreCategories !== false) {
-            setupLazyGenres(userId, genresContainer);
+            setupLazyGenres(userId, genresContainer, aiPriorityGenres);
         }
 
         console.log('Carousel Layout initialisé avec succès!');
     }
 
-    function setupLazyGenres(userId, container) {
+    function setupLazyGenres(userId, container, skipGenres = []) {
         let genresLoaded = false;
         const observer = new IntersectionObserver(async (entries, obs) => {
             if (entries[0].isIntersecting && !genresLoaded) {
                 genresLoaded = true;
-                obs.disconnect(); // Stop observing once loaded
+                obs.disconnect();
 
-                for (const genre of CONFIG.genres) {
+                const remaining = CONFIG.genres.filter(g => !skipGenres.includes(g));
+                for (const genre of remaining) {
                     const items = await loadGenreItems(genre, userId);
                     const carousel = createCarouselDOM(genre, items);
                     if (carousel) container.appendChild(carousel);
                 }
             }
-        }, { rootMargin: '200px' }); // Load a bit before it enters the screen
+        }, { rootMargin: '200px' });
 
         observer.observe(container);
     }
 
     function isCurrentPageHome() {
-        return window.location.hash === '#/home.html' ||
-            window.location.hash === '' ||
-            window.location.pathname.includes('home.html');
+        const hash = window.location.hash;
+        const path = window.location.pathname;
+        return hash === '#/home.html' ||
+            hash === '#!/home.html' ||
+            hash === '#/' ||
+            hash === '#' ||
+            hash === '' ||
+            hash.includes('home.html') ||
+            path.includes('home.html') ||
+            !!document.querySelector('#indexPage, .homePage');
     }
 
     function deactivateCarousel() {
@@ -962,6 +1048,31 @@
     .carousel-item:hover {
         transform: none;
     }
+}
+
+/* Bannière IA Groq */
+.carousel-ai-banner {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    background: linear-gradient(135deg, rgba(99,102,241,0.2) 0%, rgba(168,85,247,0.2) 100%);
+    border: 1px solid rgba(168,85,247,0.4);
+    border-radius: 8px;
+    padding: 1rem 1.5rem;
+    margin: 0 4% 2rem;
+    color: var(--carousel-text);
+    font-size: 1rem;
+    line-height: 1.5;
+}
+
+.carousel-ai-icon {
+    font-size: 1.8rem;
+    flex-shrink: 0;
+}
+
+.carousel-ai-text {
+    flex: 1;
+    font-style: italic;
 }
 
 /* =========================================================================

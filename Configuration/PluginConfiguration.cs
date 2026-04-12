@@ -76,4 +76,19 @@ public class PluginConfiguration : BasePluginConfiguration
     /// Couleur de surbrillance (ex: #e50914)
     /// </summary>
     public string HighlightColor { get; set; } = "#00a4dc";
+
+    /// <summary>
+    /// Active les recommandations IA via Groq
+    /// </summary>
+    public bool EnableGroqAi { get; set; } = false;
+
+    /// <summary>
+    /// Clé API Groq (https://console.groq.com)
+    /// </summary>
+    public string GroqApiKey { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Modèle Groq à utiliser
+    /// </summary>
+    public string GroqModel { get; set; } = "llama3-8b-8192";
 }
