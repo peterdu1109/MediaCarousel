@@ -48,12 +48,20 @@ jobs:
             PAT=$((PAT+1))
           fi
 
-          NEW="${MAJ}.${MIN}.${PAT}"        # tag GitHub : 1.2.0
-          NEW_FULL="${NEW}.0"               # version interne : 1.2.0.0 (requis par Jellyfin + .NET)
+          NEW="${MAJ}.${MIN}.${PAT}"
+          NEW_FULL="${NEW}.0"
           echo "version=$NEW" >> $GITHUB_OUTPUT
           echo "$CURRENT -> $NEW_FULL"
 
-          jq --arg v "$NEW_FULL" '.[0].versions[0].version = $v' manifest.json > manifest.tmp && mv manifest.tmp manifest.json
+          TODAY=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          CHANGELOG=$(echo "$COMMITS" | grep -v "\[skip ci\]" | sed 's/^/- /' | head -20)
+          [ -z "$CHANGELOG" ] && CHANGELOG="- Mise a jour et corrections diverses"
+
+          # Prépendre une nouvelle entrée — ne jamais écraser l'historique
+          jq --arg v "$NEW_FULL" --arg chg "$CHANGELOG" --arg ts "$TODAY" \
+            '.[0].versions = [{"version":$v,"changelog":$chg,"targetAbi":"10.11.0.0","sourceUrl":"","checksum":"","timestamp":$ts}] + .[0].versions' \
+            manifest.json > manifest.tmp && mv manifest.tmp manifest.json
+
           sed -i "s|<AssemblyVersion>.*</AssemblyVersion>|<AssemblyVersion>${NEW_FULL}</AssemblyVersion>|" JellyfinCarouselPlugin.csproj
           sed -i "s|<FileVersion>.*</FileVersion>|<FileVersion>${NEW_FULL}</FileVersion>|" JellyfinCarouselPlugin.csproj
 
