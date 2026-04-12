@@ -455,7 +455,7 @@
     }
 
     async function initCarouselLayout() {
-        console.log('[MediaCarousel] Initialisation, config:', pluginConfig);
+        console.log('[MediaCarousel] initCarouselLayout() démarré');
 
         if (pluginConfig && pluginConfig.EnableCarouselLayout === false) {
             console.log('[MediaCarousel] Désactivé dans la configuration.');
@@ -557,78 +557,72 @@
         observer.observe(container);
     }
 
-    function isCurrentPageHome() {
-        const hash = window.location.hash;
-        const path = window.location.pathname;
-        return hash === '#/home.html' ||
-            hash === '#!/home.html' ||
-            hash === '#/' ||
-            hash === '#' ||
-            hash === '' ||
-            hash.includes('home.html') ||
-            path.includes('home.html') ||
-            !!document.querySelector('#indexPage, .homePage');
+    // Détection basée uniquement sur le DOM — pas de dépendance à l'URL/hash
+    function isOnHomePage() {
+        return !!document.querySelector('#indexPage, .homePage, [data-type="home"]');
     }
 
     function deactivateCarousel() {
         document.body.classList.remove('media-carousel-active');
-        // Restaurer les éléments masqués pour que les autres plugins/pages fonctionnent normalement
         document.querySelectorAll('[data-jc-hidden="true"]').forEach(el => {
             el.removeAttribute('data-jc-hidden');
         });
     }
 
+    let _layoutBusy = false;
     function triggerLayout() {
-        if (!isCurrentPageHome()) {
+        if (_layoutBusy) return;
+        if (!isOnHomePage()) {
             deactivateCarousel();
             return;
         }
-
+        _layoutBusy = true;
         ensureConfigLoaded().then(() => {
-            if (!document.getElementById('jellyfin-carousel-layout')) {
-                // Ensure page container is available before injecting
-                if (document.querySelector('.homePage') || document.querySelector('#indexPage')) {
-                    initCarouselLayout();
-                } else {
-                    // Retry slightly after
-                    setTimeout(initCarouselLayout, 300);
-                }
-            } else {
-                // Already exists, just ensure active class is there
+            if (document.getElementById('jellyfin-carousel-layout')) {
                 document.body.classList.add('media-carousel-active');
+                _layoutBusy = false;
+            } else {
+                initCarouselLayout().finally(() => { _layoutBusy = false; });
             }
-        });
+        }).catch(() => { _layoutBusy = false; });
     }
 
     function observePageChanges() {
-        // Method 1: Jellyfin native routing events (Emby Router)
+        // Stratégie 1 : événement natif Jellyfin
         document.addEventListener('viewshow', function (e) {
             const view = e.detail ? e.detail.view : e.target;
-            if (view && (view.id === 'indexPage' || view.classList.contains('homePage'))) {
+            if (!view) return;
+            const onHome = view.id === 'indexPage' || (view.classList && view.classList.contains('homePage'));
+            if (onHome) {
                 setTimeout(triggerLayout, 100);
-            } else {
-                deactivateCarousel();
+            } else if (view.id && view.id !== 'indexPage') {
+                // Vraie navigation hors accueil — vérifier le DOM après stabilisation
+                setTimeout(() => { if (!isOnHomePage()) deactivateCarousel(); }, 200);
             }
         });
 
-        // Method 2: MutationObserver Fallback for dynamic navigation
-        let initTimeout = null;
-        const observer = new MutationObserver((mutations) => {
-            if (isCurrentPageHome()) {
-                if (!document.getElementById('jellyfin-carousel-layout') && document.querySelector('#indexPage')) {
-                    if (initTimeout) clearTimeout(initTimeout);
-                    initTimeout = setTimeout(triggerLayout, 500);
+        // Stratégie 2 : MutationObserver sur le body
+        let _mutPending = null;
+        new MutationObserver(() => {
+            if (_mutPending) clearTimeout(_mutPending);
+            _mutPending = setTimeout(() => {
+                if (isOnHomePage() && !document.getElementById('jellyfin-carousel-layout')) {
+                    triggerLayout();
                 }
-            } else {
-                deactivateCarousel();
-            }
-        });
+            }, 400);
+        }).observe(document.body, { childList: true, subtree: true });
 
-        observer.observe(document.body, { childList: true, subtree: true });
+        // Stratégie 3 : polling toutes les 2 s (filet de sécurité absolu)
+        setInterval(() => {
+            if (isOnHomePage() && !document.getElementById('jellyfin-carousel-layout')) {
+                console.log('[MediaCarousel] Polling: carousel manquant, réinitialisation...');
+                triggerLayout();
+            }
+        }, 2000);
     }
 
     waitForJellyfin(() => {
-        console.log('Jellyfin détecté, initialisation du plugin Carousel...');
+        console.log('[MediaCarousel] Jellyfin prêt — démarrage');
 
         const style = document.createElement('style');
         style.textContent = `
@@ -1095,8 +1089,10 @@ body.media-carousel-active .homePage .homePageSection {
 `;
         document.head.appendChild(style);
 
-        // First load
-        setTimeout(triggerLayout, 800);
+        // Premier chargement : tentatives à 0, 500, 1500 ms
+        triggerLayout();
+        setTimeout(triggerLayout, 500);
+        setTimeout(triggerLayout, 1500);
         observePageChanges();
     });
 })();
