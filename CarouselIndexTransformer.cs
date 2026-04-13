@@ -7,6 +7,8 @@ namespace JellyfinCarouselPlugin;
 public static class CarouselIndexTransformer
 {
     private const string ScriptTag =
+        "<script src=\"/MediaCarousel/carousel-layout.js\"></script>";
+    private const string OldScriptTag = 
         "<script src=\"/plugins/JellyfinCarouselPlugin/Web/carousel-layout.js\"></script>";
 
     /// <summary>
@@ -41,6 +43,11 @@ public static class CarouselIndexTransformer
             if (string.IsNullOrEmpty(contents) || contents.Contains(ScriptTag))
             {
                 return contents;
+            }
+
+            if (contents.Contains(OldScriptTag)) 
+            {
+                contents = contents.Replace(OldScriptTag, "");
             }
 
             return contents.Replace("</head>", $"    {ScriptTag}\n</head>");

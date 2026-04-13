@@ -131,12 +131,19 @@ public class FileTransformationService : IHostedService
             }
 
             var content = File.ReadAllText(indexFile);
-            const string tag = "<script src=\"/plugins/JellyfinCarouselPlugin/Web/carousel-layout.js\"></script>";
+            const string tag = "<script src=\"/MediaCarousel/carousel-layout.js\"></script>";
 
             if (content.Contains(tag))
             {
                 _logger.LogInformation("MediaCarousel: Script déjà présent dans {Path}", indexFile);
                 return;
+            }
+
+            // Au cas où l'ancienne version était installée, la nettoyer
+            const string oldTag = "<script src=\"/plugins/JellyfinCarouselPlugin/Web/carousel-layout.js\"></script>";
+            if (content.Contains(oldTag))
+            {
+                content = content.Replace(oldTag, "");
             }
 
             // Injection sans ajout de newline (compatibilité fichiers minifiés)
