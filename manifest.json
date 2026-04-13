@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/icon.png",
     "versions": [
       {
+        "version": "2.1.0.0",
+        "changelog": "- feat: v2.0.0 — detection DOM robuste, descriptions FR, release ZIP",
+        "targetAbi": "10.11.0.0",
+        "sourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/2.1.0/JellyfinCarouselPlugin.zip",
+        "checksum": "859fee4ecf298de216037aa59215d4c2",
+        "timestamp": "2026-04-13T08:56:03Z"
+      },
+      {
         "version": "2.0.1.0",
         "changelog": "- update",
         "targetAbi": "10.11.0.0",
