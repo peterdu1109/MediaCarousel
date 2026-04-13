@@ -9,6 +9,12 @@
     const PLUGIN_ID = "191bd290-1054-4b55-a137-46c72181266b";
     let pluginConfig = null;
 
+    // Tentative de chargement synchrone du cache pour éviter le "Flash" (FOUC)
+    try {
+        const cached = localStorage.getItem('MediaCarousel_Config');
+        if (cached) pluginConfig = JSON.parse(cached);
+    } catch(e) {}
+
     // Configuration par défaut
     const DEFAULT_CONFIG = {
         ItemsPerCarousel: 20,
@@ -56,14 +62,14 @@
     }
 
     async function ensureConfigLoaded() {
-        if (!pluginConfig) {
-            try {
-                const config = await ApiClient.getPluginConfiguration(PLUGIN_ID);
-                pluginConfig = { ...DEFAULT_CONFIG, ...config };
-            } catch (e) {
-                console.warn('MediaCarousel: Erreur lors du chargement de la configuration, utilisation des valeurs par défaut.', e);
-                pluginConfig = DEFAULT_CONFIG;
-            }
+        try {
+            const config = await ApiClient.getPluginConfiguration(PLUGIN_ID);
+            pluginConfig = { ...DEFAULT_CONFIG, ...config };
+            localStorage.setItem('MediaCarousel_Config', JSON.stringify(pluginConfig)); // Cache pour la prochaine fois
+        } catch (e) {
+            console.warn('MediaCarousel: Erreur lors du chargement de la configuration, utilisation du cache ou defaults.', e);
+            if (!pluginConfig) pluginConfig = DEFAULT_CONFIG;
+        }
 
             // Appliquer la couleur de surbrillance
             if (pluginConfig.HighlightColor) {
@@ -566,6 +572,9 @@
         // Réinitialiser le compteur de tentatives
         _initRetryCount = 0;
 
+        // Supprimer proactivement les doublons natifs si la config le justifie
+        removeNativeDuplicates();
+
         // Éviter la double initialisation
         const existingContainer = document.getElementById('jellyfin-carousel-layout');
         if (existingContainer) {
@@ -704,14 +713,12 @@
 
     // Détection hybride : DOM + URL — couvre toutes les variantes Jellyfin
     function isOnHomePage() {
-        // 1) Détection par le DOM (sélecteurs connus)
         const domMatch = !!document.querySelector(
             '#indexPage, .homePage, #homeTab, [data-type="home"], ' +
             '.view.homePage:not(.hide), .page.homePage:not(.hide)'
         );
         if (domMatch) return true;
 
-        // 2) Détection par l'URL / hash — fallback si le DOM n'a pas de classe
         const hash = window.location.hash || '';
         const path = window.location.pathname || '';
         const urlMatch = hash === '' || hash === '#' || hash === '#!/home' ||
@@ -719,8 +726,6 @@
             path.endsWith('/web/index.html') && (hash === '' || hash === '#') ||
             hash === '#!/startup/finished';
 
-        // Ne valider le fallback URL que si on est vraiment sur l'accueil
-        // (pas sur une page de détail ou de configuration)
         if (urlMatch && !hash.includes('details') && !hash.includes('config') &&
             !hash.includes('dashboard') && !hash.includes('search') &&
             !hash.includes('list') && !hash.includes('settings')) {
@@ -729,11 +734,56 @@
 
         return false;
     }
+    
+    // Fonction synchrone pour cacher IMMÉDIATEMENT les éléments superflus
+    function applySyncLayoutStates() {
+        if (!isOnHomePage() || !pluginConfig) return;
+        
+        document.body.classList.add('media-carousel-init');
+        
+        if (pluginConfig.HideNativeHome) {
+            document.body.classList.add('mc-hide-all-native');
+        }
+        if (pluginConfig.ShowContinueWatching) {
+            document.body.classList.add('mc-hide-native-resume');
+        }
+        if (pluginConfig.ShowNewReleases) {
+            document.body.classList.add('mc-hide-native-latest');
+        }
+    }
+
+    // Suppression via le texte (Robuste pour tout thème)
+    function removeNativeDuplicates() {
+        if (!pluginConfig) return;
+        if (pluginConfig.HideNativeHome) return; // Déjà tout caché
+
+        document.querySelectorAll('.homePage .sectionTitle').forEach(titleEl => {
+            const txt = titleEl.textContent.toLowerCase();
+            const section = titleEl.closest('.homePageSection') || titleEl.closest('.verticalSection');
+            if (!section) return;
+
+            const isResume = txt.includes('continu') || txt.includes('resume') || txt.includes('watching') || txt.includes('suivant') || txt.includes('next up');
+            const isLatest = txt.includes('nouveau') || txt.includes('latest') || txt.includes('recently') || txt.includes('ajout');
+
+            if (pluginConfig.ShowContinueWatching && isResume) {
+                section.setAttribute('data-jc-duplicate', 'true');
+                section.style.display = 'none';
+            }
+            if (pluginConfig.ShowNewReleases && isLatest) {
+                section.setAttribute('data-jc-duplicate', 'true');
+                section.style.display = 'none';
+            }
+        });
+    }
 
     function deactivateCarousel() {
-        document.body.classList.remove('media-carousel-active');
-        document.querySelectorAll('[data-jc-hidden="true"]').forEach(el => {
-            el.removeAttribute('data-jc-hidden');
+        document.body.classList.remove('media-carousel-active', 'media-carousel-init', 'mc-hide-all-native', 'mc-hide-native-resume', 'mc-hide-native-latest');
+        document.querySelectorAll('[data-jc-hidden="true"], [data-jc-duplicate="true"]').forEach(el => {
+            if (el.hasAttribute('data-jc-hidden')) el.removeAttribute('data-jc-hidden');
+            if (el.hasAttribute('data-jc-duplicate')) {
+                el.removeAttribute('data-jc-duplicate');
+                el.style.display = '';
+            }
         });
     }
 
@@ -744,6 +794,9 @@
             deactivateCarousel();
             return;
         }
+        
+        applySyncLayoutStates(); // Empêche le scintillement (FOUC) immédiatement
+
         _layoutBusy = true;
         ensureConfigLoaded().then(() => {
             if (document.getElementById('jellyfin-carousel-layout')) {
@@ -1280,21 +1333,34 @@
    COMPATIBILITÉ ET MASQUAGE DES SECTIONS NATIVES/ENHANCED
    ========================================================================= */
 
-/* Masquer uniquement les éléments explicitement marqués par le plugin via JS.
-   Cette approche ciblée évite de cacher les éléments injectés par d'autres plugins. */
-[data-jc-hidden="true"] {
+/* Masquer uniquement les éléments explicitement marqués par le plugin via JS. */
+[data-jc-hidden="true"], [data-jc-duplicate="true"] {
     display: none !important;
 }
 
-/* Filet de sécurité : masquer les sections natives Jellyfin par classe */
-body.media-carousel-active .homePage .sections,
-body.media-carousel-active .homePage .verticalSection,
-body.media-carousel-active .homePage .hss-section,
-body.media-carousel-active .homePage .homePageSection {
+/* 1. HIDE ALL NATIVE: activé uniquement si HideNativeHome = true */
+body.mc-hide-all-native .homePage .sections,
+body.mc-hide-all-native .homePage .verticalSection,
+body.mc-hide-all-native .homePage .hss-section,
+body.mc-hide-all-native .homePage .homePageSection {
+    display: none !important;
+}
+
+/* 2. DUPLICATES HIDING SYNCHRONE: prévient le flash avant JS parsing */
+body.mc-hide-native-resume .sectionResume,
+body.mc-hide-native-resume .homePageSection[data-type="resumable"] {
+    display: none !important;
+}
+
+body.mc-hide-native-latest .sectionLatest,
+body.mc-hide-native-latest .homePageSection[data-type="latest"] {
     display: none !important;
 }
 `;
         document.head.appendChild(style);
+
+        // Au lancement direct, on tente l'application synchrone grace au localStorage
+        if (pluginConfig) applySyncLayoutStates();
 
         // Premier chargement : tentatives progressives 0, 300, 800, 1500, 3000 ms
         triggerLayout();
