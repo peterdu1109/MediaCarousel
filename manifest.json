@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/icon.png",
     "versions": [
       {
+        "version": "2.2.3.0",
+        "changelog": "- fix(js): add Recursive:true to ApiClient.getItems to scan inside libraries",
+        "targetAbi": "10.11.0.0",
+        "sourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/2.2.3/JellyfinCarouselPlugin.zip",
+        "checksum": "636c77e14415bd4650bf9a96bee07867",
+        "timestamp": "2026-04-13T10:44:26Z"
+      },
+      {
         "version": "2.2.2.0",
         "changelog": "- fix(config): default itemspercarousel to prevent json crash on save",
         "targetAbi": "10.11.0.0",
