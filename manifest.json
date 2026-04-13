@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/icon.png",
     "versions": [
       {
+        "version": "2.4.0.0",
+        "changelog": "- feat(js): keep native home content visible by default",
+        "targetAbi": "10.11.0.0",
+        "sourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/2.4.0/JellyfinCarouselPlugin.zip",
+        "checksum": "249121c67cd1395976318e232e5a33a0",
+        "timestamp": "2026-04-13T10:49:46Z"
+      },
+      {
         "version": "2.3.0.0",
         "changelog": "- feat(js): fetch genres dynamically from metadata and disable Hero banner",
         "targetAbi": "10.11.0.0",
