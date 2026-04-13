@@ -269,6 +269,7 @@
         try {
             const params = {
                 UserId: userId,
+                Recursive: true,
                 Limit: pluginConfig.ItemsPerCarousel || 20,
                 Fields: 'PrimaryImageAspectRatio,MediaStreams,UserData',
                 ImageTypeLimit: 1,
@@ -309,6 +310,7 @@
         try {
             const result = await ApiClient.getItems(userId, {
                 UserId: userId,
+                Recursive: true,
                 Genres: genre,
                 Limit: pluginConfig.ItemsPerCarousel || 20,
                 Fields: 'PrimaryImageAspectRatio,MediaStreams,UserData',
@@ -329,6 +331,7 @@
         if (!pluginConfig.EnableGroqAi || !pluginConfig.GroqApiKey) return null;
         try {
             const recent = await ApiClient.getItems(userId, {
+                Recursive: true,
                 SortBy: 'DatePlayed', SortOrder: 'Descending',
                 Filters: 'IsPlayed', Limit: 10,
                 Fields: 'Genres', IncludeItemTypes: 'Movie,Series'
@@ -384,6 +387,7 @@
         try {
             const params = {
                 UserId: userId,
+                Recursive: true,
                 Limit: 1,
                 Fields: 'Overview,PrimaryImageAspectRatio',
                 ImageTypeLimit: 1,
