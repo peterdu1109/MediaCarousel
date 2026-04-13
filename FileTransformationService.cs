@@ -32,9 +32,26 @@ public class FileTransformationService : IHostedService
     /// <inheritdoc />
     public Task StartAsync(CancellationToken cancellationToken)
     {
-        if (!TryRegisterWithFileTransformation())
+        // Encapsulation totale : ne JAMAIS laisser une exception remonter
+        // car cela détruit le conteneur DI de Jellyfin (ObjectDisposedException)
+        try
         {
-            TryInjectDirectly();
+            if (!TryRegisterWithFileTransformation())
+            {
+                TryInjectDirectly();
+            }
+        }
+        catch (Exception ex)
+        {
+            // Log uniquement — ne jamais propager l'exception
+            try
+            {
+                _logger.LogError(ex, "MediaCarousel: Erreur fatale dans StartAsync — le plugin continue sans injection.");
+            }
+            catch
+            {
+                // Si même le logger est cassé, ne rien faire
+            }
         }
 
         return Task.CompletedTask;
@@ -48,8 +65,16 @@ public class FileTransformationService : IHostedService
         try
         {
             var ftAssembly = AssemblyLoadContext.All
-                .SelectMany(ctx => ctx.Assemblies)
-                .FirstOrDefault(a => a.FullName?.Contains("FileTransformation", StringComparison.OrdinalIgnoreCase) ?? false);
+                .SelectMany(ctx =>
+                {
+                    try { return ctx.Assemblies; }
+                    catch { return Enumerable.Empty<System.Reflection.Assembly>(); }
+                })
+                .FirstOrDefault(a =>
+                {
+                    try { return a.FullName?.Contains("FileTransformation", StringComparison.OrdinalIgnoreCase) ?? false; }
+                    catch { return false; }
+                });
 
             if (ftAssembly == null)
             {
@@ -101,19 +126,23 @@ public class FileTransformationService : IHostedService
             var indexFile = candidates.FirstOrDefault(File.Exists);
             if (indexFile == null)
             {
-                _logger.LogWarning("MediaCarousel: index.html introuvable.");
+                _logger.LogWarning("MediaCarousel: index.html introuvable dans les chemins standard.");
                 return;
             }
 
             var content = File.ReadAllText(indexFile);
             const string tag = "<script src=\"/plugins/JellyfinCarouselPlugin/Web/carousel-layout.js\"></script>";
 
-            if (!content.Contains(tag))
+            if (content.Contains(tag))
             {
-                content = content.Replace("</head>", $"    {tag}\n</head>");
-                File.WriteAllText(indexFile, content);
-                _logger.LogInformation("MediaCarousel: Script injecté dans {Path}", indexFile);
+                _logger.LogInformation("MediaCarousel: Script déjà présent dans {Path}", indexFile);
+                return;
             }
+
+            // Injection sans ajout de newline (compatibilité fichiers minifiés)
+            content = content.Replace("</head>", tag + "</head>");
+            File.WriteAllText(indexFile, content);
+            _logger.LogInformation("MediaCarousel: Script injecté dans {Path}", indexFile);
         }
         catch (UnauthorizedAccessException)
         {

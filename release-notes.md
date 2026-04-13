@@ -5,7 +5,7 @@
 - **Retry progressif** : jusqu'à 8 tentatives avec délai croissant (500ms → 3s)
 - **Logs détaillés** dans la console du navigateur pour faciliter le diagnostic
 - **Descriptions et changelogs en français** dans le manifest et le README
-- **Version unifiée** : 2.0.0.0 dans le csproj, le manifest et le tag
+- **Version unifiée** : 2.1.1.0 dans le csproj, le manifest et le tag
 
 ## Installation
 
