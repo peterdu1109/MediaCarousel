@@ -40,7 +40,7 @@ public class CarouselScanTask : IScheduledTask
             // Simulation du traitement de cache (récupération native des éléments depuis le LibraryManager)
             var items = _libraryManager.GetItemList(new MediaBrowser.Controller.Entities.InternalItemsQuery
             {
-                IncludeItemTypes = new[] { "Movie", "Series" },
+                IncludeItemTypes = new[] { Jellyfin.Data.Enums.BaseItemKind.Movie, Jellyfin.Data.Enums.BaseItemKind.Series },
                 IsFolder = false,
                 Recursive = true
             });

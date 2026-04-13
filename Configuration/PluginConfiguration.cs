@@ -65,7 +65,7 @@ public class PluginConfiguration : BasePluginConfiguration
     /// <summary>
     /// Liste des ID de bibliothèques (Views) incluses dans le carrousel
     /// </summary>
-    public string[] IncludedLibraries { get; set; } = Array.Empty<string>();
+    public string[] IncludedLibraries { get; set; } = new string[0];
 
     /// <summary>
     /// Active la catégorie "Collections"
