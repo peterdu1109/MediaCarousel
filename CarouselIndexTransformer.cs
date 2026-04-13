@@ -1,53 +1,36 @@
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 
 namespace JellyfinCarouselPlugin;
 
+/// <summary>
+/// Payload envoyé par le plugin FileTransformation.
+/// </summary>
 public class PatchRequestPayload
 {
-    [System.Text.Json.Serialization.JsonPropertyName("contents")]
-    [Newtonsoft.Json.JsonProperty("contents")]
-    public string Contents { get; set; }
+    /// <summary>Contenu HTML courant du fichier.</summary>
+    [JsonPropertyName("contents")]
+    public string? Contents { get; set; }
 }
 
 /// <summary>
 /// Callback statique invoqué par le plugin FileTransformation pour injecter le script carousel dans index.html.
-/// La méthode est appelée par réflexion — ne pas renommer sans mettre à jour FileTransformationService.
+/// Signature calquée exactement sur EditorsChoicePlugin.Helpers.Transformations.
 /// </summary>
 public static class CarouselIndexTransformer
 {
-    private const string ScriptTag =
-        "<script src=\"/MediaCarousel/carousel-layout.js\"></script>";
-    private const string OldScriptTag = 
-        "<script src=\"/plugins/JellyfinCarouselPlugin/Web/carousel-layout.js\"></script>";
-
     /// <summary>
-    /// Reçoit le contenu HTML de index.html et injecte la balise script carousel avant &lt;/head&gt;.
+    /// Reçoit le contenu HTML de index.html et injecte la balise script carousel avant &lt;/body&gt;.
     /// Appelé par réflexion depuis le plugin FileTransformation.
-    /// </summary>
     /// </summary>
     /// <param name="payload">Payload transféré par FileTransformation</param>
     /// <returns>HTML modifié avec le script injecté</returns>
     public static string InjectScript(PatchRequestPayload payload)
     {
-        try
-        {
-            string contents = payload?.Contents ?? string.Empty;
-            if (string.IsNullOrEmpty(contents) || contents.Contains(ScriptTag))
-            {
-                return contents;
-            }
+        string script = "<script FileTransformation=\"true\" plugin=\"MediaCarousel\" defer=\"defer\" src=\"/MediaCarousel/carousel-layout.js\"></script>";
 
-            if (contents.Contains(OldScriptTag)) 
-            {
-                contents = contents.Replace(OldScriptTag, "");
-            }
+        string text = Regex.Replace(payload.Contents!, "(</body>)", $"{script}$1");
 
-            return contents.Replace("</head>", $"    {ScriptTag}\n</head>");
-        }
-        catch
-        {
-            // En cas d'erreur inattendue
-            return string.Empty;
-        }
+        return text;
     }
 }

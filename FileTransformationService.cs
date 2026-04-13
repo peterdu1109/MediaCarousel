@@ -92,7 +92,7 @@ public class CarouselStartupTask : IScheduledTask
             var payload = new JObject
             {
                 ["id"] = "191bd290-1054-4b55-a137-46c72181266b", // GUID du plugin
-                ["fileNamePattern"] = "index\\.html",
+                ["fileNamePattern"] = "index.html",
                 ["callbackAssembly"] = typeof(CarouselStartupTask).Assembly.FullName,
                 ["callbackClass"] = typeof(CarouselIndexTransformer).FullName,
                 ["callbackMethod"] = nameof(CarouselIndexTransformer.InjectScript)
