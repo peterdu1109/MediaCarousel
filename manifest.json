@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/icon.png",
     "versions": [
       {
+        "version": "2.5.1.0",
+        "changelog": "- fix(core): remove async delay and add strong json bounds for immediate fileTransformation patch",
+        "targetAbi": "10.11.0.0",
+        "sourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/2.5.1/JellyfinCarouselPlugin.zip",
+        "checksum": "0a731d4d5925a2da20c34976d5ecc934",
+        "timestamp": "2026-04-13T11:20:06Z"
+      },
+      {
         "version": "2.5.0.0",
         "changelog": "- feat(library): add library mapping UI and background scanning task\n- feat(library): add library mapping UI and background scanning task",
         "targetAbi": "10.11.0.0",
