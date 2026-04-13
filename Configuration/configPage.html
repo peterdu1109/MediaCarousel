@@ -243,7 +243,7 @@
                     ShowNewEpisodesBadge: document.querySelector('#ShowNewEpisodesBadge').checked,
                     ShowQualityBadge: document.querySelector('#ShowQualityBadge').checked,
                     EnableFavoritesButton: document.querySelector('#EnableFavoritesButton').checked,
-                    ItemsPerCarousel: parseInt(document.querySelector('#ItemsPerCarousel').value),
+                    ItemsPerCarousel: parseInt(document.querySelector('#ItemsPerCarousel').value) || 20,
                     HeroMode: document.querySelector('#HeroMode').value,
                     HighlightColor: document.querySelector('#HighlightColor').value,
                     EnableGroqAi: document.querySelector('#EnableGroqAi').checked,
