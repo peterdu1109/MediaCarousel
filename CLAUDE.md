@@ -6,7 +6,7 @@
 
 - **Plugin ID (GUID):** `191bd290-1054-4b55-a137-46c72181266b` — used in `Plugin.cs`, `manifest.json`, `configPage.html`, and `carousel-layout.js`. This is the canonical GUID.
 - **Target:** Jellyfin 10.11.x (ABI `10.11.0.0`), .NET 9.0
-- **Current version:** 1.5.2.0
+- **Current version:** 2.0.1.0
 - **Language:** C# backend, vanilla JavaScript frontend (no Node.js, no TypeScript, no npm)
 
 ---
@@ -19,7 +19,7 @@ MediaCarousel/
 ├── FileTransformationService.cs     # IHostedService — dual-strategy script injection
 ├── CarouselIndexTransformer.cs      # Static callback for FileTransformation plugin (reflection-based)
 ├── PluginServiceRegistrator.cs      # IPluginServiceRegistrator — registers FileTransformationService
-├── JellyfinCarouselPlugin.csproj    # .NET 9.0 project — version 1.5.2.0
+├── JellyfinCarouselPlugin.csproj    # .NET 9.0 project — version 2.0.1.0
 ├── manifest.json                    # Plugin manifest (Jellyfin repo catalog)
 ├── build.yaml                       # Plugin registry metadata
 ├── nuget.config                     # nuget.org package source
@@ -71,13 +71,23 @@ The backend has a single runtime responsibility: inject the carousel `<script>` 
 **Startup sequence:**
 1. `waitForJellyfin()` — polls every 100 ms until `window.ApiClient` and `window.Dashboard` exist
 2. Injects CSS inline via `<style>` tag into `document.head`
-3. Calls `triggerLayout()` at 0, 500, and 1500 ms (triple-attempt startup)
+3. Calls `triggerLayout()` at 0, 300, 800, 1500, and 3000 ms (five progressive attempts)
 4. Calls `observePageChanges()` to listen for SPA navigation
 
-**Navigation detection (triple strategy):**
-- **Strategy 1 — `viewshow` event:** Jellyfin's native DOM event — checks for `#indexPage` or `.homePage`
-- **Strategy 2 — `MutationObserver`:** Watches `document.body` for DOM changes; triggers layout after 400 ms debounce if `#indexPage` appears without `#jellyfin-carousel-layout`
-- **Strategy 3 — Polling:** Every 2 seconds, checks if on home page without an active carousel and re-triggers layout (safety net)
+**Home page detection — hybrid DOM + URL (`isOnHomePage()`):**
+- DOM selectors: `#indexPage`, `.homePage`, `#homeTab`, `[data-type="home"]`, `.view.homePage:not(.hide)`, `.page.homePage:not(.hide)`
+- URL fallback: checks `window.location.hash` for `#!/home`, `#!/home.html`, empty hash, etc.
+- Excludes detail/config/dashboard/search/list/settings pages by hash inspection
+
+**Home container detection — 14 selectors in cascade (`findHomeContainer()`):**
+`.homePage` → `#indexPage .scrollSlider` → `#indexPage .itemsContainer` → `#indexPage .padded-left.padded-right` → `#indexPage .sections` → `#indexPage` → `#homeTab` → `[data-type="home"]` → `.mainAnimatedPages .page:not(.hide)` → `.view:not(.hide) .sections` → `.view:not(.hide) .verticalSection` → `.view:not(.hide)` → `.mainAnimatedPages > div:not(.hide)` → `#skinBody .page:not(.hide)`
+
+**Navigation detection (5 strategies):**
+- **Strategy 1 — `viewshow` event:** Jellyfin's native DOM event — checks for `#indexPage`, `#homeTab`, `.homePage`, `data-type="home"`
+- **Strategy 1b — `pageshow` event:** Alternative Jellyfin event (varies by version)
+- **Strategy 2 — `hashchange`:** Detects SPA hash navigation
+- **Strategy 3 — `MutationObserver`:** Watches `document.body` for DOM changes; triggers layout after 400 ms debounce
+- **Strategy 4 — Polling:** Every 3 seconds, checks if on home page without an active carousel (safety net)
 
 **Layout activation:**
 - Adds `body.media-carousel-active` class — scoped CSS rules hide all native Jellyfin home sections under this class
@@ -229,7 +239,7 @@ Edit the `CONFIG.genres` array in `carousel-layout.js`. Genre names must match J
 
 **No npm / no TypeScript:** Do not introduce `package.json`, webpack, babel, TypeScript, or any build tooling for the JavaScript. Keep it vanilla.
 
-**Fragile DOM selectors:** `initCarouselLayout()` locates the home page container by trying `.homePage`, then `#indexPage .scrollSlider`, then `#indexPage`, then `[data-type="home"]`. If Jellyfin changes its home page HTML structure, these selectors will need updating.
+**Robust DOM selectors with retry:** `findHomeContainer()` tries 14 selectors in cascade (see Architecture section). If none match, `initCarouselLayout()` uses progressive retry (up to 8 attempts, 500 ms → 3 s delay). Detailed logs are printed to the browser console at each attempt. If Jellyfin changes its home page HTML structure, add new selectors to the `findHomeContainer()` array.
 
 **`toggleFavorite` uses a non-standard API path:** `ApiClient.FavoriteManager.updateFavoriteStatus()` is not a standard documented method. If Jellyfin changes this API, `toggleFavorite` will fail silently (errors are caught and logged to console).
 
@@ -241,7 +251,7 @@ Edit the `CONFIG.genres` array in `carousel-layout.js`. Genre names must match J
 
 **Groq API key exposed client-side:** The `GroqApiKey` is stored in plugin config and fetched by the browser JS via `ApiClient.getPluginConfiguration()`. Any authenticated Jellyfin user can read it. This is a known trade-off.
 
-**`build.yaml` is stale:** `build.yaml` lists versions up to 1.1.0 and is not auto-updated by CI. The authoritative version history is in `manifest.json`, which is updated automatically by the GitHub Actions workflow.
+**`build.yaml` is manually maintained:** `build.yaml` is not auto-updated by CI. The authoritative version history is in `manifest.json`, which is updated automatically by the GitHub Actions workflow.
 
 ---
 
