@@ -73,7 +73,7 @@ public class PluginConfiguration : BasePluginConfiguration
     public bool ShowCollections { get; set; } = true;
 
     /// <summary>
-    /// Mode d'affichage du Hero (Random, Latest, Resume)
+    /// Mode d'affichage du Hero (Random, Latest, Resume, None)
     /// </summary>
     public string HeroMode { get; set; } = "Random";
 
@@ -101,4 +101,25 @@ public class PluginConfiguration : BasePluginConfiguration
     /// Modèle Groq à utiliser
     /// </summary>
     public string GroqModel { get; set; } = "llama3-8b-8192";
+
+    /// <summary>
+    /// Ordre personnalisé des sections du layout (JSON array d'IDs)
+    /// Ex: "hero,continue,latest,top10,recommended,genres,collections"
+    /// </summary>
+    public string SectionOrder { get; set; } = "hero,continue,latest,top10,recommended,genres,collections";
+
+    /// <summary>
+    /// Style des cartes : "poster" (vertical) ou "landscape" (horizontal/backdrop)
+    /// </summary>
+    public string CardStyle { get; set; } = "poster";
+
+    /// <summary>
+    /// Nombre minimum d'éléments pour qu'un genre soit affiché
+    /// </summary>
+    public int MinGenreItems { get; set; } = 3;
+
+    /// <summary>
+    /// Nombre maximum de genres à afficher
+    /// </summary>
+    public int MaxGenres { get; set; } = 12;
 }

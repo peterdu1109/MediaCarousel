@@ -28,7 +28,11 @@
         HighlightColor: '#00a4dc',
         EnableGroqAi: false,
         GroqApiKey: '',
-        GroqModel: 'llama3-8b-8192'
+        GroqModel: 'llama3-8b-8192',
+        SectionOrder: 'hero,continue,latest,top10,recommended,genres,collections',
+        CardStyle: 'poster',
+        MinGenreItems: 3,
+        MaxGenres: 12
     };
 
     const CONFIG = {
@@ -39,8 +43,7 @@
             { id: 'recommended', name: 'Recommandés pour vous', filter: 'Recommended', configKey: 'ShowRecommended' },
             { id: 'collections', name: 'Collections', filter: 'BoxSets', configKey: 'ShowCollections' }
         ],
-        ],
-        genres: [] // Sécurisé, maintenant fetché dynamiquement depuis les métadonnées de Jellyfin
+        genres: []
     };
 
     // Attendre que Jellyfin soit chargé
@@ -132,8 +135,9 @@
     }
 
     function createMediaCard(item) {
+        const isLandscape = pluginConfig.CardStyle === 'landscape';
         const card = document.createElement('div');
-        card.className = 'carousel-item';
+        card.className = isLandscape ? 'carousel-item carousel-item-landscape' : 'carousel-item';
         card.dataset.id = item.Id;
         card.dataset.type = item.Type;
 
@@ -161,7 +165,10 @@
 
         const img = document.createElement('img');
         img.className = 'carousel-item-image';
-        img.src = getImageUrl(item, 'Primary') || getImageUrl(item, 'Backdrop');
+        // Landscape uses Backdrop, poster uses Primary
+        img.src = isLandscape
+            ? (getImageUrl(item, 'Backdrop') || getImageUrl(item, 'Primary'))
+            : (getImageUrl(item, 'Primary') || getImageUrl(item, 'Backdrop'));
         img.alt = item.Name || 'Sans titre';
         img.loading = 'lazy';
         card.appendChild(img);
@@ -569,55 +576,92 @@
         carouselContainer.className = 'carousel-main-container';
         carouselContainer.id = 'jellyfin-carousel-layout';
 
-        // Charger les Genres dynamiquement via les MetaDonnées des bibliothèques
+        // Ajouter la classe de style de carte
+        if (pluginConfig.CardStyle === 'landscape') {
+            carouselContainer.classList.add('carousel-landscape-mode');
+        }
+
+        // --- GENRES INTELLIGENTS ---
+        // Charger les Genres dynamiquement, triés par popularité (nombre d'items)
         if (pluginConfig.ShowGenreCategories !== false) {
             try {
+                const maxGenres = pluginConfig.MaxGenres || 12;
+                const minItems = pluginConfig.MinGenreItems || 3;
+
+                // Récupérer les genres avec leur nombre d'éléments
                 const genresResult = await ApiClient.getJSON(ApiClient.getUrl('Genres', {
                     UserId: userId,
                     SortBy: 'SortName',
                     SortOrder: 'Ascending',
                     Recursive: true,
-                    Limit: 15
+                    Fields: 'ItemCounts',
+                    Limit: 50 // Prendre large pour filtrer ensuite
                 }));
+
                 if (genresResult && genresResult.Items) {
-                    CONFIG.genres = genresResult.Items.map(g => g.Name).filter(Boolean);
+                    // Filtrage intelligent :
+                    // 1. Ne garder que les genres ayant au moins MinGenreItems items
+                    // 2. Trier par nombre total de contenus (popularité)
+                    // 3. Limiter à MaxGenres
+                    const smartGenres = genresResult.Items
+                        .map(g => ({
+                            name: g.Name,
+                            count: (g.MovieCount || 0) + (g.SeriesCount || 0) + (g.EpisodeCount || 0)
+                        }))
+                        .filter(g => g.name && g.count >= minItems)
+                        .sort((a, b) => b.count - a.count)
+                        .slice(0, maxGenres);
+
+                    CONFIG.genres = smartGenres.map(g => g.name);
+                    console.log('[MediaCarousel] Genres intelligents chargés:', CONFIG.genres.length,
+                        '(min:', minItems, 'items, max:', maxGenres, 'genres)');
                 }
             } catch (err) {
-                console.warn('MediaCarousel: Failed to load dynamic genres, fallback to empty array', err);
+                console.warn('MediaCarousel: Erreur chargement genres intelligents', err);
             }
         }
 
-        // Hero
-        const heroDOM = await createHero(userId);
-        if (heroDOM) carouselContainer.appendChild(heroDOM);
+        // --- LAYOUT CUSTOMISABLE VIA SECTION ORDER ---
+        const sectionOrder = (pluginConfig.SectionOrder || 'hero,continue,latest,top10,recommended,genres,collections')
+            .split(',').map(s => s.trim());
 
-        // IA Groq — bannière + genres prioritaires
+        // IA Groq — bannière + genres prioritaires (chargés hors de la boucle)
         let aiPriorityGenres = [];
         const aiReco = await loadAiRecommendations(userId);
         if (aiReco && aiReco.message) {
             carouselContainer.appendChild(createAiBanner(aiReco.message));
             aiPriorityGenres = aiReco.genres || [];
-            // Charger immédiatement les genres recommandés par l'IA
-            for (const genre of aiPriorityGenres) {
-                const items = await loadGenreItems(genre, userId);
-                const el = createCarouselDOM('🤖 ' + genre, items);
-                if (el) carouselContainer.appendChild(el);
-            }
-        }
-
-        // Catégories principales
-        for (const category of CONFIG.categories) {
-            if (pluginConfig[category.configKey] !== false) {
-                const items = await loadCategoryItems(category, userId);
-                const carousel = createCarouselDOM(category.name, items);
-                if (carousel) carouselContainer.appendChild(carousel);
-            }
         }
 
         // Container pour genres (lazy-loaded)
         const genresContainer = document.createElement('div');
         genresContainer.id = 'carousel-genres-lazy';
-        carouselContainer.appendChild(genresContainer);
+
+        // Parcourir les sections dans l'ordre personnalisé
+        for (const sectionId of sectionOrder) {
+            if (sectionId === 'hero') {
+                const heroDOM = await createHero(userId);
+                if (heroDOM) carouselContainer.appendChild(heroDOM);
+            } else if (sectionId === 'genres') {
+                if (pluginConfig.ShowGenreCategories !== false) {
+                    // Charger immédiatement les genres recommandés par l'IA
+                    for (const genre of aiPriorityGenres) {
+                        const items = await loadGenreItems(genre, userId);
+                        const el = createCarouselDOM('🤖 ' + genre, items);
+                        if (el) carouselContainer.appendChild(el);
+                    }
+                    carouselContainer.appendChild(genresContainer);
+                }
+            } else {
+                // C'est une catégorie standard
+                const category = CONFIG.categories.find(c => c.id === sectionId);
+                if (category && pluginConfig[category.configKey] !== false) {
+                    const items = await loadCategoryItems(category, userId);
+                    const carousel = createCarouselDOM(category.name, items);
+                    if (carousel) carouselContainer.appendChild(carousel);
+                }
+            }
+        }
 
         // Masquer les enfants natifs de mainContent UNIQUEMENT si configuré
         if (pluginConfig.HideNativeHome) {
@@ -631,12 +675,12 @@
         mainContent.insertBefore(carouselContainer, mainContent.firstChild);
         document.body.classList.add('media-carousel-active');
 
-        // Setup Intersection Observer for Lazy Loading Genres (skip genres déjà chargés par l'IA)
+        // Setup Intersection Observer for Lazy Loading Genres restants
         if (pluginConfig.ShowGenreCategories !== false) {
             setupLazyGenres(userId, genresContainer, aiPriorityGenres);
         }
 
-        console.log('[MediaCarousel] ✅ Carousel Layout initialisé avec succès!');
+        console.log('[MediaCarousel] ✅ Layout initialisé! Ordre:', sectionOrder.join(' → '));
     }
 
     function setupLazyGenres(userId, container, skipGenres = []) {
@@ -855,6 +899,13 @@
     cursor: pointer;
     transition: var(--carousel-transition);
     background-color: var(--carousel-card-bg);
+}
+
+.carousel-landscape-mode .carousel-item, 
+.carousel-item-landscape {
+    min-width: 320px;
+    max-width: 320px;
+    height: 180px; /* 16:9 ratio */
 }
 
 .carousel-item:hover {

@@ -5,6 +5,85 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Configuration - Carousel Layout</title>
+    <style>
+        .layout-section-list {
+            list-style: none;
+            padding: 0;
+            margin: 10px 0;
+        }
+        .layout-section-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 14px;
+            margin-bottom: 6px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 8px;
+            cursor: grab;
+            user-select: none;
+            transition: background 0.2s, border-color 0.2s, transform 0.15s;
+        }
+        .layout-section-item:hover {
+            background: rgba(255,255,255,0.1);
+            border-color: rgba(255,255,255,0.2);
+        }
+        .layout-section-item.dragging {
+            opacity: 0.4;
+            transform: scale(0.97);
+        }
+        .layout-section-item .drag-handle {
+            color: rgba(255,255,255,0.4);
+            font-size: 1.2em;
+            cursor: grab;
+            flex-shrink: 0;
+        }
+        .layout-section-item .section-label {
+            flex: 1;
+            font-weight: 500;
+        }
+        .layout-section-item .section-icon {
+            font-size: 1.1em;
+            flex-shrink: 0;
+        }
+        .card-style-preview {
+            display: flex;
+            gap: 16px;
+            margin-top: 10px;
+        }
+        .card-style-option {
+            flex: 1;
+            text-align: center;
+            padding: 16px 12px;
+            border: 2px solid rgba(255,255,255,0.1);
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.25s;
+            background: rgba(255,255,255,0.03);
+        }
+        .card-style-option:hover {
+            border-color: rgba(255,255,255,0.3);
+        }
+        .card-style-option.selected {
+            border-color: var(--accent-color, #00a4dc);
+            background: rgba(0,164,220,0.1);
+        }
+        .card-style-option .preview-box {
+            width: 60px;
+            height: 90px;
+            background: rgba(255,255,255,0.15);
+            border-radius: 6px;
+            margin: 0 auto 8px;
+        }
+        .card-style-option.landscape .preview-box {
+            width: 120px;
+            height: 68px;
+        }
+        .card-style-option .style-label {
+            font-size: 0.85em;
+            color: var(--text-muted, #999);
+        }
+    </style>
 </head>
 
 <body>
@@ -30,8 +109,6 @@
                             </label>
                         </div>
 
-
-
                         <div class="checkboxContainer">
                             <label>
                                 <input is="emby-checkbox" type="checkbox" id="EnableHoverAnimations" />
@@ -42,18 +119,42 @@
                         <div class="checkboxContainer" style="margin-top: 15px;">
                             <label>
                                 <input is="emby-checkbox" type="checkbox" id="HideNativeHome" />
-                                <span>Cacher l'interface d'accueil native de Jellyfin (Les bibliothèques, etc.)</span>
+                                <span>Cacher l'interface d'accueil native de Jellyfin</span>
                             </label>
-                            <div class="fieldDescription">Si décoché, nos carrousels s'afficheront tout en haut, mais vous garderez vos anciennes bibliothèques et sections en bas.</div>
+                            <div class="fieldDescription">Si décoché, les carrousels s'afficheront en haut, et les bibliothèques natives resteront en dessous.</div>
                         </div>
                     </div>
 
                     <div class="verticalSection">
                         <h3>Bibliothèques incluses</h3>
-                        <p style="color:var(--text-muted, #999); font-size: 0.9em; margin-top: -10px;">Cochez les bibliothèques que le carrousel a le droit d'afficher (si vide, aucune limite).</p>
+                        <p style="color:var(--text-muted, #999); font-size: 0.9em; margin-top: -10px;">Cochez les bibliothèques que le carrousel a le droit d'afficher (si vide = aucune limite).</p>
                         <div id="librariesContainer" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; margin-top: 10px;">
                             <div style="color:var(--text-muted, #999);">Chargement des bibliothèques...</div>
                         </div>
+                    </div>
+
+                    <!-- LAYOUT CUSTOMISABLE -->
+                    <div class="verticalSection">
+                        <h3>🎨 Ordre des sections</h3>
+                        <p style="color:var(--text-muted, #999); font-size: 0.9em; margin-top: -10px;">Glissez-déposez pour réorganiser l'ordre d'affichage sur votre page d'accueil.</p>
+                        <ul id="sectionOrderList" class="layout-section-list">
+                            <!-- Rempli dynamiquement -->
+                        </ul>
+                    </div>
+
+                    <div class="verticalSection">
+                        <h3>🖼️ Style des cartes</h3>
+                        <div class="card-style-preview">
+                            <div class="card-style-option poster" data-style="poster" onclick="selectCardStyle('poster')">
+                                <div class="preview-box"></div>
+                                <div class="style-label">Poster (affiche)</div>
+                            </div>
+                            <div class="card-style-option landscape" data-style="landscape" onclick="selectCardStyle('landscape')">
+                                <div class="preview-box"></div>
+                                <div class="style-label">Paysage (backdrop)</div>
+                            </div>
+                        </div>
+                        <input type="hidden" id="CardStyle" value="poster" />
                     </div>
 
                     <div class="verticalSection">
@@ -99,6 +200,22 @@
                                 <input is="emby-checkbox" type="checkbox" id="ShowCollections" />
                                 <span>Collections (Boxsets)</span>
                             </label>
+                        </div>
+                    </div>
+
+                    <div class="verticalSection">
+                        <h3>🎯 Filtrage intelligent des genres</h3>
+
+                        <div class="inputContainer">
+                            <label for="MinGenreItems">Nombre minimum d'éléments pour afficher un genre</label>
+                            <input is="emby-input" type="number" id="MinGenreItems" min="1" max="20" step="1" />
+                            <div class="fieldDescription">Les genres avec moins de X éléments seront masqués automatiquement.</div>
+                        </div>
+
+                        <div class="inputContainer">
+                            <label for="MaxGenres">Nombre maximum de genres affichés</label>
+                            <input is="emby-input" type="number" id="MaxGenres" min="3" max="30" step="1" />
+                            <div class="fieldDescription">Seuls les genres les plus populaires seront affichés.</div>
                         </div>
                     </div>
 
@@ -196,24 +313,99 @@
                 config: null
             };
 
+            // === Section labels for drag-and-drop ===
+            var SECTION_DEFS = {
+                'hero':        { icon: '🎬', label: 'Bannière Hero' },
+                'continue':    { icon: '▶️', label: 'Continuer à regarder' },
+                'latest':      { icon: '🆕', label: 'Nouveautés' },
+                'top10':       { icon: '🏆', label: 'Top 10' },
+                'recommended': { icon: '👍', label: 'Recommandés' },
+                'genres':      { icon: '🎭', label: 'Genres' },
+                'collections': { icon: '📦', label: 'Collections' }
+            };
+
+            function renderSectionOrder(orderStr) {
+                var list = document.getElementById('sectionOrderList');
+                if (!list) return;
+                list.innerHTML = '';
+
+                var order = (orderStr || 'hero,continue,latest,top10,recommended,genres,collections').split(',');
+
+                order.forEach(function(sectionId) {
+                    var def = SECTION_DEFS[sectionId.trim()];
+                    if (!def) return;
+
+                    var li = document.createElement('li');
+                    li.className = 'layout-section-item';
+                    li.setAttribute('draggable', 'true');
+                    li.dataset.sectionId = sectionId.trim();
+
+                    li.innerHTML = '<span class="drag-handle">⠿</span>' +
+                        '<span class="section-icon">' + def.icon + '</span>' +
+                        '<span class="section-label">' + def.label + '</span>';
+
+                    list.appendChild(li);
+                });
+
+                enableDragAndDrop(list);
+            }
+
+            function enableDragAndDrop(list) {
+                var dragged = null;
+                list.addEventListener('dragstart', function(e) {
+                    dragged = e.target.closest('.layout-section-item');
+                    if (dragged) dragged.classList.add('dragging');
+                });
+                list.addEventListener('dragend', function(e) {
+                    if (dragged) dragged.classList.remove('dragging');
+                    dragged = null;
+                });
+                list.addEventListener('dragover', function(e) {
+                    e.preventDefault();
+                    var target = e.target.closest('.layout-section-item');
+                    if (target && target !== dragged) {
+                        var items = Array.from(list.children);
+                        var draggedIdx = items.indexOf(dragged);
+                        var targetIdx = items.indexOf(target);
+                        if (draggedIdx < targetIdx) {
+                            list.insertBefore(dragged, target.nextSibling);
+                        } else {
+                            list.insertBefore(dragged, target);
+                        }
+                    }
+                });
+            }
+
+            function getSectionOrderFromDOM() {
+                var items = document.querySelectorAll('#sectionOrderList .layout-section-item');
+                var order = [];
+                for (var i = 0; i < items.length; i++) {
+                    order.push(items[i].dataset.sectionId);
+                }
+                return order.join(',');
+            }
+
+            window.selectCardStyle = function(style) {
+                document.getElementById('CardStyle').value = style;
+                var options = document.querySelectorAll('.card-style-option');
+                for (var i = 0; i < options.length; i++) {
+                    options[i].classList.toggle('selected', options[i].dataset.style === style);
+                }
+            };
+
             function renderLibrariesCheckboxes(views, includedLibraries) {
                 var container = document.querySelector('#librariesContainer');
                 if (!container) return;
-                
                 container.innerHTML = '';
-                
                 if (!views || views.length === 0) {
                     container.innerHTML = '<div style="color:var(--text-muted, #999);">Aucune bibliothèque trouvée.</div>';
                     return;
                 }
-
                 views.forEach(function(view) {
                     var isChecked = !includedLibraries || includedLibraries.length === 0 || includedLibraries.includes(view.Id);
-                    
                     var html = '<div class="checkboxContainer" style="margin:0;">';
                     html += '<label><input is="emby-checkbox" type="checkbox" class="chkLibrary" data-id="' + view.Id + '"' + (isChecked ? ' checked="checked"' : '') + ' />';
                     html += '<span>' + view.Name + '</span></label></div>';
-                    
                     container.insertAdjacentHTML('beforeend', html);
                 });
             }
@@ -221,7 +413,6 @@
             document.querySelector('#carouselConfigPage').addEventListener('pageshow', function () {
                 Dashboard.showLoadingMsg();
 
-                // Charger la version du plugin de manière sécurisée
                 try {
                     ApiClient.getJSON(ApiClient.getUrl("Plugins")).then(function (plugins) {
                         if (plugins && plugins.length) {
@@ -244,11 +435,13 @@
                     document.querySelector('#ShowTop10').checked = config.ShowTop10;
                     document.querySelector('#ShowRecommended').checked = config.ShowRecommended;
                     document.querySelector('#ShowGenreCategories').checked = config.ShowGenreCategories;
-                    document.querySelector('#ShowCollections').checked = config.ShowCollections !== false; // Default true if undefined
+                    document.querySelector('#ShowCollections').checked = config.ShowCollections !== false;
                     document.querySelector('#ShowNewEpisodesBadge').checked = config.ShowNewEpisodesBadge;
                     document.querySelector('#ShowQualityBadge').checked = config.ShowQualityBadge;
                     document.querySelector('#EnableFavoritesButton').checked = config.EnableFavoritesButton !== false;
                     document.querySelector('#ItemsPerCarousel').value = config.ItemsPerCarousel;
+                    document.querySelector('#MinGenreItems').value = config.MinGenreItems || 3;
+                    document.querySelector('#MaxGenres').value = config.MaxGenres || 12;
 
                     var heroModeSelect = document.querySelector('#HeroMode');
                     if (heroModeSelect) heroModeSelect.value = config.HeroMode || 'Random';
@@ -256,12 +449,17 @@
                     var highlightColorInput = document.querySelector('#HighlightColor');
                     if (highlightColorInput) highlightColorInput.value = config.HighlightColor || '#00a4dc';
 
+                    // Section order
+                    renderSectionOrder(config.SectionOrder || 'hero,continue,latest,top10,recommended,genres,collections');
+
+                    // Card style
+                    selectCardStyle(config.CardStyle || 'poster');
+
                     document.querySelector('#EnableGroqAi').checked = config.EnableGroqAi === true;
                     document.querySelector('#GroqApiKey').value = config.GroqApiKey || '';
                     var groqModelSelect = document.querySelector('#GroqModel');
                     if (groqModelSelect) groqModelSelect.value = config.GroqModel || 'llama3-8b-8192';
 
-                    // Chargement des bibliothèques (Views) de l'utilisateur actif
                     var userId = ApiClient.getCurrentUserId();
                     if (userId) {
                         ApiClient.getUserViews({}, userId).then(function(result) {
@@ -284,7 +482,6 @@
 
             document.querySelector('#carouselConfigForm').addEventListener('submit', function (e) {
                 e.preventDefault();
-
                 Dashboard.showLoadingMsg();
 
                 var selectedLibraries = [];
@@ -294,8 +491,6 @@
                         selectedLibraries.push(chkLibraries[i].getAttribute('data-id'));
                     }
                 }
-                
-                // Si toutes sont cochées, on peut sauvegarder un tableau vide (signifiant : aucune restriction)
                 if (selectedLibraries.length === chkLibraries.length) {
                     selectedLibraries = [];
                 }
@@ -305,6 +500,10 @@
                     EnableHoverAnimations: document.querySelector('#EnableHoverAnimations').checked,
                     HideNativeHome: document.querySelector('#HideNativeHome') ? document.querySelector('#HideNativeHome').checked : false,
                     IncludedLibraries: selectedLibraries,
+                    SectionOrder: getSectionOrderFromDOM(),
+                    CardStyle: document.querySelector('#CardStyle').value,
+                    MinGenreItems: parseInt(document.querySelector('#MinGenreItems').value) || 3,
+                    MaxGenres: parseInt(document.querySelector('#MaxGenres').value) || 12,
                     ShowContinueWatching: document.querySelector('#ShowContinueWatching').checked,
                     ShowNewReleases: document.querySelector('#ShowNewReleases').checked,
                     ShowTop10: document.querySelector('#ShowTop10').checked,
