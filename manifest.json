@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/icon.png",
     "versions": [
       {
+        "version": "2.6.1.0",
+        "changelog": "- style: update plugin icon",
+        "targetAbi": "10.11.0.0",
+        "sourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/2.6.1/JellyfinCarouselPlugin.zip",
+        "checksum": "a20c0c1e44ab7487edef40bff57145c5",
+        "timestamp": "2026-04-13T13:52:43Z"
+      },
+      {
         "version": "2.6.0.0",
         "changelog": "- feat(ui): add smart genre sorting, customizable section order, and card style options",
         "targetAbi": "10.11.0.0",
