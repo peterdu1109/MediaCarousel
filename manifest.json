@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/icon.png",
     "versions": [
       {
+        "version": "2.3.0.0",
+        "changelog": "- feat(js): fetch genres dynamically from metadata and disable Hero banner",
+        "targetAbi": "10.11.0.0",
+        "sourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/2.3.0/JellyfinCarouselPlugin.zip",
+        "checksum": "a1cce8fd6007d471b2981ca593138aa3",
+        "timestamp": "2026-04-13T10:45:40Z"
+      },
+      {
         "version": "2.2.3.0",
         "changelog": "- fix(js): add Recursive:true to ApiClient.getItems to scan inside libraries",
         "targetAbi": "10.11.0.0",
