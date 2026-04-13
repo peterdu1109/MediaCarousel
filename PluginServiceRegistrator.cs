@@ -12,6 +12,7 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
     /// <inheritdoc />
     public void RegisterServices(IServiceCollection serviceCollection, IServerApplicationHost applicationHost)
     {
-        serviceCollection.AddHostedService<FileTransformationService>();
+        // CarouselStartupTask est un IScheduledTask, découvert automatiquement par Jellyfin.
+        // Aucun enregistrement manuel nécessaire.
     }
 }
