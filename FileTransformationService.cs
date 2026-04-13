@@ -32,19 +32,12 @@ public class FileTransformationService : IHostedService
     /// <inheritdoc />
     public Task StartAsync(CancellationToken cancellationToken)
     {
-        // Encapsulation totale : ne JAMAIS laisser une exception remonter
         try
         {
-            Task.Run(async () =>
+            if (!TryRegisterWithFileTransformation())
             {
-                // Attendre que tous les autres plugins (notamment FileTransformation) soient chargés et initialisés
-                await Task.Delay(10000, cancellationToken);
-                
-                if (!TryRegisterWithFileTransformation())
-                {
-                    TryInjectDirectly();
-                }
-            }, cancellationToken);
+                TryInjectDirectly();
+            }
         }
         catch (Exception ex)
         {
@@ -98,11 +91,11 @@ public class FileTransformationService : IHostedService
 
             var payload = new JObject
             {
-                ["id"] = "c391d6f2-1a2b-4a3c-8d4e-5f6a7b8c9d0e",
+                ["id"] = "191bd290-1054-4b55-a137-46c72181266b", // GUID du plugin
                 ["fileNamePattern"] = "index\\.html",
-                ["callbackAssembly"] = GetType().Assembly.FullName,
-                ["callbackClass"] = "JellyfinCarouselPlugin.CarouselIndexTransformer",
-                ["callbackMethod"] = "InjectScript"
+                ["callbackAssembly"] = typeof(FileTransformationService).Assembly.FullName,
+                ["callbackClass"] = typeof(CarouselIndexTransformer).FullName,
+                ["callbackMethod"] = nameof(CarouselIndexTransformer.InjectScript)
             };
 
             registerMethod.Invoke(null, new object[] { payload });

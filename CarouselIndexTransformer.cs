@@ -4,7 +4,8 @@ namespace JellyfinCarouselPlugin;
 
 public class PatchRequestPayload
 {
-    [JsonPropertyName("contents")]
+    [System.Text.Json.Serialization.JsonPropertyName("contents")]
+    [Newtonsoft.Json.JsonProperty("contents")]
     public string Contents { get; set; }
 }
 
