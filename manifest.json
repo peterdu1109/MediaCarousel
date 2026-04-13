@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/icon.png",
     "versions": [
       {
+        "version": "2.7.0.0",
+        "changelog": "- feat(ui): eliminate FOUC with synchronous layout masking and intelligent duplicate removal",
+        "targetAbi": "10.11.0.0",
+        "sourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/2.7.0/JellyfinCarouselPlugin.zip",
+        "checksum": "710e30bb94a5a3b2ae6edf5f20668201",
+        "timestamp": "2026-04-13T13:55:49Z"
+      },
+      {
         "version": "2.6.1.0",
         "changelog": "- style: update plugin icon",
         "targetAbi": "10.11.0.0",
