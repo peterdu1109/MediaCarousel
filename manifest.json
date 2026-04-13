@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/icon.png",
     "versions": [
       {
+        "version": "2.4.1.0",
+        "changelog": "- fix(core): match Editor's Choice FileTransformation behavior to fix silent registration failures",
+        "targetAbi": "10.11.0.0",
+        "sourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/2.4.1/JellyfinCarouselPlugin.zip",
+        "checksum": "a1c9ea0f13bd91c236b68cd7aa04e195",
+        "timestamp": "2026-04-13T10:59:00Z"
+      },
+      {
         "version": "2.4.0.0",
         "changelog": "- feat(js): keep native home content visible by default",
         "targetAbi": "10.11.0.0",
