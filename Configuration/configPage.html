@@ -49,6 +49,14 @@
                     </div>
 
                     <div class="verticalSection">
+                        <h3>Bibliothèques incluses</h3>
+                        <p style="color:var(--text-muted, #999); font-size: 0.9em; margin-top: -10px;">Cochez les bibliothèques que le carrousel a le droit d'afficher (si vide, aucune limite).</p>
+                        <div id="librariesContainer" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; margin-top: 10px;">
+                            <div style="color:var(--text-muted, #999);">Chargement des bibliothèques...</div>
+                        </div>
+                    </div>
+
+                    <div class="verticalSection">
                         <h3>Catégories à afficher</h3>
 
                         <div class="checkboxContainer">
@@ -184,8 +192,31 @@
 
         <script type="text/javascript">
             var CarouselConfigPage = {
-                pluginId: "191bd290-1054-4b55-a137-46c72181266b"
+                pluginId: "191bd290-1054-4b55-a137-46c72181266b",
+                config: null
             };
+
+            function renderLibrariesCheckboxes(views, includedLibraries) {
+                var container = document.querySelector('#librariesContainer');
+                if (!container) return;
+                
+                container.innerHTML = '';
+                
+                if (!views || views.length === 0) {
+                    container.innerHTML = '<div style="color:var(--text-muted, #999);">Aucune bibliothèque trouvée.</div>';
+                    return;
+                }
+
+                views.forEach(function(view) {
+                    var isChecked = !includedLibraries || includedLibraries.length === 0 || includedLibraries.includes(view.Id);
+                    
+                    var html = '<div class="checkboxContainer" style="margin:0;">';
+                    html += '<label><input is="emby-checkbox" type="checkbox" class="chkLibrary" data-id="' + view.Id + '"' + (isChecked ? ' checked="checked"' : '') + ' />';
+                    html += '<span>' + view.Name + '</span></label></div>';
+                    
+                    container.insertAdjacentHTML('beforeend', html);
+                });
+            }
 
             document.querySelector('#carouselConfigPage').addEventListener('pageshow', function () {
                 Dashboard.showLoadingMsg();
@@ -230,7 +261,21 @@
                     var groqModelSelect = document.querySelector('#GroqModel');
                     if (groqModelSelect) groqModelSelect.value = config.GroqModel || 'llama3-8b-8192';
 
-                    Dashboard.hideLoadingMsg();
+                    // Chargement des bibliothèques (Views) de l'utilisateur actif
+                    var userId = ApiClient.getCurrentUserId();
+                    if (userId) {
+                        ApiClient.getUserViews({}, userId).then(function(result) {
+                            renderLibrariesCheckboxes(result.Items || [], config.IncludedLibraries || []);
+                            Dashboard.hideLoadingMsg();
+                        }).catch(function(e) {
+                            console.error("Erreur chargement bibliothèques:", e);
+                            renderLibrariesCheckboxes([], []);
+                            Dashboard.hideLoadingMsg();
+                        });
+                    } else {
+                        renderLibrariesCheckboxes([], []);
+                        Dashboard.hideLoadingMsg();
+                    }
                 }).catch(function(err) {
                     console.error("Erreur chargement configuration plugins:", err);
                     Dashboard.hideLoadingMsg();
@@ -242,10 +287,24 @@
 
                 Dashboard.showLoadingMsg();
 
+                var selectedLibraries = [];
+                var chkLibraries = document.querySelectorAll('.chkLibrary');
+                for(var i=0; i<chkLibraries.length; i++) {
+                    if(chkLibraries[i].checked) {
+                        selectedLibraries.push(chkLibraries[i].getAttribute('data-id'));
+                    }
+                }
+                
+                // Si toutes sont cochées, on peut sauvegarder un tableau vide (signifiant : aucune restriction)
+                if (selectedLibraries.length === chkLibraries.length) {
+                    selectedLibraries = [];
+                }
+
                 var config = {
                     EnableCarouselLayout: document.querySelector('#EnableCarouselLayout').checked,
                     EnableHoverAnimations: document.querySelector('#EnableHoverAnimations').checked,
                     HideNativeHome: document.querySelector('#HideNativeHome') ? document.querySelector('#HideNativeHome').checked : false,
+                    IncludedLibraries: selectedLibraries,
                     ShowContinueWatching: document.querySelector('#ShowContinueWatching').checked,
                     ShowNewReleases: document.querySelector('#ShowNewReleases').checked,
                     ShowTop10: document.querySelector('#ShowTop10').checked,

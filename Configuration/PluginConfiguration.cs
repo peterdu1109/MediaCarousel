@@ -63,6 +63,11 @@ public class PluginConfiguration : BasePluginConfiguration
     public bool HideNativeHome { get; set; } = false;
 
     /// <summary>
+    /// Liste des ID de bibliothèques (Views) incluses dans le carrousel
+    /// </summary>
+    public string[] IncludedLibraries { get; set; } = Array.Empty<string>();
+
+    /// <summary>
     /// Active la catégorie "Collections"
     /// </summary>
     public bool ShowCollections { get; set; } = true;

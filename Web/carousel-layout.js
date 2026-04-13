@@ -21,6 +21,7 @@
         ShowNewEpisodesBadge: true,
         ShowQualityBadge: true,
         HideNativeHome: false,
+        IncludedLibraries: [],
         EnableFavoritesButton: true,
         EnableHoverAnimations: true,
         HeroMode: 'Random',
@@ -296,8 +297,7 @@
                 params.SortOrder = 'Ascending';
             }
 
-            const result = await ApiClient.getItems(userId, params);
-            return result.Items || [];
+            return await fetchItemsSafely(userId, params);
         } catch (error) {
             console.error('Erreur lors du chargement de la catégorie:', category.name, error);
             return [];
@@ -306,8 +306,7 @@
 
     async function loadGenreItems(genre, userId) {
         try {
-            const result = await ApiClient.getItems(userId, {
-                UserId: userId,
+            return await fetchItemsSafely(userId, {
                 Recursive: true,
                 Genres: genre,
                 Limit: pluginConfig.ItemsPerCarousel || 20,
@@ -318,11 +317,39 @@
                 SortBy: 'DateCreated',
                 SortOrder: 'Descending'
             });
-            return result.Items || [];
         } catch (error) {
             console.error('Erreur lors du chargement du genre:', genre, error);
             return [];
         }
+    }
+
+    async function fetchItemsSafely(userId, baseParams) {
+        if (!pluginConfig.IncludedLibraries || pluginConfig.IncludedLibraries.length === 0) {
+            const res = await ApiClient.getItems(userId, baseParams);
+            return (res && res.Items) ? res.Items : [];
+        }
+
+        let allItems = [];
+        const promises = pluginConfig.IncludedLibraries.map(async (libId) => {
+            const params = { ...baseParams, ParentId: libId };
+            const res = await ApiClient.getItems(userId, params);
+            return (res && res.Items) ? res.Items : [];
+        });
+        
+        const results = await Promise.all(promises);
+        results.forEach(items => allItems.push(...items));
+        
+        if (baseParams.SortBy === 'DateCreated') {
+            allItems.sort((a, b) => (new Date(b.DateCreated) - new Date(a.DateCreated)));
+        } else if (baseParams.SortBy === 'Random') {
+            allItems.sort(() => 0.5 - Math.random());
+        }
+
+        if (baseParams.Limit) {
+            allItems = allItems.slice(0, baseParams.Limit);
+        }
+
+        return allItems;
     }
 
     async function loadAiRecommendations(userId) {
@@ -407,10 +434,10 @@
                 params.SortBy = 'Random';
             }
 
-            const result = await ApiClient.getItems(userId, params);
+            const items = await fetchItemsSafely(userId, params);
 
-            if (result.Items && result.Items.length > 0) {
-                const item = result.Items[0];
+            if (items && items.length > 0) {
+                const item = items[0];
                 const backdropUrl = getImageUrl(item, 'Backdrop');
                 const title = item.Name || '';
                 const overview = item.Overview || '';
