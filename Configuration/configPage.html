@@ -38,6 +38,14 @@
                                 <span>Activer les animations au survol</span>
                             </label>
                         </div>
+
+                        <div class="checkboxContainer" style="margin-top: 15px;">
+                            <label>
+                                <input is="emby-checkbox" type="checkbox" id="HideNativeHome" />
+                                <span>Cacher l'interface d'accueil native de Jellyfin (Les bibliothèques, etc.)</span>
+                            </label>
+                            <div class="fieldDescription">Si décoché, nos carrousels s'afficheront tout en haut, mais vous garderez vos anciennes bibliothèques et sections en bas.</div>
+                        </div>
                     </div>
 
                     <div class="verticalSection">
@@ -198,6 +206,8 @@
                 ApiClient.getPluginConfiguration(CarouselConfigPage.pluginId).then(function (config) {
                     document.querySelector('#EnableCarouselLayout').checked = config.EnableCarouselLayout;
                     document.querySelector('#EnableHoverAnimations').checked = config.EnableHoverAnimations;
+                    var hideNativeHome = document.querySelector('#HideNativeHome');
+                    if (hideNativeHome) hideNativeHome.checked = config.HideNativeHome === true;
                     document.querySelector('#ShowContinueWatching').checked = config.ShowContinueWatching;
                     document.querySelector('#ShowNewReleases').checked = config.ShowNewReleases;
                     document.querySelector('#ShowTop10').checked = config.ShowTop10;
@@ -235,6 +245,7 @@
                 var config = {
                     EnableCarouselLayout: document.querySelector('#EnableCarouselLayout').checked,
                     EnableHoverAnimations: document.querySelector('#EnableHoverAnimations').checked,
+                    HideNativeHome: document.querySelector('#HideNativeHome') ? document.querySelector('#HideNativeHome').checked : false,
                     ShowContinueWatching: document.querySelector('#ShowContinueWatching').checked,
                     ShowNewReleases: document.querySelector('#ShowNewReleases').checked,
                     ShowTop10: document.querySelector('#ShowTop10').checked,

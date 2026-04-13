@@ -20,6 +20,7 @@
         ShowCollections: true,
         ShowNewEpisodesBadge: true,
         ShowQualityBadge: true,
+        HideNativeHome: false,
         EnableFavoritesButton: true,
         EnableHoverAnimations: true,
         HeroMode: 'Random',
@@ -591,13 +592,14 @@
         genresContainer.id = 'carousel-genres-lazy';
         carouselContainer.appendChild(genresContainer);
 
-        // Masquer les enfants natifs de mainContent via data-attribute pour
-        // pouvoir les restaurer proprement (sans casser d'autres plugins)
-        Array.from(mainContent.children).forEach(child => {
-            if (child !== carouselContainer) {
-                child.setAttribute('data-jc-hidden', 'true');
-            }
-        });
+        // Masquer les enfants natifs de mainContent UNIQUEMENT si configuré
+        if (pluginConfig.HideNativeHome) {
+            Array.from(mainContent.children).forEach(child => {
+                if (child !== carouselContainer) {
+                    child.setAttribute('data-jc-hidden', 'true');
+                }
+            });
+        }
 
         mainContent.insertBefore(carouselContainer, mainContent.firstChild);
         document.body.classList.add('media-carousel-active');

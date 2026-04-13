@@ -58,6 +58,11 @@ public class PluginConfiguration : BasePluginConfiguration
     public bool EnableHoverAnimations { get; set; } = true;
 
     /// <summary>
+    /// Cache l'interface native de Jellyfin
+    /// </summary>
+    public bool HideNativeHome { get; set; } = false;
+
+    /// <summary>
     /// Active la catégorie "Collections"
     /// </summary>
     public bool ShowCollections { get; set; } = true;
