@@ -6,7 +6,7 @@
 
 - **Plugin ID (GUID):** `191bd290-1054-4b55-a137-46c72181266b` — used in `Plugin.cs`, `manifest.json`, `configPage.html`, and `carousel-layout.js`. This is the canonical GUID.
 - **Target:** Jellyfin 10.11.x (ABI `10.11.0.0`), .NET 9.0
-- **Current version:** 2.1.1.0
+- **Current version:** 2.1.4.0
 - **Language:** C# backend, vanilla JavaScript frontend (no Node.js, no TypeScript, no npm)
 
 ---

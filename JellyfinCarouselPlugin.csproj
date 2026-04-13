@@ -25,9 +25,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="Web\**\*.*">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
+    <EmbeddedResource Include="Web\**\*.*" />
     <EmbeddedResource Include="Configuration\**\*.html" />
   </ItemGroup>
 

@@ -22,15 +22,17 @@ public class MediaCarouselApiController : ControllerBase
     [Produces("application/javascript")]
     public ActionResult GetScript()
     {
-        var assemblyLocation = Assembly.GetExecutingAssembly().Location;
-        var directory = Path.GetDirectoryName(assemblyLocation);
-        var scriptPath = directory != null ? Path.Combine(directory, "Web", "carousel-layout.js") : string.Empty;
+        var assembly = Assembly.GetExecutingAssembly();
+        var resourceName = "JellyfinCarouselPlugin.Web.carousel-layout.js";
 
-        if (string.IsNullOrEmpty(scriptPath) || !System.IO.File.Exists(scriptPath))
+        using var stream = assembly.GetManifestResourceStream(resourceName);
+        if (stream == null)
         {
-            return NotFound("carousel-layout.js introuvable sur le disque.");
+            return NotFound("carousel-layout.js introuvable dans les ressources embarquées.");
         }
 
-        return PhysicalFile(scriptPath, "application/javascript");
+        using var reader = new StreamReader(stream);
+        var content = reader.ReadToEnd();
+        return Content(content, "application/javascript");
     }
 }
