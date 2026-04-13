@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/icon.png",
     "versions": [
       {
+        "version": "2.2.1.0",
+        "changelog": "- fix(config): resolve infinite loader due to apiclient method",
+        "targetAbi": "10.11.0.0",
+        "sourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/2.2.1/JellyfinCarouselPlugin.zip",
+        "checksum": "4f3466e1eda5d8b6e05fa20af96e533f",
+        "timestamp": "2026-04-13T10:15:47Z"
+      },
+      {
         "version": "2.2.0.0",
         "changelog": "- feat(config): show plugin version on config page",
         "targetAbi": "10.11.0.0",
