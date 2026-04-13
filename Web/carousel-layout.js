@@ -37,11 +37,8 @@
             { id: 'recommended', name: 'Recommandés pour vous', filter: 'Recommended', configKey: 'ShowRecommended' },
             { id: 'collections', name: 'Collections', filter: 'BoxSets', configKey: 'ShowCollections' }
         ],
-        genres: [
-            'Action', 'Aventure', 'Animation', 'Comédie', 'Crime',
-            'Documentaire', 'Drame', 'Enfants', 'Fantaisie', 'Horreur',
-            'Musique', 'Mystère', 'Romance', 'Science-Fiction', 'Thriller', 'Western'
-        ]
+        ],
+        genres: [] // Sécurisé, maintenant fetché dynamiquement depuis les métadonnées de Jellyfin
     };
 
     // Attendre que Jellyfin soit chargé
@@ -384,6 +381,8 @@
     }
 
     async function createHero(userId) {
+        if (pluginConfig.HeroMode === 'None') return null;
+
         try {
             const params = {
                 UserId: userId,
@@ -541,6 +540,24 @@
         const carouselContainer = document.createElement('div');
         carouselContainer.className = 'carousel-main-container';
         carouselContainer.id = 'jellyfin-carousel-layout';
+
+        // Charger les Genres dynamiquement via les MetaDonnées des bibliothèques
+        if (pluginConfig.ShowGenreCategories !== false) {
+            try {
+                const genresResult = await ApiClient.getJSON(ApiClient.getUrl('Genres', {
+                    UserId: userId,
+                    SortBy: 'SortName',
+                    SortOrder: 'Ascending',
+                    Recursive: true,
+                    Limit: 15
+                }));
+                if (genresResult && genresResult.Items) {
+                    CONFIG.genres = genresResult.Items.map(g => g.Name).filter(Boolean);
+                }
+            } catch (err) {
+                console.warn('MediaCarousel: Failed to load dynamic genres, fallback to empty array', err);
+            }
+        }
 
         // Hero
         const heroDOM = await createHero(userId);
