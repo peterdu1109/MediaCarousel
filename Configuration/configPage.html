@@ -16,6 +16,9 @@
                 <form id="carouselConfigForm">
 
                     <h2>Configuration du Carousel Layout</h2>
+                    <p style="margin-top: -10px; margin-bottom: 20px; color: var(--text-muted, #999);">
+                        Version installée : <span id="pluginVersionDisplay">Chargement...</span>
+                    </p>
 
                     <div class="verticalSection">
                         <h3>Options générales</h3>
@@ -177,6 +180,15 @@
 
             document.querySelector('#carouselConfigPage').addEventListener('pageshow', function () {
                 Dashboard.showLoadingMsg();
+
+                // Charger la version du plugin
+                ApiClient.getPlugins().then(function (plugins) {
+                    var plugin = plugins.find(p => p.Id === CarouselConfigPage.pluginId);
+                    if (plugin) {
+                        document.querySelector('#pluginVersionDisplay').textContent = plugin.Version;
+                    }
+                });
+
                 ApiClient.getPluginConfiguration(CarouselConfigPage.pluginId).then(function (config) {
                     document.querySelector('#EnableCarouselLayout').checked = config.EnableCarouselLayout;
                     document.querySelector('#EnableHoverAnimations').checked = config.EnableHoverAnimations;
