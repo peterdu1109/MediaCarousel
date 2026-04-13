@@ -33,13 +33,18 @@ public class FileTransformationService : IHostedService
     public Task StartAsync(CancellationToken cancellationToken)
     {
         // Encapsulation totale : ne JAMAIS laisser une exception remonter
-        // car cela détruit le conteneur DI de Jellyfin (ObjectDisposedException)
         try
         {
-            if (!TryRegisterWithFileTransformation())
+            Task.Run(async () =>
             {
-                TryInjectDirectly();
-            }
+                // Attendre que tous les autres plugins (notamment FileTransformation) soient chargés et initialisés
+                await Task.Delay(10000, cancellationToken);
+                
+                if (!TryRegisterWithFileTransformation())
+                {
+                    TryInjectDirectly();
+                }
+            }, cancellationToken);
         }
         catch (Exception ex)
         {

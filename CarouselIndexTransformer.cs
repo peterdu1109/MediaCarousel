@@ -1,4 +1,12 @@
+using System.Text.Json.Serialization;
+
 namespace JellyfinCarouselPlugin;
+
+public class PatchRequestPayload
+{
+    [JsonPropertyName("contents")]
+    public string Contents { get; set; }
+}
 
 /// <summary>
 /// Callback statique invoqué par le plugin FileTransformation pour injecter le script carousel dans index.html.
@@ -15,31 +23,14 @@ public static class CarouselIndexTransformer
     /// Reçoit le contenu HTML de index.html et injecte la balise script carousel avant &lt;/head&gt;.
     /// Appelé par réflexion depuis le plugin FileTransformation.
     /// </summary>
-    /// <param name="data">Objet JSON { "contents": "..." } ou contenu HTML brut passé par FileTransformation</param>
-    /// <returns>HTML modifié avec le script injecté, ou contenu original en cas d'erreur</returns>
-    public static string InjectScript(object data)
+    /// </summary>
+    /// <param name="payload">Payload transféré par FileTransformation</param>
+    /// <returns>HTML modifié avec le script injecté</returns>
+    public static string InjectScript(PatchRequestPayload payload)
     {
         try
         {
-            var raw = data?.ToString() ?? string.Empty;
-            if (string.IsNullOrEmpty(raw))
-            {
-                return raw;
-            }
-
-            // Essayer de parser comme JSON { "contents": "..." }
-            string contents;
-            try
-            {
-                var jObj = Newtonsoft.Json.Linq.JObject.Parse(raw);
-                contents = jObj["contents"]?.ToString() ?? string.Empty;
-            }
-            catch
-            {
-                // Si ce n'est pas du JSON, traiter comme du HTML brut
-                contents = raw;
-            }
-
+            string contents = payload?.Contents ?? string.Empty;
             if (string.IsNullOrEmpty(contents) || contents.Contains(ScriptTag))
             {
                 return contents;
@@ -54,8 +45,8 @@ public static class CarouselIndexTransformer
         }
         catch
         {
-            // En cas d'erreur inattendue, retourner le contenu original pour ne pas casser Jellyfin
-            return data?.ToString() ?? string.Empty;
+            // En cas d'erreur inattendue
+            return string.Empty;
         }
     }
 }
