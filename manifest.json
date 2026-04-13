@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/icon.png",
     "versions": [
       {
+        "version": "2.5.2.0",
+        "changelog": "- fix(core): convert injection to IScheduledTask, remove broken IHostedService registration\n- fix(core): refactor FileTransformation registration to IScheduledTask to mimic EditorsChoice precisely\n- fix(core): refactor FileTransformation registration to IScheduledTask to mimic EditorsChoice precisely",
+        "targetAbi": "10.11.0.0",
+        "sourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/2.5.2/JellyfinCarouselPlugin.zip",
+        "checksum": "973ead99b5f62d72b4e7a6a6272d6258",
+        "timestamp": "2026-04-13T13:40:58Z"
+      },
+      {
         "version": "2.5.1.0",
         "changelog": "- fix(core): remove async delay and add strong json bounds for immediate fileTransformation patch",
         "targetAbi": "10.11.0.0",
