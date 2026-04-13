@@ -2,15 +2,23 @@
   {
     "guid": "191bd290-1054-4b55-a137-46c72181266b",
     "name": "Carousel Layout",
-    "description": "Remplace l'accueil Jellyfin par un layout Netflix : carrousels horizontaux par catégorie et genre, bannière Hero, recommandations IA via Groq, support tactile complet",
-    "overview": "Layout Netflix-like avec carrousels, hero, 16 genres, IA Groq",
+    "description": "Transforme la page d'accueil Jellyfin en interface Netflix : bannière Hero, carrousels horizontaux par catégorie et par genre, badges qualité, favoris en un clic et recommandations IA optionnelles",
+    "overview": "Interface Netflix pour Jellyfin — carrousels, Hero, 16 genres, IA Groq",
     "owner": "peterdu1109",
     "category": "General",
     "imageUrl": "https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/icon.png",
     "versions": [
       {
+        "version": "2.0.0.0",
+        "changelog": "Version majeure — Détection de la page d'accueil entièrement refaite :\n- Détection hybride DOM + URL pour être compatible avec toutes les installations Jellyfin 10.11.x\n- 14 sélecteurs DOM en cascade pour trouver le container d'accueil\n- Écoute hashchange + pageshow + viewshow + MutationObserver + polling\n- Retry progressif (jusqu'à 8 tentatives) au lieu de boucle infinie\n- Logs détaillés dans la console du navigateur pour faciliter le diagnostic\n- Descriptions et changelog en français clair dans le manifest",
+        "targetAbi": "10.11.0.0",
+        "sourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/2.0.0/JellyfinCarouselPlugin.zip",
+        "checksum": "",
+        "timestamp": "2026-04-13T10:00:00Z"
+      },
+      {
         "version": "1.5.2.0",
-        "changelog": "- fix: historique versions manifest + changelog auto depuis commits",
+        "changelog": "Correctifs mineurs et nettoyage du manifest",
         "targetAbi": "10.11.0.0",
         "sourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/1.5.2/JellyfinCarouselPlugin.zip",
         "checksum": "c791ab07fb32cfa180d0bc12dde589e2",
@@ -18,7 +26,7 @@
       },
       {
         "version": "1.5.1.0",
-        "changelog": "- Activation forcée du carousel : polling 2 s + DOM-first + 3 tentatives au démarrage\n- Détection page accueil basée sur le DOM (plus de dépendance au hash URL)\n- Garde-fou anti-double-init avec flag _layoutBusy\n- Logs améliorés pour faciliter le diagnostic",
+        "changelog": "Polling 2s + détection DOM-first + garde-fou anti-double-init",
         "targetAbi": "10.11.0.0",
         "sourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/1.5.1/JellyfinCarouselPlugin.zip",
         "checksum": "141f31c532b1d9bf6980f4e29903f918",
@@ -26,7 +34,7 @@
       },
       {
         "version": "1.5.0.0",
-        "changelog": "- Intégration plugin FileTransformation (injection sans droits root ni Docker)\n- 16 genres de carrousels (Action, Aventure, Enfants, Thriller, Documentaire...)\n- Recommandations IA via Groq (clé API configurable dans les paramètres)\n- Bannière IA personnalisée basée sur l'historique de visionnage\n- Migration IServerEntryPoint → IHostedService (compatibilité Jellyfin 10.11.8)\n- Packages mis à jour : Jellyfin.Model + Jellyfin.Controller 10.11.8",
+        "changelog": "Intégration FileTransformation, 16 genres, recommandations IA Groq, migration IHostedService",
         "targetAbi": "10.11.0.0",
         "sourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/1.5.0/JellyfinCarouselPlugin.zip",
         "checksum": "0c77b71465b8869e886bd05cbae2d5b1",
@@ -34,7 +42,7 @@
       },
       {
         "version": "1.2.0.0",
-        "changelog": "- Page de configuration complète (HeroMode, couleur accent, toggles par catégorie)\n- Bannière Hero personnalisable : Aléatoire, Dernier ajout, En cours\n- Bouton Favoris (cœur) au survol sans ouvrir la fiche\n- Badges dynamiques : qualité vidéo (4K/HD) et nouveaux épisodes\n- Carrousel Collections (Boxsets)\n- Chargement différé des genres (IntersectionObserver)",
+        "changelog": "Page de configuration, bannière Hero, bouton Favoris, badges 4K/HD, carrousel Collections, lazy-loading genres",
         "targetAbi": "10.11.0.0",
         "sourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/1.2.0/JellyfinCarouselPlugin.zip",
         "checksum": "1a21eb5520d75af53345cc497210b2ed",
@@ -42,7 +50,7 @@
       },
       {
         "version": "1.0.0.0",
-        "changelog": "- Version initiale avec intégration aux thèmes natifs Jellyfin\n- Carrousels Nouveautés, Top 10, Continuer à regarder\n- Badges nouveaux épisodes et qualité",
+        "changelog": "Première version — carrousels Nouveautés, Top 10, Continuer à regarder, badges qualité",
         "targetAbi": "10.11.0.0",
         "sourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/1.0.0/JellyfinCarouselPlugin.zip",
         "checksum": "58db286f7ae9dbcf73cf547478f54a51",

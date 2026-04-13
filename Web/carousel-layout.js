@@ -454,8 +454,41 @@
         return null;
     }
 
+    // Compteur de tentatives pour initCarouselLayout
+    let _initRetryCount = 0;
+    const MAX_INIT_RETRIES = 8;
+
+    // Trouver le container de la page d'accueil avec de nombreux fallbacks
+    function findHomeContainer() {
+        // Sélecteurs dans l'ordre de priorité — couvre Jellyfin 10.10.x à 10.11.x
+        const selectors = [
+            '.homePage',
+            '#indexPage .scrollSlider',
+            '#indexPage .itemsContainer',
+            '#indexPage .padded-left.padded-right',
+            '#indexPage .sections',
+            '#indexPage',
+            '#homeTab',
+            '[data-type="home"]',
+            '.mainAnimatedPages .page:not(.hide)',
+            '.view:not(.hide) .sections',
+            '.view:not(.hide) .verticalSection',
+            '.view:not(.hide)',
+            '.mainAnimatedPages > div:not(.hide)',
+            '#skinBody .page:not(.hide)'
+        ];
+        for (const sel of selectors) {
+            const el = document.querySelector(sel);
+            if (el) {
+                console.log('[MediaCarousel] Container trouvé via:', sel);
+                return el;
+            }
+        }
+        return null;
+    }
+
     async function initCarouselLayout() {
-        console.log('[MediaCarousel] initCarouselLayout() démarré');
+        console.log('[MediaCarousel] initCarouselLayout() démarré (tentative ' + (_initRetryCount + 1) + '/' + MAX_INIT_RETRIES + ')');
 
         if (pluginConfig && pluginConfig.EnableCarouselLayout === false) {
             console.log('[MediaCarousel] Désactivé dans la configuration.');
@@ -463,19 +496,37 @@
         }
 
         const userId = ApiClient.getCurrentUserId();
-        if (!userId) { console.error('[MediaCarousel] Aucun utilisateur connecté'); return; }
-
-        // Cherche le container avec plusieurs sélecteurs possibles
-        let mainContent = document.querySelector('.homePage')
-            || document.querySelector('#indexPage .scrollSlider')
-            || document.querySelector('#indexPage')
-            || document.querySelector('[data-type="home"]');
-
-        if (!mainContent) {
-            console.log('[MediaCarousel] Container non trouvé, retentative dans 600ms...');
-            setTimeout(initCarouselLayout, 600);
+        if (!userId) {
+            console.warn('[MediaCarousel] Aucun utilisateur connecté, nouvelle tentative...');
+            if (_initRetryCount < MAX_INIT_RETRIES) {
+                _initRetryCount++;
+                setTimeout(initCarouselLayout, 1000);
+            }
             return;
         }
+
+        // Chercher le container avec de nombreux fallbacks
+        let mainContent = findHomeContainer();
+
+        if (!mainContent) {
+            _initRetryCount++;
+            if (_initRetryCount <= MAX_INIT_RETRIES) {
+                const delay = Math.min(500 * _initRetryCount, 3000);
+                console.log('[MediaCarousel] Container non trouvé, tentative ' + _initRetryCount + '/' + MAX_INIT_RETRIES + ' dans ' + delay + 'ms...');
+                console.log('[MediaCarousel] DOM actuel — body classes:', document.body.className);
+                console.log('[MediaCarousel] DOM actuel — éléments principaux:', [
+                    '#indexPage', '.homePage', '#homeTab', '[data-type="home"]',
+                    '.mainAnimatedPages', '.view:not(.hide)', '.page:not(.hide)'
+                ].map(s => s + ':' + !!document.querySelector(s)).join(', '));
+                setTimeout(initCarouselLayout, delay);
+            } else {
+                console.error('[MediaCarousel] Container introuvable après ' + MAX_INIT_RETRIES + ' tentatives. Vérifiez que vous êtes sur la page d\'accueil.');
+            }
+            return;
+        }
+
+        // Réinitialiser le compteur de tentatives
+        _initRetryCount = 0;
 
         // Éviter la double initialisation
         const existingContainer = document.getElementById('jellyfin-carousel-layout');
@@ -535,7 +586,7 @@
             setupLazyGenres(userId, genresContainer, aiPriorityGenres);
         }
 
-        console.log('Carousel Layout initialisé avec succès!');
+        console.log('[MediaCarousel] ✅ Carousel Layout initialisé avec succès!');
     }
 
     function setupLazyGenres(userId, container, skipGenres = []) {
@@ -557,9 +608,32 @@
         observer.observe(container);
     }
 
-    // Détection basée uniquement sur le DOM — pas de dépendance à l'URL/hash
+    // Détection hybride : DOM + URL — couvre toutes les variantes Jellyfin
     function isOnHomePage() {
-        return !!document.querySelector('#indexPage, .homePage, [data-type="home"]');
+        // 1) Détection par le DOM (sélecteurs connus)
+        const domMatch = !!document.querySelector(
+            '#indexPage, .homePage, #homeTab, [data-type="home"], ' +
+            '.view.homePage:not(.hide), .page.homePage:not(.hide)'
+        );
+        if (domMatch) return true;
+
+        // 2) Détection par l'URL / hash — fallback si le DOM n'a pas de classe
+        const hash = window.location.hash || '';
+        const path = window.location.pathname || '';
+        const urlMatch = hash === '' || hash === '#' || hash === '#!/home' ||
+            hash === '#!/home.html' || hash.startsWith('#!/home?') ||
+            path.endsWith('/web/index.html') && (hash === '' || hash === '#') ||
+            hash === '#!/startup/finished';
+
+        // Ne valider le fallback URL que si on est vraiment sur l'accueil
+        // (pas sur une page de détail ou de configuration)
+        if (urlMatch && !hash.includes('details') && !hash.includes('config') &&
+            !hash.includes('dashboard') && !hash.includes('search') &&
+            !hash.includes('list') && !hash.includes('settings')) {
+            return true;
+        }
+
+        return false;
     }
 
     function deactivateCarousel() {
@@ -588,20 +662,49 @@
     }
 
     function observePageChanges() {
-        // Stratégie 1 : événement natif Jellyfin
+        // Stratégie 1 : événement natif Jellyfin « viewshow »
         document.addEventListener('viewshow', function (e) {
             const view = e.detail ? e.detail.view : e.target;
             if (!view) return;
-            const onHome = view.id === 'indexPage' || (view.classList && view.classList.contains('homePage'));
+            const onHome = view.id === 'indexPage' ||
+                view.id === 'homeTab' ||
+                (view.classList && view.classList.contains('homePage')) ||
+                (view.dataset && view.dataset.type === 'home');
+            console.log('[MediaCarousel] viewshow détecté — id=' + (view.id || '?') + ', onHome=' + onHome);
             if (onHome) {
+                _initRetryCount = 0;
                 setTimeout(triggerLayout, 100);
             } else if (view.id && view.id !== 'indexPage') {
-                // Vraie navigation hors accueil — vérifier le DOM après stabilisation
+                // Navigation hors accueil — vérifier le DOM après stabilisation
                 setTimeout(() => { if (!isOnHomePage()) deactivateCarousel(); }, 200);
             }
         });
 
-        // Stratégie 2 : MutationObserver sur le body
+        // Stratégie 1b : événement Jellyfin « pageshow » (variante selon les versions)
+        document.addEventListener('pageshow', function (e) {
+            setTimeout(() => {
+                if (isOnHomePage() && !document.getElementById('jellyfin-carousel-layout')) {
+                    _initRetryCount = 0;
+                    triggerLayout();
+                }
+            }, 300);
+        });
+
+        // Stratégie 2 : hashchange — détecte les navigations SPA
+        window.addEventListener('hashchange', function () {
+            setTimeout(() => {
+                if (isOnHomePage()) {
+                    if (!document.getElementById('jellyfin-carousel-layout')) {
+                        _initRetryCount = 0;
+                        triggerLayout();
+                    }
+                } else {
+                    deactivateCarousel();
+                }
+            }, 300);
+        });
+
+        // Stratégie 3 : MutationObserver sur le body
         let _mutPending = null;
         new MutationObserver(() => {
             if (_mutPending) clearTimeout(_mutPending);
@@ -612,21 +715,24 @@
             }, 400);
         }).observe(document.body, { childList: true, subtree: true });
 
-        // Stratégie 3 : polling toutes les 2 s (filet de sécurité absolu)
+        // Stratégie 4 : polling toutes les 3 s (filet de sécurité absolu)
         setInterval(() => {
             if (isOnHomePage() && !document.getElementById('jellyfin-carousel-layout')) {
                 console.log('[MediaCarousel] Polling: carousel manquant, réinitialisation...');
+                _initRetryCount = 0;
                 triggerLayout();
             }
-        }, 2000);
+        }, 3000);
     }
 
     waitForJellyfin(() => {
-        console.log('[MediaCarousel] Jellyfin prêt — démarrage');
+        console.log('[MediaCarousel] Jellyfin prêt — démarrage du plugin v2.0.0');
+        console.log('[MediaCarousel] URL actuelle:', window.location.href);
+        console.log('[MediaCarousel] Hash:', window.location.hash);
 
         const style = document.createElement('style');
         style.textContent = `
-/* Carousel Layout Plugin - Styles Netflix-like */
+/* Carousel Layout Plugin v2.0.0 - Styles Netflix-like */
 /* Thème sombre avec carrousels horizontaux */
 
 :root {
@@ -1089,10 +1195,13 @@ body.media-carousel-active .homePage .homePageSection {
 `;
         document.head.appendChild(style);
 
-        // Premier chargement : tentatives à 0, 500, 1500 ms
+        // Premier chargement : tentatives progressives 0, 300, 800, 1500, 3000 ms
         triggerLayout();
-        setTimeout(triggerLayout, 500);
+        setTimeout(triggerLayout, 300);
+        setTimeout(triggerLayout, 800);
         setTimeout(triggerLayout, 1500);
+        setTimeout(triggerLayout, 3000);
         observePageChanges();
+        console.log('[MediaCarousel] Observation active — en attente de la page d\'accueil');
     });
 })();
