@@ -13,20 +13,42 @@ public static class CarouselIndexTransformer
     /// Reçoit le contenu HTML de index.html et injecte la balise script carousel avant &lt;/head&gt;.
     /// Appelé par réflexion depuis le plugin FileTransformation.
     /// </summary>
-    /// <param name="data">Objet JSON { "contents": "..." } passé par FileTransformation</param>
-    /// <returns>HTML modifié avec le script injecté</returns>
+    /// <param name="data">Objet JSON { "contents": "..." } ou contenu HTML brut passé par FileTransformation</param>
+    /// <returns>HTML modifié avec le script injecté, ou contenu original en cas d'erreur</returns>
     public static string InjectScript(object data)
     {
-        // Utilise ToString() pour traverser les barrières AssemblyLoadContext en toute sécurité
-        var json = data?.ToString() ?? "{}";
-        var jObj = Newtonsoft.Json.Linq.JObject.Parse(json);
-        var contents = jObj["contents"]?.ToString() ?? string.Empty;
-
-        if (contents.Contains(ScriptTag))
+        try
         {
-            return contents;
-        }
+            var raw = data?.ToString() ?? string.Empty;
+            if (string.IsNullOrEmpty(raw))
+            {
+                return raw;
+            }
 
-        return contents.Replace("</head>", $"    {ScriptTag}\n</head>");
+            // Essayer de parser comme JSON { "contents": "..." }
+            string contents;
+            try
+            {
+                var jObj = Newtonsoft.Json.Linq.JObject.Parse(raw);
+                contents = jObj["contents"]?.ToString() ?? string.Empty;
+            }
+            catch
+            {
+                // Si ce n'est pas du JSON, traiter comme du HTML brut
+                contents = raw;
+            }
+
+            if (string.IsNullOrEmpty(contents) || contents.Contains(ScriptTag))
+            {
+                return contents;
+            }
+
+            return contents.Replace("</head>", $"    {ScriptTag}\n</head>");
+        }
+        catch
+        {
+            // En cas d'erreur inattendue, retourner le contenu original pour ne pas casser Jellyfin
+            return data?.ToString() ?? string.Empty;
+        }
     }
 }
