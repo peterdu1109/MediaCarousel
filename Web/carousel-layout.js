@@ -71,10 +71,9 @@
             if (!pluginConfig) pluginConfig = DEFAULT_CONFIG;
         }
 
-            // Appliquer la couleur de surbrillance
-            if (pluginConfig.HighlightColor) {
-                document.documentElement.style.setProperty('--carousel-highlight', pluginConfig.HighlightColor);
-            }
+        // Appliquer la couleur de surbrillance
+        if (pluginConfig.HighlightColor) {
+            document.documentElement.style.setProperty('--carousel-highlight', pluginConfig.HighlightColor);
         }
         return pluginConfig;
     }
