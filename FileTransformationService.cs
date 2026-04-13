@@ -5,32 +5,33 @@ using System.Runtime.Loader;
 using System.Threading;
 using System.Threading.Tasks;
 using MediaBrowser.Common.Configuration;
-using Microsoft.Extensions.Hosting;
+using MediaBrowser.Model.Tasks;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Linq;
 
 namespace JellyfinCarouselPlugin;
 
 /// <summary>
-/// Service d'injection du script carousel : utilise FileTransformation plugin si disponible,
-/// sinon injection directe dans index.html en fallback.
+/// Service d'injection du script carousel : utilise FileTransformation plugin.
+/// Exécuté en tant que tâche planifiée au démarrage pour s'assurer que FT est chargé.
 /// </summary>
-public class FileTransformationService : IHostedService
+public class CarouselStartupTask : IScheduledTask
 {
     private readonly IApplicationPaths _appPaths;
-    private readonly ILogger<FileTransformationService> _logger;
+    private readonly ILogger<CarouselStartupTask> _logger;
 
-    /// <summary>
-    /// Initialise une nouvelle instance de <see cref="FileTransformationService"/>
-    /// </summary>
-    public FileTransformationService(IApplicationPaths appPaths, ILogger<FileTransformationService> logger)
+    public string Name => "MediaCarousel Startup & Injection";
+    public string Key => "Jellyfin.Plugin.MediaCarousel.Startup";
+    public string Description => "Enregistre MediaCarousel auprès de FileTransformation au démarrage du serveur.";
+    public string Category => "Media Carousel";
+
+    public CarouselStartupTask(IApplicationPaths appPaths, ILogger<CarouselStartupTask> logger)
     {
         _appPaths = appPaths;
         _logger = logger;
     }
 
-    /// <inheritdoc />
-    public Task StartAsync(CancellationToken cancellationToken)
+    public Task ExecuteAsync(IProgress<double> progress, CancellationToken cancellationToken)
     {
         try
         {
@@ -41,22 +42,19 @@ public class FileTransformationService : IHostedService
         }
         catch (Exception ex)
         {
-            // Log uniquement — ne jamais propager l'exception
-            try
-            {
-                _logger.LogError(ex, "MediaCarousel: Erreur fatale dans StartAsync — le plugin continue sans injection.");
-            }
-            catch
-            {
-                // Si même le logger est cassé, ne rien faire
-            }
+            _logger.LogError(ex, "MediaCarousel: Erreur fatale dans ExecuteAsync — le plugin continue sans injection.");
         }
 
         return Task.CompletedTask;
     }
 
-    /// <inheritdoc />
-    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    public IEnumerable<TaskTriggerInfo> GetDefaultTriggers()
+    {
+        yield return new TaskTriggerInfo
+        {
+            Type = TaskTriggerInfoType.StartupTrigger
+        };
+    }
 
     private bool TryRegisterWithFileTransformation()
     {
@@ -93,7 +91,7 @@ public class FileTransformationService : IHostedService
             {
                 ["id"] = "191bd290-1054-4b55-a137-46c72181266b", // GUID du plugin
                 ["fileNamePattern"] = "index\\.html",
-                ["callbackAssembly"] = typeof(FileTransformationService).Assembly.FullName,
+                ["callbackAssembly"] = typeof(CarouselStartupTask).Assembly.FullName,
                 ["callbackClass"] = typeof(CarouselIndexTransformer).FullName,
                 ["callbackMethod"] = nameof(CarouselIndexTransformer.InjectScript)
             };
