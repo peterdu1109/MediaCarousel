@@ -181,13 +181,18 @@
             document.querySelector('#carouselConfigPage').addEventListener('pageshow', function () {
                 Dashboard.showLoadingMsg();
 
-                // Charger la version du plugin
-                ApiClient.getPlugins().then(function (plugins) {
-                    var plugin = plugins.find(p => p.Id === CarouselConfigPage.pluginId);
-                    if (plugin) {
-                        document.querySelector('#pluginVersionDisplay').textContent = plugin.Version;
-                    }
-                });
+                // Charger la version du plugin de manière sécurisée
+                try {
+                    ApiClient.getJSON(ApiClient.getUrl("Plugins")).then(function (plugins) {
+                        if (plugins && plugins.length) {
+                            var plugin = plugins.find(function(p) { return p.Id === CarouselConfigPage.pluginId; });
+                            if (plugin) {
+                                var versionDisplay = document.querySelector('#pluginVersionDisplay');
+                                if (versionDisplay) versionDisplay.textContent = plugin.Version;
+                            }
+                        }
+                    }).catch(function(e) { console.warn("Erreur chargement version plugin:", e); });
+                } catch(e) { console.warn("Méthode Plugins non disponible:", e); }
 
                 ApiClient.getPluginConfiguration(CarouselConfigPage.pluginId).then(function (config) {
                     document.querySelector('#EnableCarouselLayout').checked = config.EnableCarouselLayout;
@@ -214,6 +219,9 @@
                     var groqModelSelect = document.querySelector('#GroqModel');
                     if (groqModelSelect) groqModelSelect.value = config.GroqModel || 'llama3-8b-8192';
 
+                    Dashboard.hideLoadingMsg();
+                }).catch(function(err) {
+                    console.error("Erreur chargement configuration plugins:", err);
                     Dashboard.hideLoadingMsg();
                 });
             });
