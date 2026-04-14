@@ -331,7 +331,7 @@
                     </div>
 
                     <div>
-                        <button is="emby-button" type="submit" class="raised button-submit block">
+                        <button is="emby-button" type="button" id="btnSave" class="raised button-submit block">
                             <span>Sauvegarder</span>
                         </button>
                     </div>
@@ -343,15 +343,12 @@
         <script type="text/javascript">
             var CarouselConfigPage = {
                 pluginId: "191bd290-1054-4b55-a137-46c72181266b",
-                config: null,
                 customSections: []
             };
 
-            // === Section labels for drag-and-drop ===
             var SECTION_DEFS = {
                 'hero':        { icon: '🎬', label: 'Bannière Hero' },
                 'continue':    { icon: '▶️', label: 'Continuer à regarder' },
-                'native_media':{ icon: '📚', label: 'Vos Bibliothèques Natives (Jellyfin)' },
                 'latest':      { icon: '🆕', label: 'Nouveautés' },
                 'top10':       { icon: '🏆', label: 'Top 10' },
                 'recommended': { icon: '👍', label: 'Recommandés' },
@@ -359,89 +356,57 @@
                 'collections': { icon: '📦', label: 'Collections' }
             };
 
+            window.selectCardStyle = function(style) {
+                document.getElementById('CardStyle').value = style;
+                document.querySelectorAll('.card-style-option').forEach(function(o) {
+                    o.classList.toggle('selected', o.dataset.style === style);
+                });
+            };
+
+            window.removeCustomSection = function(id) {
+                CarouselConfigPage.customSections = CarouselConfigPage.customSections.filter(function(c) { return c.id !== id; });
+                document.getElementById('CustomSectionsJson').value = JSON.stringify(CarouselConfigPage.customSections);
+                var currentOrder = getSectionOrderFromDOM().split(',').filter(function(x) { return x !== id; }).join(',');
+                renderSectionOrder(currentOrder);
+            };
+
+            function getSectionOrderFromDOM() {
+                var items = document.querySelectorAll('#sectionOrderList .layout-section-item');
+                var order = [];
+                for (var i = 0; i < items.length; i++) order.push(items[i].dataset.sectionId);
+                return order.join(',');
+            }
+
             function renderSectionOrder(orderStr) {
                 var list = document.getElementById('sectionOrderList');
                 if (!list) return;
                 list.innerHTML = '';
-
-                var order = (orderStr || 'hero,continue,native_media,latest,top10,recommended,genres,collections').split(',');
-
+                var order = (orderStr || 'hero,continue,latest,top10,recommended,genres,collections').split(',');
                 order.forEach(function(sectionId) {
                     sectionId = sectionId.trim();
                     if (!sectionId) return;
-
                     var def = SECTION_DEFS[sectionId];
                     var isCustom = false;
-                    
                     if (!def && sectionId.startsWith('custom_')) {
-                        // Chercher dans les custom sections
-                        var customData = CarouselConfigPage.customSections.find(c => c.id === sectionId);
+                        var customData = CarouselConfigPage.customSections.find(function(c) { return c.id === sectionId; });
                         if (customData) {
                             def = { icon: '✨', label: customData.name + ' (' + customData.type + ': ' + customData.value + ')' };
                             isCustom = true;
                         }
                     }
-                    
                     if (!def) return;
-
                     var li = document.createElement('li');
                     li.className = 'layout-section-item';
                     li.setAttribute('draggable', 'true');
                     li.dataset.sectionId = sectionId;
-
-                    var innerHTML = '<span class="drag-handle">⠿</span>' +
+                    li.innerHTML = '<span class="drag-handle">⠿</span>' +
                         '<span class="section-icon">' + def.icon + '</span>' +
-                        '<span class="section-label">' + def.label + '</span>';
-                        
-                    if (isCustom) {
-                        innerHTML += '<button type="button" class="btn-remove-custom" onclick="removeCustomSection(\\'' + sectionId + '\\')" style="margin-left:auto; background:none; border:none; color:#f00; cursor:pointer;" title="Supprimer">✖</button>';
-                    }
-                        
-                    li.innerHTML = innerHTML;
+                        '<span class="section-label">' + def.label + '</span>' +
+                        (isCustom ? '<button type="button" onclick="removeCustomSection(\'' + sectionId + '\')" style="margin-left:auto;background:none;border:none;color:#f55;cursor:pointer;" title="Supprimer">✖</button>' : '');
                     list.appendChild(li);
                 });
-
                 enableDragAndDrop(list);
             }
-
-            // --- Custom Sections Logic ---
-            document.getElementById('btnAddCustomSection').addEventListener('click', function() {
-                var name = document.getElementById('CustomSectionName').value.trim();
-                var type = document.getElementById('CustomSectionType').value;
-                var value = document.getElementById('CustomSectionValue').value.trim();
-                
-                if (!name || !value) {
-                    Dashboard.alert("Veuillez remplir le titre et la valeur de filtrage.");
-                    return;
-                }
-                
-                var newId = 'custom_' + new Date().getTime();
-                CarouselConfigPage.customSections.push({
-                    id: newId,
-                    name: name,
-                    type: type,
-                    value: value
-                });
-                
-                document.getElementById('CustomSectionsJson').value = JSON.stringify(CarouselConfigPage.customSections);
-                
-                // Vider les champs
-                document.getElementById('CustomSectionName').value = '';
-                document.getElementById('CustomSectionValue').value = '';
-                
-                // Ajouter à la liste existante via DOM Serialize
-                var currentOrder = getSectionOrderFromDOM();
-                currentOrder += (currentOrder ? ',' : '') + newId;
-                renderSectionOrder(currentOrder);
-            });
-
-            window.removeCustomSection = function(id) {
-                CarouselConfigPage.customSections = CarouselConfigPage.customSections.filter(c => c.id !== id);
-                document.getElementById('CustomSectionsJson').value = JSON.stringify(CarouselConfigPage.customSections);
-                
-                var currentOrder = getSectionOrderFromDOM().split(',').filter(x => x !== id).join(',');
-                renderSectionOrder(currentOrder);
-            };
 
             function enableDragAndDrop(list) {
                 var dragged = null;
@@ -449,7 +414,7 @@
                     dragged = e.target.closest('.layout-section-item');
                     if (dragged) dragged.classList.add('dragging');
                 });
-                list.addEventListener('dragend', function(e) {
+                list.addEventListener('dragend', function() {
                     if (dragged) dragged.classList.remove('dragging');
                     dragged = null;
                 });
@@ -458,9 +423,7 @@
                     var target = e.target.closest('.layout-section-item');
                     if (target && target !== dragged) {
                         var items = Array.from(list.children);
-                        var draggedIdx = items.indexOf(dragged);
-                        var targetIdx = items.indexOf(target);
-                        if (draggedIdx < targetIdx) {
+                        if (items.indexOf(dragged) < items.indexOf(target)) {
                             list.insertBefore(dragged, target.nextSibling);
                         } else {
                             list.insertBefore(dragged, target);
@@ -469,103 +432,138 @@
                 });
             }
 
-            function getSectionOrderFromDOM() {
-                var items = document.querySelectorAll('#sectionOrderList .layout-section-item');
-                var order = [];
-                for (var i = 0; i < items.length; i++) {
-                    order.push(items[i].dataset.sectionId);
-                }
-                return order.join(',');
-            }
-
-            window.selectCardStyle = function(style) {
-                document.getElementById('CardStyle').value = style;
-                var options = document.querySelectorAll('.card-style-option');
-                for (var i = 0; i < options.length; i++) {
-                    options[i].classList.toggle('selected', options[i].dataset.style === style);
-                }
-            };
-
             function renderLibrariesCheckboxes(views, includedLibraries) {
-                var container = document.querySelector('#librariesContainer');
+                var container = document.getElementById('librariesContainer');
                 if (!container) return;
-                container.innerHTML = '';
                 if (!views || views.length === 0) {
-                    container.innerHTML = '<div style="color:var(--text-muted, #999);">Aucune bibliothèque trouvée.</div>';
+                    container.innerHTML = '<div style="color:var(--text-muted,#999);">Aucune bibliothèque trouvée.</div>';
                     return;
                 }
+                container.innerHTML = '';
                 views.forEach(function(view) {
-                    var isChecked = !includedLibraries || includedLibraries.length === 0 || includedLibraries.includes(view.Id);
-                    var html = '<div class="checkboxContainer" style="margin:0;">';
-                    html += '<label><input is="emby-checkbox" type="checkbox" class="chkLibrary" data-id="' + view.Id + '"' + (isChecked ? ' checked="checked"' : '') + ' />';
-                    html += '<span>' + view.Name + '</span></label></div>';
-                    container.insertAdjacentHTML('beforeend', html);
+                    var isChecked = !includedLibraries || includedLibraries.length === 0 || includedLibraries.indexOf(view.Id) !== -1;
+                    container.insertAdjacentHTML('beforeend',
+                        '<div class="checkboxContainer" style="margin:0;"><label>' +
+                        '<input is="emby-checkbox" type="checkbox" class="chkLibrary" data-id="' + view.Id + '"' + (isChecked ? ' checked' : '') + ' />' +
+                        '<span>' + view.Name + '</span></label></div>');
                 });
             }
 
-            document.querySelector('#carouselConfigPage').addEventListener('pageshow', function () {
+            function saveConfig() {
                 Dashboard.showLoadingMsg();
 
+                var chkLibraries = document.querySelectorAll('.chkLibrary');
+                var selectedLibraries = [];
+                chkLibraries.forEach(function(el) { if (el.checked) selectedLibraries.push(el.getAttribute('data-id')); });
+                if (selectedLibraries.length === chkLibraries.length) selectedLibraries = [];
+
+                var config = {
+                    EnableCarouselLayout:  document.getElementById('EnableCarouselLayout').checked,
+                    EnableHoverAnimations: document.getElementById('EnableHoverAnimations').checked,
+                    HideNativeHome:        document.getElementById('HideNativeHome') ? document.getElementById('HideNativeHome').checked : false,
+                    IncludedLibraries:     selectedLibraries,
+                    SectionOrder:          getSectionOrderFromDOM(),
+                    CardStyle:             document.getElementById('CardStyle').value,
+                    CustomSectionsJson:    document.getElementById('CustomSectionsJson').value,
+                    MinGenreItems:         parseInt(document.getElementById('MinGenreItems').value) || 3,
+                    MaxGenres:             parseInt(document.getElementById('MaxGenres').value) || 12,
+                    ShowContinueWatching:  document.getElementById('ShowContinueWatching').checked,
+                    ShowNewReleases:       document.getElementById('ShowNewReleases').checked,
+                    ShowTop10:             document.getElementById('ShowTop10').checked,
+                    ShowRecommended:       document.getElementById('ShowRecommended').checked,
+                    ShowGenreCategories:   document.getElementById('ShowGenreCategories').checked,
+                    ShowCollections:       document.getElementById('ShowCollections').checked,
+                    ShowNewEpisodesBadge:  document.getElementById('ShowNewEpisodesBadge').checked,
+                    ShowQualityBadge:      document.getElementById('ShowQualityBadge').checked,
+                    EnableFavoritesButton: document.getElementById('EnableFavoritesButton').checked,
+                    ItemsPerCarousel:      parseInt(document.getElementById('ItemsPerCarousel').value) || 20,
+                    HeroMode:             document.getElementById('HeroMode').value,
+                    HighlightColor:        document.getElementById('HighlightColor').value,
+                    EnableGroqAi:          document.getElementById('EnableGroqAi').checked,
+                    GroqApiKey:            document.getElementById('GroqApiKey').value,
+                    GroqModel:             document.getElementById('GroqModel').value
+                };
+
+                ApiClient.updatePluginConfiguration(CarouselConfigPage.pluginId, config).then(function() {
+                    Dashboard.hideLoadingMsg();
+                    Dashboard.alert({ message: 'Configuration sauvegardée avec succès.', title: 'Carousel Layout' });
+                }).catch(function(err) {
+                    Dashboard.hideLoadingMsg();
+                    console.error('Erreur sauvegarde:', err);
+                    Dashboard.alert({ message: 'Erreur lors de la sauvegarde.', title: 'Carousel Layout' });
+                });
+            }
+
+            document.querySelector('#carouselConfigPage').addEventListener('pageshow', function() {
+                Dashboard.showLoadingMsg();
+
+                // Bouton Sauvegarder — click direct (emby-button ne déclenche pas form.submit)
+                var btnSave = document.getElementById('btnSave');
+                if (btnSave) btnSave.addEventListener('click', saveConfig);
+
+                // Bouton Ajouter section custom
+                var btnAdd = document.getElementById('btnAddCustomSection');
+                if (btnAdd) btnAdd.addEventListener('click', function() {
+                    var name  = document.getElementById('CustomSectionName').value.trim();
+                    var type  = document.getElementById('CustomSectionType').value;
+                    var value = document.getElementById('CustomSectionValue').value.trim();
+                    if (!name || !value) { Dashboard.alert('Veuillez remplir le titre et la valeur.'); return; }
+                    var newId = 'custom_' + Date.now();
+                    CarouselConfigPage.customSections.push({ id: newId, name: name, type: type, value: value });
+                    document.getElementById('CustomSectionsJson').value = JSON.stringify(CarouselConfigPage.customSections);
+                    document.getElementById('CustomSectionName').value = '';
+                    document.getElementById('CustomSectionValue').value = '';
+                    renderSectionOrder(getSectionOrderFromDOM() + (getSectionOrderFromDOM() ? ',' : '') + newId);
+                });
+
+                // Version plugin
                 try {
-                    ApiClient.getJSON(ApiClient.getUrl("Plugins")).then(function (plugins) {
-                        if (plugins && plugins.length) {
-                            var plugin = plugins.find(function(p) { return p.Id === CarouselConfigPage.pluginId; });
-                            if (plugin) {
-                                var versionDisplay = document.querySelector('#pluginVersionDisplay');
-                                if (versionDisplay) versionDisplay.textContent = plugin.Version;
-                            }
-                        }
-                    }).catch(function(e) { console.warn("Erreur chargement version plugin:", e); });
-                } catch(e) { console.warn("Méthode Plugins non disponible:", e); }
+                    ApiClient.getJSON(ApiClient.getUrl('Plugins')).then(function(plugins) {
+                        var plugin = (plugins || []).find(function(p) { return p.Id === CarouselConfigPage.pluginId; });
+                        var el = document.getElementById('pluginVersionDisplay');
+                        if (plugin && el) el.textContent = plugin.Version;
+                    }).catch(function() {});
+                } catch(e) {}
 
-                ApiClient.getPluginConfiguration(CarouselConfigPage.pluginId).then(function (config) {
-                    document.querySelector('#EnableCarouselLayout').checked = config.EnableCarouselLayout;
-                    document.querySelector('#EnableHoverAnimations').checked = config.EnableHoverAnimations;
-                    var hideNativeHome = document.querySelector('#HideNativeHome');
-                    if (hideNativeHome) hideNativeHome.checked = config.HideNativeHome === true;
-                    document.querySelector('#ShowContinueWatching').checked = config.ShowContinueWatching;
-                    document.querySelector('#ShowNewReleases').checked = config.ShowNewReleases;
-                    document.querySelector('#ShowTop10').checked = config.ShowTop10;
-                    document.querySelector('#ShowRecommended').checked = config.ShowRecommended;
-                    document.querySelector('#ShowGenreCategories').checked = config.ShowGenreCategories;
-                    document.querySelector('#ShowCollections').checked = config.ShowCollections !== false;
-                    document.querySelector('#ShowNewEpisodesBadge').checked = config.ShowNewEpisodesBadge;
-                    document.querySelector('#ShowQualityBadge').checked = config.ShowQualityBadge;
-                    document.querySelector('#EnableFavoritesButton').checked = config.EnableFavoritesButton !== false;
-                    document.querySelector('#ItemsPerCarousel').value = config.ItemsPerCarousel;
-                    document.querySelector('#MinGenreItems').value = config.MinGenreItems || 3;
-                    document.querySelector('#MaxGenres').value = config.MaxGenres || 12;
+                // Chargement config
+                ApiClient.getPluginConfiguration(CarouselConfigPage.pluginId).then(function(config) {
+                    document.getElementById('EnableCarouselLayout').checked  = config.EnableCarouselLayout !== false;
+                    document.getElementById('EnableHoverAnimations').checked = config.EnableHoverAnimations !== false;
+                    var hnh = document.getElementById('HideNativeHome');
+                    if (hnh) hnh.checked = config.HideNativeHome === true;
+                    document.getElementById('ShowContinueWatching').checked  = config.ShowContinueWatching !== false;
+                    document.getElementById('ShowNewReleases').checked        = config.ShowNewReleases !== false;
+                    document.getElementById('ShowTop10').checked              = config.ShowTop10 !== false;
+                    document.getElementById('ShowRecommended').checked        = config.ShowRecommended !== false;
+                    document.getElementById('ShowGenreCategories').checked    = config.ShowGenreCategories !== false;
+                    document.getElementById('ShowCollections').checked        = config.ShowCollections !== false;
+                    document.getElementById('ShowNewEpisodesBadge').checked   = config.ShowNewEpisodesBadge !== false;
+                    document.getElementById('ShowQualityBadge').checked       = config.ShowQualityBadge !== false;
+                    document.getElementById('EnableFavoritesButton').checked  = config.EnableFavoritesButton !== false;
+                    document.getElementById('ItemsPerCarousel').value         = config.ItemsPerCarousel || 20;
+                    document.getElementById('MinGenreItems').value            = config.MinGenreItems || 3;
+                    document.getElementById('MaxGenres').value                = config.MaxGenres || 12;
+                    document.getElementById('HeroMode').value                 = config.HeroMode || 'Random';
+                    document.getElementById('HighlightColor').value           = config.HighlightColor || '#00a4dc';
+                    document.getElementById('EnableGroqAi').checked           = config.EnableGroqAi === true;
+                    document.getElementById('GroqApiKey').value               = config.GroqApiKey || '';
+                    document.getElementById('GroqModel').value                = config.GroqModel || 'llama3-8b-8192';
 
-                    var heroModeSelect = document.querySelector('#HeroMode');
-                    if (heroModeSelect) heroModeSelect.value = config.HeroMode || 'Random';
-
-                    var highlightColorInput = document.querySelector('#HighlightColor');
-                    if (highlightColorInput) highlightColorInput.value = config.HighlightColor || '#00a4dc';
-
-                    // Chargement Custom Sections
                     try {
                         CarouselConfigPage.customSections = JSON.parse(config.CustomSectionsJson || '[]');
                     } catch(e) { CarouselConfigPage.customSections = []; }
                     document.getElementById('CustomSectionsJson').value = JSON.stringify(CarouselConfigPage.customSections);
 
-                    // Section order
-                    renderSectionOrder(config.SectionOrder || 'hero,continue,native_media,latest,top10,recommended,genres,collections');
-
-                    // Card style
+                    renderSectionOrder(config.SectionOrder || 'hero,continue,latest,top10,recommended,genres,collections');
                     selectCardStyle(config.CardStyle || 'poster');
 
-                    document.querySelector('#EnableGroqAi').checked = config.EnableGroqAi === true;
-                    document.querySelector('#GroqApiKey').value = config.GroqApiKey || '';
-                    var groqModelSelect = document.querySelector('#GroqModel');
-                    if (groqModelSelect) groqModelSelect.value = config.GroqModel || 'llama3-8b-8192';
-
+                    // Bibliothèques
                     var userId = ApiClient.getCurrentUserId();
                     if (userId) {
-                        ApiClient.getUserViews({}, userId).then(function(result) {
+                        ApiClient.getUserViews(userId).then(function(result) {
                             renderLibrariesCheckboxes(result.Items || [], config.IncludedLibraries || []);
                             Dashboard.hideLoadingMsg();
-                        }).catch(function(e) {
-                            console.error("Erreur chargement bibliothèques:", e);
+                        }).catch(function() {
                             renderLibrariesCheckboxes([], []);
                             Dashboard.hideLoadingMsg();
                         });
@@ -574,58 +572,9 @@
                         Dashboard.hideLoadingMsg();
                     }
                 }).catch(function(err) {
-                    console.error("Erreur chargement configuration plugins:", err);
+                    console.error('Erreur chargement config:', err);
                     Dashboard.hideLoadingMsg();
                 });
-            });
-
-            document.querySelector('#carouselConfigForm').addEventListener('submit', function (e) {
-                e.preventDefault();
-                Dashboard.showLoadingMsg();
-
-                var selectedLibraries = [];
-                var chkLibraries = document.querySelectorAll('.chkLibrary');
-                for(var i=0; i<chkLibraries.length; i++) {
-                    if(chkLibraries[i].checked) {
-                        selectedLibraries.push(chkLibraries[i].getAttribute('data-id'));
-                    }
-                }
-                if (selectedLibraries.length === chkLibraries.length) {
-                    selectedLibraries = [];
-                }
-
-                var config = {
-                    EnableCarouselLayout: document.querySelector('#EnableCarouselLayout').checked,
-                    EnableHoverAnimations: document.querySelector('#EnableHoverAnimations').checked,
-                    HideNativeHome: document.querySelector('#HideNativeHome') ? document.querySelector('#HideNativeHome').checked : false,
-                    IncludedLibraries: selectedLibraries,
-                    SectionOrder: getSectionOrderFromDOM(),
-                    CardStyle: document.querySelector('#CardStyle').value,
-                    CustomSectionsJson: document.getElementById('CustomSectionsJson').value,
-                    MinGenreItems: parseInt(document.querySelector('#MinGenreItems').value) || 3,
-                    MaxGenres: parseInt(document.querySelector('#MaxGenres').value) || 12,
-                    ShowContinueWatching: document.querySelector('#ShowContinueWatching').checked,
-                    ShowNewReleases: document.querySelector('#ShowNewReleases').checked,
-                    ShowTop10: document.querySelector('#ShowTop10').checked,
-                    ShowRecommended: document.querySelector('#ShowRecommended').checked,
-                    ShowGenreCategories: document.querySelector('#ShowGenreCategories').checked,
-                    ShowCollections: document.querySelector('#ShowCollections').checked,
-                    ShowNewEpisodesBadge: document.querySelector('#ShowNewEpisodesBadge').checked,
-                    ShowQualityBadge: document.querySelector('#ShowQualityBadge').checked,
-                    EnableFavoritesButton: document.querySelector('#EnableFavoritesButton').checked,
-                    ItemsPerCarousel: parseInt(document.querySelector('#ItemsPerCarousel').value) || 20,
-                    HeroMode: document.querySelector('#HeroMode').value,
-                    HighlightColor: document.querySelector('#HighlightColor').value,
-                    EnableGroqAi: document.querySelector('#EnableGroqAi').checked,
-                    GroqApiKey: document.querySelector('#GroqApiKey').value,
-                    GroqModel: document.querySelector('#GroqModel').value
-                };
-
-                ApiClient.updatePluginConfiguration(CarouselConfigPage.pluginId, config).then(function () {
-                    Dashboard.processPluginConfigurationUpdateResult();
-                });
-
-                return false;
             });
         </script>
     </div>
