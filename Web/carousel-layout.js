@@ -206,11 +206,12 @@
         return card;
     }
 
-    function createCarouselDOM(title, items) {
+    function createCarouselDOM(title, items, carouselId = null) {
         if (!items || items.length === 0) return null;
 
         const container = document.createElement('div');
         container.className = 'carousel-category';
+        if (carouselId) container.dataset.carouselId = carouselId;
 
         const h2 = document.createElement('h2');
         h2.className = 'carousel-category-title';
@@ -334,6 +335,9 @@
                 params.SortBy = 'PlayCount';
                 params.SortOrder = 'Descending';
                 params.Limit = 10;
+            } else if (category.id === 'recommended') {
+                params.SortBy = 'IsFavoriteOrLiked,Random';
+                params.SortOrder = 'Descending';
             } else if (category.id === 'collections') {
                 params.SortBy = 'SortName';
                 params.SortOrder = 'Ascending';
@@ -626,118 +630,117 @@
             document.body.classList.remove('carousel-landscape-mode');
         }
 
+        // Créer le container principal du plugin
+        const carouselContainer = document.createElement('div');
+        carouselContainer.id = 'jellyfin-carousel-layout';
+        carouselContainer.className = 'carousel-main-container';
+
+        // Container pour genres (lazy-loaded via IntersectionObserver)
+        const genresContainer = document.createElement('div');
+        genresContainer.id = 'carousel-genres-lazy';
+
         // Initialiser le système intelligent de genres
         if (pluginConfig.ShowGenreCategories !== false) {
             try {
                 const maxGenres = pluginConfig.MaxGenres || 12;
                 const minItems = pluginConfig.MinGenreItems || 3;
-
-                // Récupérer les genres avec leur nombre d'éléments
                 const genresResult = await ApiClient.getJSON(ApiClient.getUrl('Genres', {
                     UserId: userId,
                     SortBy: 'SortName',
                     SortOrder: 'Ascending',
                     Recursive: true,
                     Fields: 'ItemCounts',
-                    Limit: 50 // Prendre large pour filtrer ensuite
+                    Limit: 50
                 }));
-
                 if (genresResult && genresResult.Items) {
-                    // Filtrage intelligent :
-                    // 1. Ne garder que les genres ayant au moins MinGenreItems items
-                    // 2. Trier par nombre total de contenus (popularité)
-                    // 3. Limiter à MaxGenres
-                    const smartGenres = genresResult.Items
+                    CONFIG.genres = genresResult.Items
                         .map(g => ({
                             name: g.Name,
                             count: (g.MovieCount || 0) + (g.SeriesCount || 0) + (g.EpisodeCount || 0)
                         }))
                         .filter(g => g.name && g.count >= minItems)
                         .sort((a, b) => b.count - a.count)
-                        .slice(0, maxGenres);
-
-                    CONFIG.genres = smartGenres.map(g => g.name);
-                    console.log('[MediaCarousel] Genres intelligents chargés:', CONFIG.genres.length,
-                        '(min:', minItems, 'items, max:', maxGenres, 'genres)');
+                        .slice(0, maxGenres)
+                        .map(g => g.name);
+                    console.log('[MediaCarousel] Genres:', CONFIG.genres.length, '(min:', minItems, ', max:', maxGenres, ')');
                 }
             } catch (err) {
                 console.warn('MediaCarousel: Erreur chargement genres intelligents', err);
             }
         }
 
-        // --- LAYOUT CUSTOMISABLE VIA SECTION ORDER ---
+        // Ordre des sections
         const sectionOrder = (pluginConfig.SectionOrder || 'hero,continue,latest,top10,recommended,genres,collections')
             .split(',').map(s => s.trim());
 
-        // IA Groq — bannière + genres prioritaires (chargés hors de la boucle)
-        let aiPriorityGenres = [];
-        const aiReco = await loadAiRecommendations(userId);
-        if (aiReco && aiReco.message) {
-            carouselContainer.appendChild(createAiBanner(aiReco.message));
-            aiPriorityGenres = aiReco.genres || [];
-        }
+        // Lancer l'IA en parallèle — non bloquant
+        const aiRecoPromise = loadAiRecommendations(userId);
 
-        // Container pour genres (lazy-loaded)
-        const genresContainer = document.createElement('div');
-        genresContainer.id = 'carousel-genres-lazy';
-
-        // Parcourir les sections dans l'ordre personnalisé
-        for (const sectionId of sectionOrder) {
+        // Charger toutes les sections en parallèle, conserver l'ordre d'affichage
+        const sectionElements = await Promise.all(sectionOrder.map(async (sectionId) => {
             if (sectionId === 'hero') {
-                const heroDOM = await createHero(userId);
-                if (heroDOM) carouselContainer.appendChild(heroDOM);
+                return await createHero(userId);
             } else if (sectionId === 'genres') {
-                if (pluginConfig.ShowGenreCategories !== false) {
-                    // Charger immédiatement les genres recommandés par l'IA
-                    for (const genre of aiPriorityGenres) {
-                        const items = await loadGenreItems(genre, userId);
-                        const el = createCarouselDOM('🤖 ' + genre, items);
-                        if (el) carouselContainer.appendChild(el);
-                    }
-                    carouselContainer.appendChild(genresContainer);
-                }
+                return pluginConfig.ShowGenreCategories !== false ? genresContainer : null;
             } else {
-                // C'est une catégorie standard
                 const category = CONFIG.categories.find(c => c.id === sectionId);
-                if (category && pluginConfig[category.configKey] !== false) {
-                    const items = await loadCategoryItems(category, userId);
-                    const carousel = createCarouselDOM(category.name, items);
-                    if (carousel) carouselContainer.appendChild(carousel);
-                }
+                if (!category || pluginConfig[category.configKey] === false) return null;
+                const items = await loadCategoryItems(category, userId);
+                return createCarouselDOM(category.name, items);
             }
-        }
+        }));
 
-        // Masquer les enfants natifs de mainContent UNIQUEMENT si configuré
+        // Insérer dans l'ordre
+        sectionElements.forEach(el => { if (el) carouselContainer.appendChild(el); });
+
+        // Masquer les sections natives si configuré
         if (pluginConfig.HideNativeHome) {
             Array.from(mainContent.children).forEach(child => {
-                if (child !== carouselContainer) {
-                    child.setAttribute('data-jc-hidden', 'true');
-                }
+                if (child !== carouselContainer) child.setAttribute('data-jc-hidden', 'true');
             });
         }
 
         mainContent.insertBefore(carouselContainer, mainContent.firstChild);
         document.body.classList.add('media-carousel-active');
 
-        // Setup Intersection Observer for Lazy Loading Genres restants
+        // Lazy loading des genres restants (skip ceux déjà chargés via data-carousel-id)
         if (pluginConfig.ShowGenreCategories !== false) {
-            setupLazyGenres(userId, genresContainer, aiPriorityGenres);
+            setupLazyGenres(userId, genresContainer);
         }
+
+        // IA : quand disponible, insérer bannière + genres prioritaires sans bloquer
+        aiRecoPromise.then(aiReco => {
+            if (!aiReco) return;
+            if (aiReco.message) {
+                carouselContainer.insertBefore(createAiBanner(aiReco.message), carouselContainer.firstChild);
+            }
+            const aiGenres = (aiReco.genres || []).filter(g => CONFIG.genres.includes(g));
+            (async () => {
+                for (const genre of aiGenres) {
+                    // Éviter le doublon si le lazy loader a déjà chargé ce genre
+                    if (genresContainer.querySelector('[data-carousel-id="' + genre + '"]')) continue;
+                    const items = await loadGenreItems(genre, userId);
+                    const el = createCarouselDOM('🤖 ' + genre, items, genre);
+                    if (el) genresContainer.insertBefore(el, genresContainer.firstChild);
+                }
+            })();
+        }).catch(() => {});
 
         console.log('[MediaCarousel] ✅ Layout initialisé! Ordre:', sectionOrder.join(' → '));
     }
 
-    function setupLazyGenres(userId, container, skipGenres = []) {
+    function setupLazyGenres(userId, container) {
         let genresLoaded = false;
         const observer = new IntersectionObserver(async (entries, obs) => {
             if (entries[0].isIntersecting && !genresLoaded) {
                 genresLoaded = true;
                 obs.disconnect();
 
-                const remaining = CONFIG.genres.filter(g => !skipGenres.includes(g));
-                for (const genre of remaining) {
+                for (const genre of CONFIG.genres) {
+                    // Éviter doublon avec les genres déjà insérés (IA ou autre)
+                    if (container.querySelector('[data-carousel-id="' + genre + '"]')) continue;
                     const items = await loadGenreItems(genre, userId);
-                    const carousel = createCarouselDOM(genre, items);
+                    const carousel = createCarouselDOM(genre, items, genre);
                     if (carousel) container.appendChild(carousel);
                 }
             }
@@ -969,24 +972,26 @@
     /* Chrome/Safari */
 }
 
-/* Carte de média */
+/* Carte de média — mode poster (défaut) : ratio portrait 2:3 */
 .carousel-item {
     position: relative;
-    min-width: 250px;
-    max-width: 250px;
-    height: 140px;
-    border-radius: 4px;
+    min-width: 160px;
+    max-width: 160px;
+    height: 240px;
+    border-radius: 6px;
     overflow: hidden;
     cursor: pointer;
     transition: var(--carousel-transition);
     background-color: var(--carousel-card-bg);
+    flex-shrink: 0;
 }
 
-.carousel-landscape-mode .carousel-item, 
+/* Mode paysage : ratio 16:9 */
+.carousel-landscape-mode .carousel-item,
 .carousel-item-landscape {
     min-width: 320px;
     max-width: 320px;
-    height: 180px; /* 16:9 ratio */
+    height: 180px;
 }
 
 .carousel-item:hover {
@@ -1122,18 +1127,20 @@
 /* Boutons de navigation */
 .carousel-nav-button {
     position: absolute;
-    top: 50%;
-    transform: translateY(-50%);
+    top: 0;
+    bottom: 0;
     background-color: rgba(0, 0, 0, 0.8);
     color: white;
     border: none;
     width: 50px;
-    height: 140px;
     cursor: pointer;
     z-index: 5;
     opacity: 0;
     transition: opacity 0.3s ease;
     font-size: 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .carousel-container:hover .carousel-nav-button {
@@ -1228,20 +1235,20 @@
     background: linear-gradient(to top, var(--carousel-overlay-bg) 0%, transparent 100%);
 }
 
-/* Responsive design */
+/* Responsive */
 @media (max-width: 1400px) {
     .carousel-item {
-        min-width: 200px;
-        max-width: 200px;
-        height: 112px;
+        min-width: 140px;
+        max-width: 140px;
+        height: 210px;
     }
 }
 
 @media (max-width: 800px) {
     .carousel-item {
-        min-width: 150px;
-        max-width: 150px;
-        height: 84px;
+        min-width: 120px;
+        max-width: 120px;
+        height: 180px;
     }
 
     .carousel-category-title {
@@ -1268,9 +1275,9 @@
 
 @media (max-width: 500px) {
     .carousel-item {
-        min-width: 120px;
-        max-width: 120px;
-        height: 67px;
+        min-width: 100px;
+        max-width: 100px;
+        height: 150px;
     }
 
     .carousel-main-container {
