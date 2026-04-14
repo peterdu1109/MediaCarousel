@@ -819,10 +819,12 @@
         if (pluginConfig.HideNativeHome) return; // Déjà tout caché
 
         document.querySelectorAll('.homePage .sectionTitle').forEach(titleEl => {
-            const txt = titleEl.textContent.toLowerCase();
             const section = titleEl.closest('.homePageSection') || titleEl.closest('.verticalSection');
             if (!section) return;
+            // Ne jamais toucher à nos propres sections injectées
+            if (section.classList.contains('carousel-section')) return;
 
+            const txt = titleEl.textContent.toLowerCase();
             const isResume = txt.includes('continu') || txt.includes('resume') || txt.includes('watching') || txt.includes('suivant') || txt.includes('next up');
             const isLatest = txt.includes('nouveau') || txt.includes('latest') || txt.includes('recently') || txt.includes('ajout');
 
@@ -1396,9 +1398,10 @@
     display: none !important;
 }
 
-/* 1. HIDE ALL NATIVE: activé uniquement si HideNativeHome = true */
-body.mc-hide-all-native .homePage .sections,
-body.mc-hide-all-native .homePage .verticalSection,
+/* 1. HIDE ALL NATIVE: activé uniquement si HideNativeHome = true
+   Ne pas cacher .sections (notre container d'injection), exclure .carousel-section */
+body.mc-hide-all-native .homePage .sections > :not(.carousel-section):not(.carousel-hero-section):not(#carousel-genres-lazy),
+body.mc-hide-all-native .homePage > .verticalSection:not(.carousel-section),
 body.mc-hide-all-native .homePage .hss-section,
 body.mc-hide-all-native .homePage .homePageSection {
     display: none !important;
