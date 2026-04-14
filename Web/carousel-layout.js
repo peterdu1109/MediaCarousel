@@ -209,12 +209,14 @@
     function createCarouselDOM(title, items, carouselId = null) {
         if (!items || items.length === 0) return null;
 
+        // Utilise .verticalSection de Jellyfin pour s'intégrer nativement dans le layout
         const container = document.createElement('div');
-        container.className = 'carousel-category';
+        container.className = 'verticalSection carousel-section';
         if (carouselId) container.dataset.carouselId = carouselId;
 
+        // .sectionTitle : classe native Jellyfin pour la typographie des sections
         const h2 = document.createElement('h2');
-        h2.className = 'carousel-category-title';
+        h2.className = 'sectionTitle';
         h2.textContent = title;
         container.appendChild(h2);
 
@@ -605,38 +607,34 @@
         // Réinitialiser le compteur de tentatives
         _initRetryCount = 0;
 
-        // Supprimer proactivement les doublons natifs si la config le justifie
-        removeNativeDuplicates();
+        // Points d'injection natifs Jellyfin
+        const homePage = document.querySelector('.homePage');
+        const sectionsEl = homePage
+            ? (homePage.querySelector('.sections') || homePage)
+            : (document.querySelector('.mainAnimatedPages') || document.body);
 
-        const mainContent = document.querySelector('.mainAnimatedPages') || document.body;
-        const sectionsContainer = document.querySelector('.homePage .sections') || mainContent.querySelector('.sections');
-
-        if (!sectionsContainer) {
-            console.error('[MediaCarousel] Container .sections introuvable dans .homePage. Mode de secours activé.');
+        if (!sectionsEl) {
+            console.error('[MediaCarousel] Container .sections introuvable. Abandon.');
             return;
         }
 
-        // Activer l'entrelacement Flexbox sur le conteneur natif Jellyfin
-        sectionsContainer.style.display = 'flex';
-        sectionsContainer.style.flexDirection = 'column';
+        // Nettoyage des injections précédentes
+        sectionsEl.querySelectorAll('.carousel-section').forEach(el => el.remove());
+        if (homePage) homePage.querySelectorAll('.carousel-hero-section').forEach(el => el.remove());
 
-        // Nettoyer les précédents carrousels du plugin branchés
-        sectionsContainer.querySelectorAll('.carousel-plugin-row').forEach(c => c.remove());
+        // Marquer comme géré par le plugin (sert de garde contre double-init)
+        sectionsEl.dataset.jcActive = 'true';
 
-        // Ajouter la classe de style de carte globale au lieu du conteneur
+        // CardStyle : classe sur body pour CSS scope
         if (pluginConfig.CardStyle === 'landscape') {
             document.body.classList.add('carousel-landscape-mode');
         } else {
             document.body.classList.remove('carousel-landscape-mode');
         }
 
-        // Créer le container principal du plugin
-        const carouselContainer = document.createElement('div');
-        carouselContainer.id = 'jellyfin-carousel-layout';
-        carouselContainer.className = 'carousel-main-container';
-
         // Container pour genres (lazy-loaded via IntersectionObserver)
         const genresContainer = document.createElement('div');
+        genresContainer.className = 'verticalSection carousel-section carousel-genres-container';
         genresContainer.id = 'carousel-genres-lazy';
 
         // Initialiser le système intelligent de genres
@@ -673,51 +671,76 @@
         const sectionOrder = (pluginConfig.SectionOrder || 'hero,continue,latest,top10,recommended,genres,collections')
             .split(',').map(s => s.trim());
 
+        // Supprimer les sections natives dupliquées par nos carrousels
+        removeNativeDuplicates();
+
+        // Masquer tout le natif si HideNativeHome
+        if (pluginConfig.HideNativeHome) {
+            Array.from(sectionsEl.children).forEach(child => {
+                if (!child.classList.contains('carousel-section')) {
+                    child.setAttribute('data-jc-hidden', 'true');
+                }
+            });
+        }
+
         // Lancer l'IA en parallèle — non bloquant
         const aiRecoPromise = loadAiRecommendations(userId);
 
         // Charger toutes les sections en parallèle, conserver l'ordre d'affichage
-        const sectionElements = await Promise.all(sectionOrder.map(async (sectionId) => {
+        const sectionData = await Promise.all(sectionOrder.map(async (sectionId) => {
             if (sectionId === 'hero') {
-                return await createHero(userId);
+                return { id: 'hero', el: await createHero(userId) };
             } else if (sectionId === 'genres') {
-                return pluginConfig.ShowGenreCategories !== false ? genresContainer : null;
+                return pluginConfig.ShowGenreCategories !== false
+                    ? { id: 'genres', el: genresContainer }
+                    : null;
             } else {
                 const category = CONFIG.categories.find(c => c.id === sectionId);
                 if (!category || pluginConfig[category.configKey] === false) return null;
                 const items = await loadCategoryItems(category, userId);
-                return createCarouselDOM(category.name, items);
+                const el = createCarouselDOM(category.name, items);
+                return el ? { id: sectionId, el } : null;
             }
         }));
 
-        // Insérer dans l'ordre
-        sectionElements.forEach(el => { if (el) carouselContainer.appendChild(el); });
+        // Injection native : hero avant .sections, reste dans .sections
+        sectionData.forEach(section => {
+            if (!section || !section.el) return;
+            if (section.id === 'hero') {
+                section.el.classList.add('carousel-hero-section');
+                if (homePage && sectionsEl !== homePage && homePage.contains(sectionsEl)) {
+                    homePage.insertBefore(section.el, sectionsEl);
+                } else {
+                    sectionsEl.insertBefore(section.el, sectionsEl.firstChild);
+                }
+            } else {
+                sectionsEl.appendChild(section.el);
+            }
+        });
 
-        // Masquer les sections natives si configuré
-        if (pluginConfig.HideNativeHome) {
-            Array.from(mainContent.children).forEach(child => {
-                if (child !== carouselContainer) child.setAttribute('data-jc-hidden', 'true');
-            });
-        }
-
-        mainContent.insertBefore(carouselContainer, mainContent.firstChild);
         document.body.classList.add('media-carousel-active');
 
-        // Lazy loading des genres restants (skip ceux déjà chargés via data-carousel-id)
+        // Lazy loading des genres restants
         if (pluginConfig.ShowGenreCategories !== false) {
             setupLazyGenres(userId, genresContainer);
         }
 
-        // IA : quand disponible, insérer bannière + genres prioritaires sans bloquer
+        // IA : bannière + genres prioritaires insérés quand disponibles
         aiRecoPromise.then(aiReco => {
             if (!aiReco) return;
             if (aiReco.message) {
-                carouselContainer.insertBefore(createAiBanner(aiReco.message), carouselContainer.firstChild);
+                // Bannière IA : avant le premier carrousel dans sectionsEl
+                const firstCarousel = sectionsEl.querySelector('.carousel-section');
+                const banner = createAiBanner(aiReco.message);
+                if (firstCarousel) {
+                    sectionsEl.insertBefore(banner, firstCarousel);
+                } else {
+                    sectionsEl.appendChild(banner);
+                }
             }
             const aiGenres = (aiReco.genres || []).filter(g => CONFIG.genres.includes(g));
             (async () => {
                 for (const genre of aiGenres) {
-                    // Éviter le doublon si le lazy loader a déjà chargé ce genre
                     if (genresContainer.querySelector('[data-carousel-id="' + genre + '"]')) continue;
                     const items = await loadGenreItems(genre, userId);
                     const el = createCarouselDOM('🤖 ' + genre, items, genre);
@@ -726,7 +749,7 @@
             })();
         }).catch(() => {});
 
-        console.log('[MediaCarousel] ✅ Layout initialisé! Ordre:', sectionOrder.join(' → '));
+        console.log('[MediaCarousel] ✅ Fusion native activée! Ordre:', sectionOrder.join(' → '));
     }
 
     function setupLazyGenres(userId, container) {
@@ -815,14 +838,18 @@
     }
 
     function deactivateCarousel() {
-        document.body.classList.remove('media-carousel-active', 'media-carousel-init', 'mc-hide-all-native', 'mc-hide-native-resume', 'mc-hide-native-latest');
+        // Supprimer les sections injectées par le plugin
+        document.querySelectorAll('.carousel-section, .carousel-hero-section, .carousel-ai-banner').forEach(el => el.remove());
+        // Retirer le marqueur d'activation
+        document.querySelectorAll('[data-jc-active]').forEach(el => delete el.dataset.jcActive);
+        // Restaurer les sections natives masquées
         document.querySelectorAll('[data-jc-hidden="true"], [data-jc-duplicate="true"]').forEach(el => {
-            if (el.hasAttribute('data-jc-hidden')) el.removeAttribute('data-jc-hidden');
-            if (el.hasAttribute('data-jc-duplicate')) {
-                el.removeAttribute('data-jc-duplicate');
-                el.style.display = '';
-            }
+            el.removeAttribute('data-jc-hidden');
+            el.removeAttribute('data-jc-duplicate');
+            el.style.display = '';
         });
+        document.body.classList.remove('media-carousel-active', 'media-carousel-init',
+            'mc-hide-all-native', 'mc-hide-native-resume', 'mc-hide-native-latest');
     }
 
     let _layoutBusy = false;
@@ -837,7 +864,7 @@
 
         _layoutBusy = true;
         ensureConfigLoaded().then(() => {
-            if (document.getElementById('jellyfin-carousel-layout')) {
+            if (document.querySelector('[data-jc-active]')) {
                 document.body.classList.add('media-carousel-active');
                 _layoutBusy = false;
             } else {
@@ -868,7 +895,7 @@
         // Stratégie 1b : événement Jellyfin « pageshow » (variante selon les versions)
         document.addEventListener('pageshow', function (e) {
             setTimeout(() => {
-                if (isOnHomePage() && !document.getElementById('jellyfin-carousel-layout')) {
+                if (isOnHomePage() && !document.querySelector('[data-jc-active]')) {
                     _initRetryCount = 0;
                     triggerLayout();
                 }
@@ -879,7 +906,7 @@
         window.addEventListener('hashchange', function () {
             setTimeout(() => {
                 if (isOnHomePage()) {
-                    if (!document.getElementById('jellyfin-carousel-layout')) {
+                    if (!document.querySelector('[data-jc-active]')) {
                         _initRetryCount = 0;
                         triggerLayout();
                     }
@@ -894,7 +921,7 @@
         new MutationObserver(() => {
             if (_mutPending) clearTimeout(_mutPending);
             _mutPending = setTimeout(() => {
-                if (isOnHomePage() && !document.getElementById('jellyfin-carousel-layout')) {
+                if (isOnHomePage() && !document.querySelector('[data-jc-active]')) {
                     triggerLayout();
                 }
             }, 400);
@@ -902,7 +929,7 @@
 
         // Stratégie 4 : polling toutes les 3 s (filet de sécurité absolu)
         setInterval(() => {
-            if (isOnHomePage() && !document.getElementById('jellyfin-carousel-layout')) {
+            if (isOnHomePage() && !document.querySelector('[data-jc-active]')) {
                 console.log('[MediaCarousel] Polling: carousel manquant, réinitialisation...');
                 _initRetryCount = 0;
                 triggerLayout();
@@ -933,18 +960,14 @@
     --carousel-overlay-bg: var(--theme-background, var(--background-color, #141414));
 }
 
-/* En-tête de catégorie / Conteneur du row fusionné */
-.carousel-category, .carousel-plugin-row {
-    margin-bottom: 2.5rem;
-    padding: 0 4%;
+/* Section carrousel — s'intègre dans .verticalSection de Jellyfin */
+.carousel-section {
+    /* Jellyfin gère l'espacement via .verticalSection — pas de padding supplémentaire */
 }
 
-.carousel-category-title {
-    font-size: 1.4rem;
-    font-weight: 700;
-    color: var(--carousel-text);
-    margin-bottom: 1rem;
-    padding-left: 4%;
+/* Hero injecté avant .sections — pleine largeur */
+.carousel-hero-section {
+    width: 100%;
 }
 
 /* Container du carrousel */
