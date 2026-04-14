@@ -578,10 +578,10 @@
             return;
         }
 
-        // Chercher le container avec de nombreux fallbacks
-        let mainContent = findHomeContainer();
+        // Vérifier qu'on est bien sur la page d'accueil
+        const homeContainer = findHomeContainer();
 
-        if (!mainContent) {
+        if (!homeContainer) {
             _initRetryCount++;
             if (_initRetryCount <= MAX_INIT_RETRIES) {
                 const delay = Math.min(500 * _initRetryCount, 3000);

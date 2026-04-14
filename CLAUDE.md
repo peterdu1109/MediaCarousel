@@ -1,131 +1,118 @@
 # CLAUDE.md — MediaCarousel (JellyfinCarouselPlugin)
 
-## Project Overview
+## Vue d'ensemble
 
-**MediaCarousel** is a Jellyfin server plugin that replaces the Jellyfin web UI home page with a Netflix-style horizontal carousel layout. It is a hybrid project: a C# (.NET 9.0) backend that injects a JavaScript file into Jellyfin's HTML at startup, and a vanilla JavaScript frontend that takes over the home page DOM at runtime.
+Plugin Jellyfin qui remplace la page d'accueil par un layout Netflix : bannière Hero, carrousels horizontaux par catégorie et par genre, badges qualité, favoris, et recommandations IA optionnelles (Groq).
 
-- **Plugin ID (GUID):** `191bd290-1054-4b55-a137-46c72181266b` — used in `Plugin.cs`, `manifest.json`, `configPage.html`, and `carousel-layout.js`. This is the canonical GUID.
-- **Target:** Jellyfin 10.11.x (ABI `10.11.0.0`), .NET 9.0
-- **Current version:** 2.1.4.0
-- **Language:** C# backend, vanilla JavaScript frontend (no Node.js, no TypeScript, no npm)
+- **Plugin GUID :** `191bd290-1054-4b55-a137-46c72181266b` — dans `Plugin.cs`, `manifest.json`, `configPage.html`, `carousel-layout.js`
+- **Cible :** Jellyfin 10.11.x (ABI `10.11.0.0`), .NET 9.0
+- **Version actuelle :** 2.7.2.0
+- **Stack :** C# backend, JavaScript vanilla frontend (pas de Node, pas de TypeScript, pas de npm)
 
 ---
 
-## Repository Structure
+## Structure du dépôt
 
 ```
 MediaCarousel/
 ├── Plugin.cs                        # BasePlugin<PluginConfiguration> + IHasWebPages
-├── FileTransformationService.cs     # IHostedService — dual-strategy script injection
-├── CarouselIndexTransformer.cs      # Static callback for FileTransformation plugin (reflection-based)
-├── PluginServiceRegistrator.cs      # IPluginServiceRegistrator — registers FileTransformationService
-├── JellyfinCarouselPlugin.csproj    # .NET 9.0 project — version 2.0.1.0
-├── manifest.json                    # Plugin manifest (Jellyfin repo catalog)
-├── build.yaml                       # Plugin registry metadata
-├── nuget.config                     # nuget.org package source
-├── LICENSE                          # MIT
-├── README.md                        # User-facing documentation (French)
-├── icon.png                         # Plugin icon (referenced by manifest.json ImageUrl)
-├── .github/
-│   └── workflows/
-│       └── build.yml                # CI/CD: auto-version bump, build, package, GitHub release
+├── FileTransformationService.cs     # IHostedService — injection du script dans index.html
+├── CarouselIndexTransformer.cs      # Callback statique pour le plugin FileTransformation (réflexion)
+├── PluginServiceRegistrator.cs      # IPluginServiceRegistrator — enregistre FileTransformationService
+├── JellyfinCarouselPlugin.csproj    # .NET 9.0, version 2.7.2.0
+├── manifest.json                    # Catalogue Jellyfin (mis à jour par CI)
+├── build.yaml                       # Métadonnées du registre de plugins
+├── nuget.config                     # Source nuget.org
 ├── Configuration/
-│   ├── PluginConfiguration.cs       # 17-property config model (extends BasePluginConfiguration)
-│   └── configPage.html              # Admin config UI, embedded as a resource
+│   ├── PluginConfiguration.cs       # Modèle de config (24 propriétés)
+│   └── configPage.html              # UI admin, ressource embarquée
 └── Web/
-    ├── carousel-layout.js           # All plugin logic — single IIFE (~1099 lines)
-    ├── carousel-styles.css          # CSS reference copy — NOT served as a linked stylesheet (see below)
-    └── icon.png                     # Plugin icon (served as web asset)
+    ├── carousel-layout.js           # Toute la logique frontend — IIFE (~1400 lignes)
+    ├── carousel-styles.css          # Copie CSS de référence (ne pas servir directement)
+    └── icon.png                     # Icône plugin (assets web)
 ```
 
-> **Critical:** `carousel-styles.css` is **not linked** to Jellyfin. All styles are injected into the page as an inline `<style>` tag by `carousel-layout.js` when Jellyfin is detected. `carousel-styles.css` is a human-readable mirror kept in sync manually. When changing styles, edit the template literal string inside `carousel-layout.js` and keep `carousel-styles.css` in sync.
+> **Critique :** `carousel-styles.css` n'est **pas** lié à Jellyfin. Tout le CSS est injecté en `<style>` inline par `carousel-layout.js`. Modifier `carousel-styles.css` seul n'a aucun effet. Modifier le template literal dans `carousel-layout.js` et garder `carousel-styles.css` en sync manuellement.
 
 ---
 
 ## Architecture
 
-### C# Backend (Startup Only)
+### Backend C# (démarrage uniquement)
 
-The backend has a single runtime responsibility: inject the carousel `<script>` tag into Jellyfin's `index.html` at server startup. This is handled by `FileTransformationService` (an `IHostedService`), registered via `PluginServiceRegistrator`.
+Responsabilité unique : injecter le `<script>` du carrousel dans `index.html` de Jellyfin au démarrage du serveur.
 
-**Injection strategy (dual-mode in `FileTransformationService.StartAsync`):**
+**Stratégie d'injection duale (`FileTransformationService.StartAsync`) :**
 
-1. **Primary — FileTransformation plugin:** Searches loaded assemblies for the third-party `FileTransformation` plugin via `AssemblyLoadContext.All`. If found, registers a transformation callback (`CarouselIndexTransformer.InjectScript`) that modifies `index.html` content at serve-time. This avoids modifying the file on disk and works without root/Docker permissions.
+1. **Primaire — plugin FileTransformation :** Cherche l'assembly du plugin tiers via `AssemblyLoadContext.All`. Si trouvé, enregistre `CarouselIndexTransformer.InjectScript` comme callback de transformation — modifie le contenu de `index.html` à la volée, sans écrire sur le disque.
+2. **Fallback — injection directe :** Modifie `index.html` sur le disque si le plugin FileTransformation n'est pas installé. Idempotent (vérifie la présence de la balise `<script>` avant insertion).
 
-2. **Fallback — Direct file injection:** If the FileTransformation plugin is not installed, modifies `index.html` on disk directly (same behavior as the legacy `InjectionService`). The injection is idempotent (checks for the `<script>` tag before inserting).
+**Ordre de résolution du chemin (`TryInjectDirectly`) :**
+1. `{WebPath}/index.html`
+2. `{ProgramDataPath}/jellyfin-web/index.html`
+3. `{BaseDirectory}/jellyfin-web/index.html`
+4. `{BaseDirectory}/web/index.html`
 
-**Fallback path resolution order (`TryInjectDirectly`):**
-1. `{IApplicationPaths.WebPath}/index.html`
-2. `{IApplicationPaths.ProgramDataPath}/jellyfin-web/index.html`
-3. `{AppDomain.CurrentDomain.BaseDirectory}/jellyfin-web/index.html`
-4. `{AppDomain.CurrentDomain.BaseDirectory}/web/index.html`
+> `CarouselIndexTransformer` est invoqué par réflexion. Les noms de classe et de méthode `InjectScript` sont hardcodés dans `FileTransformationService`. Ne pas renommer sans mettre à jour les deux fichiers.
 
-**`CarouselIndexTransformer`** is a static class invoked by reflection from the FileTransformation plugin. It receives a JSON object `{ "contents": "..." }`, parses it with Newtonsoft.Json, and injects the `<script>` tag before `</head>`. Do not rename the class or method without updating `FileTransformationService`.
+### Frontend JavaScript (toute la logique runtime)
 
-`Plugin.cs` exposes the config page as an embedded resource (`JellyfinCarouselPlugin.Configuration.configPage.html`) and provides `GetWebPath()` so Jellyfin knows where to serve `Web/` assets from.
+`carousel-layout.js` : IIFE unique `(function() { 'use strict'; ... })()`, pas de dépendances externes. Utilise `window.ApiClient` et `window.Dashboard` fournis par Jellyfin.
 
-### JavaScript Frontend (All Runtime Logic)
+**Séquence de démarrage :**
+1. Lecture synchrone de `localStorage('MediaCarousel_Config')` — anti-FOUC avant même que Jellyfin soit prêt
+2. `waitForJellyfin()` — polling toutes les 100 ms jusqu'à ce que `ApiClient` et `Dashboard` existent
+3. `triggerLayout()` appelé à 0, 300, 800, 1500 et 3000 ms (5 tentatives progressives)
+4. `observePageChanges()` — écoute les navigations SPA
 
-`carousel-layout.js` is a single IIFE (`(function() { 'use strict'; ... })()`) with no external dependencies. It runs in the browser using Jellyfin's globally available `window.ApiClient` and `window.Dashboard`.
+**Détection de la page d'accueil (`isOnHomePage()`) :**
+- DOM : `#indexPage`, `.homePage`, `#homeTab`, `[data-type="home"]`, `.view.homePage:not(.hide)`, `.page.homePage:not(.hide)`
+- URL fallback : `window.location.hash` — `#!/home`, `#!/home.html`, hash vide, etc.
+- Exclusion explicite : `details`, `config`, `dashboard`, `search`, `list`, `settings`
 
-**Startup sequence:**
-1. `waitForJellyfin()` — polls every 100 ms until `window.ApiClient` and `window.Dashboard` exist
-2. Injects CSS inline via `<style>` tag into `document.head`
-3. Calls `triggerLayout()` at 0, 300, 800, 1500, and 3000 ms (five progressive attempts)
-4. Calls `observePageChanges()` to listen for SPA navigation
+**Détection du container home (`findHomeContainer()`) — 14 sélecteurs en cascade :**
+`.homePage` → `#indexPage .scrollSlider` → `#indexPage .itemsContainer` → ... → `#skinBody .page:not(.hide)`
 
-**Home page detection — hybrid DOM + URL (`isOnHomePage()`):**
-- DOM selectors: `#indexPage`, `.homePage`, `#homeTab`, `[data-type="home"]`, `.view.homePage:not(.hide)`, `.page.homePage:not(.hide)`
-- URL fallback: checks `window.location.hash` for `#!/home`, `#!/home.html`, empty hash, etc.
-- Excludes detail/config/dashboard/search/list/settings pages by hash inspection
+**Détection de navigation (5 stratégies dans `observePageChanges()`) :**
+1. Événement natif Jellyfin `viewshow`
+2. Événement Jellyfin `pageshow` (variante selon version)
+3. `hashchange` — navigation SPA
+4. `MutationObserver` sur `document.body` — debounce 400 ms
+5. Polling toutes les 3 s — filet de sécurité
 
-**Home container detection — 14 selectors in cascade (`findHomeContainer()`):**
-`.homePage` → `#indexPage .scrollSlider` → `#indexPage .itemsContainer` → `#indexPage .padded-left.padded-right` → `#indexPage .sections` → `#indexPage` → `#homeTab` → `[data-type="home"]` → `.mainAnimatedPages .page:not(.hide)` → `.view:not(.hide) .sections` → `.view:not(.hide) .verticalSection` → `.view:not(.hide)` → `.mainAnimatedPages > div:not(.hide)` → `#skinBody .page:not(.hide)`
+**Activation du layout :**
+- `applySyncLayoutStates()` applique immédiatement les classes anti-FOUC : `media-carousel-init`, `mc-hide-all-native`, `mc-hide-native-resume`, `mc-hide-native-latest`
+- `removeNativeDuplicates()` masque les sections Jellyfin natives dupliquées par correspondance de texte
+- Le layout est inséré via `insertBefore(carouselContainer, mainContent.firstChild)` dans `.mainAnimatedPages || body`
+- `body.media-carousel-active` est ajouté après insertion complète
 
-**Navigation detection (5 strategies):**
-- **Strategy 1 — `viewshow` event:** Jellyfin's native DOM event — checks for `#indexPage`, `#homeTab`, `.homePage`, `data-type="home"`
-- **Strategy 1b — `pageshow` event:** Alternative Jellyfin event (varies by version)
-- **Strategy 2 — `hashchange`:** Detects SPA hash navigation
-- **Strategy 3 — `MutationObserver`:** Watches `document.body` for DOM changes; triggers layout after 400 ms debounce
-- **Strategy 4 — Polling:** Every 3 seconds, checks if on home page without an active carousel (safety net)
+**Ordre des sections — `SectionOrder` :**
+La config `SectionOrder` est une chaîne CSV (ex. `"hero,continue,latest,top10,recommended,genres,collections"`) qui contrôle l'ordre d'affichage. Les sections inconnues sont ignorées silencieusement.
 
-**Layout activation:**
-- Adds `body.media-carousel-active` class — scoped CSS rules hide all native Jellyfin home sections under this class
-- Hides native Jellyfin children via `data-jc-hidden="true"` attribute (instead of broad CSS selectors, for plugin compatibility)
-- Inserts `#jellyfin-carousel-layout` div before `mainContent.firstChild`
-- Guards against re-initialization with `_layoutBusy` flag and `#jellyfin-carousel-layout` existence check
+**Genres dynamiques :**
+Les genres ne sont plus hardcodés. À chaque chargement, l'API Jellyfin est interrogée (`/Genres`), filtrée par `MinGenreItems`, triée par popularité, limitée à `MaxGenres`. Les genres Groq AI sont chargés en priorité, les autres en lazy via `IntersectionObserver` (marge 200 px).
 
-**Configuration:**
-- `pluginConfig` is a module-level variable, lazy-loaded once via `ensureConfigLoaded()`
-- Falls back to `DEFAULT_CONFIG` if the API call fails
-- Config is **not** reloaded on SPA navigation — requires a page refresh for changes to take effect
-
-**Groq AI Recommendations (optional):**
-- When `EnableGroqAi` is true and a `GroqApiKey` is set, `loadAiRecommendations()` sends the user's recent watch history to the Groq API
-- The AI returns 3 recommended genres and a personalized welcome message
-- AI-recommended genre carousels are loaded eagerly (before main categories), prefixed with 🤖
-- A stylized banner (`carousel-ai-banner`) displays the AI message
-- Remaining genres still lazy-load normally but skip AI-recommended ones to avoid duplicates
+**Config — cache et invalidation :**
+- Chargée une fois via `ensureConfigLoaded()` puis mise en cache dans `localStorage('MediaCarousel_Config')`
+- Chargée synchronement depuis le cache au démarrage pour éviter le FOUC
+- Les changements de config nécessitent un rechargement complet (F5)
 
 ---
 
-## Key Files and Their Roles
+## Fichiers clés
 
-| File | Role | Edit frequency |
+| Fichier | Rôle | Fréquence de modification |
 |---|---|---|
-| `Web/carousel-layout.js` | All UI behavior, API calls, DOM manipulation, inline CSS | High |
-| `Configuration/PluginConfiguration.cs` | Config schema — must match `DEFAULT_CONFIG` in JS | When adding settings |
-| `Configuration/configPage.html` | Admin UI — must match both the C# model and JS defaults | When adding settings |
-| `FileTransformationService.cs` | Dual-mode script injection at server start | Rarely |
-| `CarouselIndexTransformer.cs` | Static reflection callback for FileTransformation plugin | Rarely |
-| `PluginServiceRegistrator.cs` | DI registration for `FileTransformationService` | Rarely |
-| `Plugin.cs` | Plugin identity and web page registration | Rarely |
-| `Web/carousel-styles.css` | CSS reference copy — keep in sync with inline styles in JS | When changing styles |
-| `.github/workflows/build.yml` | CI/CD pipeline — auto-version, build, release | When changing CI |
+| `Web/carousel-layout.js` | Tout le comportement UI, appels API, DOM, CSS inline | Haute |
+| `Configuration/PluginConfiguration.cs` | Modèle de config — doit rester en sync avec `DEFAULT_CONFIG` JS | À chaque nouveau réglage |
+| `Configuration/configPage.html` | UI admin — doit rester en sync avec le modèle C# et les défauts JS | À chaque nouveau réglage |
+| `FileTransformationService.cs` | Injection du script au démarrage | Rare |
+| `CarouselIndexTransformer.cs` | Callback réflexion pour FileTransformation | Rare |
+| `Web/carousel-styles.css` | Copie CSS de référence — garder en sync avec le JS | À chaque changement CSS |
 
 ---
 
-## Development Workflow
+## Workflow de développement
 
 ### Build
 
@@ -133,141 +120,155 @@ The backend has a single runtime responsibility: inject the carousel `<script>` 
 dotnet build -c Release
 ```
 
-Output goes to `bin/Release/net9.0/`. The `Web/` directory is copied to the output via `CopyToOutputDirectory`. `Configuration/configPage.html` is embedded as a managed resource.
+Sortie dans `bin/Release/net9.0/`. Le dossier `Web/` est copié via `CopyToOutputDirectory`. `configPage.html` est embarqué comme ressource managée.
 
 ### Package
+
+```powershell
+# Windows
+Compress-Archive -Path "bin\Release\net9.0\*" -DestinationPath "JellyfinCarouselPlugin.zip" -Force
+```
 
 ```bash
 # Linux
 cd bin/Release/net9.0 && zip -r ../../../JellyfinCarouselPlugin.zip .
 ```
 
-```powershell
-# Windows PowerShell
-Compress-Archive -Path "bin\Release\net9.0\*" -DestinationPath "JellyfinCarouselPlugin.zip" -Force
-```
+### Installation et test
 
-### Install and Test
+1. Extraire le ZIP dans un dossier `CarouselLayout` sous `plugins/` de Jellyfin
+2. Redémarrer le serveur Jellyfin
+3. **Dashboard → Plugins → Carousel Layout → Settings**
+4. Ouvrir la page d'accueil — console browser pour les logs `[MediaCarousel]`
 
-1. Extract the ZIP into a directory named `CarouselLayout` under Jellyfin's `plugins/` folder
-2. Restart the Jellyfin server
-3. Navigate to **Dashboard → Plugins → Carousel Layout → Settings** to configure
-4. Open the home page to see the carousel layout
+Pas de tests automatisés. Tout est manuel sur une instance Jellyfin. Itération JS : éditer directement dans le dossier web Jellyfin + hard reload (Ctrl+Shift+R).
 
-There are **no automated tests**. All testing is manual on a running Jellyfin instance. Use the browser console (`console.log` from the plugin) for debugging.
+### CI/CD (`.github/workflows/build.yml`)
 
-### Iterating on JavaScript
-
-During development, you can directly edit `carousel-layout.js` in the Jellyfin web server directory and hard-reload the browser (Ctrl+Shift+R / Cmd+Shift+R). No build step is needed for JS-only changes.
-
-### CI/CD Pipeline (`.github/workflows/build.yml`)
-
-Triggered on push to `main` or manual `workflow_dispatch`. The pipeline:
-
-1. **Bump version** — Reads current version from `manifest.json`, analyzes conventional commits since last tag:
-   - Breaking changes → major bump
-   - `feat:` → minor bump
-   - Everything else → patch bump
+Déclenché sur push `main` ou `workflow_dispatch` :
+1. **Bump version** — lit `manifest.json`, analyse les commits conventionnels depuis le dernier tag (breaking → majeur, `feat:` → mineur, reste → patch)
 2. **Build** — `dotnet restore` + `dotnet build -c Release`
-3. **Package** — Zips `bin/Release/net9.0/` into `JellyfinCarouselPlugin.zip`
-4. **Update manifest** — Prepends a new version entry to `manifest.json` with `sourceUrl` and `checksum`; updates `AssemblyVersion`/`FileVersion` in `.csproj`
-5. **Commit** — Commits version bump with `[skip ci]` to avoid infinite loops
-6. **Release** — Creates a GitHub release with auto-generated changelog from commit messages
+3. **Package** — ZIP `bin/Release/net9.0/`
+4. **Mise à jour manifest** — ajoute une entrée de version avec `sourceUrl` et checksum ; met à jour `AssemblyVersion` dans `.csproj`
+5. **Commit** — commit du bump avec `[skip ci]`
+6. **Release** — GitHub release avec changelog auto depuis les messages de commit
 
 ---
 
-## Code Conventions
+## Conventions de code
 
 ### C#
-
-- **Naming:** PascalCase for classes, methods, and properties
-- **Docs:** XML doc comments (`///`) on public members; descriptions are in French
-- **Nullable:** `<Nullable>enable</Nullable>` is on — use `?` annotations and null checks
-- **Structure:** One class per file; file name matches class name
+- PascalCase pour classes, méthodes, propriétés
+- Commentaires XML (`///`) en français sur les membres publics
+- `<Nullable>enable</Nullable>` — utiliser `?` et null checks
+- Un fichier par classe
 
 ### JavaScript
-
-- **Naming:** camelCase for functions and variables; SCREAMING_SNAKE_CASE for module-level constants (`PLUGIN_ID`, `DEFAULT_CONFIG`, `CONFIG`)
-- **Style:** Vanilla JS only — no modules, no TypeScript, no npm, no build step
-- **Pattern:** Single IIFE — no globals exported
-- **Async:** `async/await` throughout; top-level code uses `.then()` (IIFE is not async)
-- **Comments:** French language; English for code identifiers
+- camelCase pour fonctions et variables ; SCREAMING_SNAKE_CASE pour constantes module (`PLUGIN_ID`, `DEFAULT_CONFIG`, `CONFIG`)
+- JS vanilla uniquement — pas de modules, pas de TypeScript, pas de npm, pas de build
+- IIFE unique — rien d'exporté en global
+- `async/await` partout ; code top-level avec `.then()` (IIFE non async)
+- Commentaires en français ; identifiants en anglais
 
 ### CSS
+- kebab-case avec préfixes sémantiques : `.carousel-*`, `.badge-*`, `.carousel-hero-*`, `.carousel-ai-*`
+- Custom properties dans `:root` ; fallbacks sur les variables Jellyfin
+- Breakpoints : 1400 px, 800 px, 500 px + `@media (hover: none)`
+- Toutes les règles de la page d'accueil scopées à `body.media-carousel-active`
 
-- **Naming:** kebab-case with semantic prefixes: `.carousel-*`, `.badge-*`, `.carousel-hero-*`, `.carousel-ai-*`
-- **Custom properties:** Defined in `:root`; use Jellyfin theme variables as fallbacks (e.g., `var(--theme-primary, var(--accent-color, var(--link-color, #00a4dc)))`)
-- **Responsive breakpoints:** 1400 px, 800 px, 500 px + `@media (hover: none)` for touch devices
-- **Activation guard:** All home-page override rules are scoped to `body.media-carousel-active` — this class is set/removed by the JS
-
-### Commit Messages
-
-Follow Conventional Commits: `feat:`, `fix:`, `docs:`, `refactor:`, `chore:`. Keep messages concise and under 80 characters. The CI pipeline uses these prefixes for automatic semantic versioning.
+### Commits
+Conventional Commits : `feat:`, `fix:`, `docs:`, `refactor:`, `chore:`. Messages < 80 caractères. Utilisés pour le versioning sémantique automatique par CI.
 
 ---
 
-## Adding a New Configuration Setting
+## Ajouter un réglage de configuration
 
-Configuration is defined in three places that must stay in sync:
+Trois fichiers à synchroniser :
 
-1. **`Configuration/PluginConfiguration.cs`** — Add a C# property with a default value and a French XML doc comment
-2. **`Configuration/configPage.html`** — Add the form control (use `emby-checkbox`, `emby-input`, or `emby-select`) and update both the `pageshow` load handler and the `submit` save handler
-3. **`Web/carousel-layout.js`** — Add the key to `DEFAULT_CONFIG`, then reference it via `pluginConfig.YourNewSetting` in the relevant function
+1. **`PluginConfiguration.cs`** — propriété C# avec valeur par défaut + commentaire XML français
+2. **`configPage.html`** — contrôle de formulaire (`emby-checkbox`, `emby-input`, `emby-select`) + mise à jour des handlers `pageshow` (chargement) et `submit` (sauvegarde)
+3. **`carousel-layout.js`** — clé dans `DEFAULT_CONFIG`, puis utilisation via `pluginConfig.LeNouveauReglage`
 
 ---
 
-## Adding a New Carousel Category
+## Ajouter une catégorie carrousel
 
-1. Add an entry to `CONFIG.categories` in `carousel-layout.js`:
+1. Ajouter une entrée à `CONFIG.categories` dans `carousel-layout.js` :
    ```js
    { id: 'mycat', name: 'Ma Catégorie', filter: 'SomeFilter', configKey: 'ShowMyCategory' }
    ```
-2. Add the sorting/filtering logic for the new `id` inside `loadCategoryItems()`
-3. Add `ShowMyCategory` as a configuration setting (see above)
-
-## Adding a New Genre Carousel
-
-Edit the `CONFIG.genres` array in `carousel-layout.js`. Genre names must match Jellyfin's genre strings exactly (case-sensitive). Current genres (16): Action, Aventure, Animation, Comédie, Crime, Documentaire, Drame, Enfants, Fantaisie, Horreur, Musique, Mystère, Romance, Science-Fiction, Thriller, Western. Genre carousels are loaded lazily via `IntersectionObserver` with a 200 px root margin (unless prioritized by Groq AI).
+2. Ajouter la logique de filtrage pour ce `id` dans `loadCategoryItems()`
+3. Ajouter `ShowMyCategory` comme réglage de configuration (voir ci-dessus)
+4. Ajouter l'id à `SectionOrder` si besoin
 
 ---
 
-## Gotchas and Constraints
+## Configuration — 24 propriétés
 
-**CSS lives inside JS:** Edit the inline style template literal in `carousel-layout.js` — not just `carousel-styles.css`. Changes to `carousel-styles.css` alone have no effect on a running Jellyfin instance.
-
-**Config is cached per page load:** `pluginConfig` is loaded once and never reloaded during SPA navigation. Config changes require the user to do a full page refresh (F5). This is intentional.
-
-**No npm / no TypeScript:** Do not introduce `package.json`, webpack, babel, TypeScript, or any build tooling for the JavaScript. Keep it vanilla.
-
-**Robust DOM selectors with retry:** `findHomeContainer()` tries 14 selectors in cascade (see Architecture section). If none match, `initCarouselLayout()` uses progressive retry (up to 8 attempts, 500 ms → 3 s delay). Detailed logs are printed to the browser console at each attempt. If Jellyfin changes its home page HTML structure, add new selectors to the `findHomeContainer()` array.
-
-**`toggleFavorite` uses a non-standard API path:** `ApiClient.FavoriteManager.updateFavoriteStatus()` is not a standard documented method. If Jellyfin changes this API, `toggleFavorite` will fail silently (errors are caught and logged to console).
-
-**`icon.png` exists in two places:** At the repo root (referenced by `manifest.json`'s `ImageUrl`) and inside `Web/` (served as a plugin asset). Keep both in sync when updating the icon.
-
-**Build artifacts at root:** `build_output.txt`, `errors.txt`, and `restore_log.txt` are local build logs at the repo root. They are **not** gitignored — consider adding them to `.gitignore`.
-
-**`CarouselIndexTransformer` invoked by reflection:** The class name and method name `InjectScript` are hardcoded as strings in `FileTransformationService`. Renaming either without updating the registration payload will break the FileTransformation integration silently.
-
-**Groq API key exposed client-side:** The `GroqApiKey` is stored in plugin config and fetched by the browser JS via `ApiClient.getPluginConfiguration()`. Any authenticated Jellyfin user can read it. This is a known trade-off.
-
-**`build.yaml` is manually maintained:** `build.yaml` is not auto-updated by CI. The authoritative version history is in `manifest.json`, which is updated automatically by the GitHub Actions workflow.
-
----
-
-## Jellyfin Integration Notes
-
-- Plugin configuration is stored as XML by Jellyfin's `BasePluginConfiguration` serializer
-- The config page is served at: `/web/configurationpage?name=Carousel+Layout`
-- The JS asset is served at: `/plugins/JellyfinCarouselPlugin/Web/carousel-layout.js`
-- `ApiClient.getItems(userId, params)` returns `{ Items: [], TotalRecordCount: N }`
-- `ApiClient.getPluginConfiguration(pluginId)` and `ApiClient.updatePluginConfiguration(pluginId, config)` use the plugin GUID as a string
-- `Dashboard.navigate('details?id=' + itemId)` triggers SPA navigation to the item detail page
-- `window.ApiClient` and `window.Dashboard` are Jellyfin globals — always guard access behind `waitForJellyfin()`; do not assume they exist at script load time
+| Propriété | Type | Défaut | Description |
+|---|---|---|---|
+| `EnableCarouselLayout` | bool | `true` | Interrupteur maître |
+| `ShowNewReleases` | bool | `true` | Catégorie "Nouveautés" |
+| `ShowTop10` | bool | `true` | Catégorie "Top 10" |
+| `ShowContinueWatching` | bool | `true` | Catégorie "Continuer à regarder" |
+| `ShowRecommended` | bool | `true` | Catégorie "Recommandés" |
+| `ShowGenreCategories` | bool | `true` | Carrousels par genre |
+| `ShowCollections` | bool | `true` | Catégorie "Collections" (Boxsets) |
+| `ShowNewEpisodesBadge` | bool | `true` | Badge "Nouveaux épisodes" sur les séries |
+| `ShowQualityBadge` | bool | `true` | Badges 4K/HD |
+| `ItemsPerCarousel` | int | `20` | Max items par carrousel |
+| `EnableHoverAnimations` | bool | `true` | Animation zoom au survol |
+| `EnableFavoritesButton` | bool | `true` | Bouton cœur sur les cartes |
+| `HeroMode` | string | `"Random"` | Mode bannière : `Random`, `Latest`, `Resume`, `None` |
+| `HighlightColor` | string | `"#00a4dc"` | Couleur d'accentuation (hex) |
+| `HideNativeHome` | bool | `false` | Masquer toute la page d'accueil native Jellyfin |
+| `IncludedLibraries` | string[] | `[]` | IDs de bibliothèques incluses (vide = toutes) |
+| `SectionOrder` | string | `"hero,continue,..."` | Ordre CSV des sections du layout |
+| `CardStyle` | string | `"poster"` | Style des cartes : `poster` (vertical) ou `landscape` (backdrop) |
+| `MinGenreItems` | int | `3` | Minimum d'items pour afficher un genre |
+| `MaxGenres` | int | `12` | Nombre maximum de genres affichés |
+| `CustomSectionsJson` | string | `"[]"` | Sections personnalisées (JSON array) |
+| `EnableGroqAi` | bool | `false` | Recommandations IA via Groq |
+| `GroqApiKey` | string | `""` | Clé API Groq |
+| `GroqModel` | string | `"llama3-8b-8192"` | Modèle Groq |
 
 ---
 
-## NuGet Dependencies
+## Pièges et contraintes
+
+**CSS dans le JS :** Modifier le template literal dans `carousel-layout.js`, pas seulement `carousel-styles.css`.
+
+**Config cachée par chargement :** Les changements nécessitent F5. C'est intentionnel.
+
+**Pas de npm / TypeScript :** Ne pas introduire de `package.json`, webpack, babel, TypeScript ou tout outillage de build pour le JS.
+
+**Genres dynamiques :** Les genres sont récupérés depuis l'API Jellyfin à chaque init, filtrés et triés. Pas de liste hardcodée.
+
+**Clé Groq exposée côté client :** `GroqApiKey` est accessible à tout utilisateur Jellyfin authentifié via `ApiClient.getPluginConfiguration()`. Compromis assumé.
+
+**`CarouselIndexTransformer` par réflexion :** Nom de classe et méthode `InjectScript` hardcodés dans `FileTransformationService`. Renommer sans mettre à jour les deux fichiers casse l'intégration silencieusement.
+
+**`icon.png` en double :** Racine du dépôt (référencé par `manifest.json`) et dans `Web/` (asset servi). Synchroniser les deux à la mise à jour.
+
+**`build.yaml` maintenu manuellement :** Pas mis à jour par CI. La source de vérité des versions est `manifest.json`.
+
+**Artifacts de build à la racine :** `build_output.txt`, `errors.txt`, `restore_log.txt` ne sont pas gitignorés.
+
+---
+
+## Intégration Jellyfin
+
+- Config stockée en XML par le sérialiseur `BasePluginConfiguration`
+- Page de config : `/web/configurationpage?name=Carousel+Layout`
+- Asset JS servi : `/plugins/JellyfinCarouselPlugin/Web/carousel-layout.js`
+- `ApiClient.getItems(userId, params)` → `{ Items: [], TotalRecordCount: N }`
+- `ApiClient.getPluginConfiguration(pluginId)` / `updatePluginConfiguration(pluginId, config)` — GUID en string
+- `Dashboard.navigate('details?id=' + itemId)` — navigation SPA vers la fiche item
+- `window.ApiClient` et `window.Dashboard` sont des globaux Jellyfin — toujours vérifier leur existence via `waitForJellyfin()`
+
+---
+
+## Dépendances NuGet
 
 | Package | Version |
 |---|---|
@@ -275,28 +276,4 @@ Edit the `CONFIG.genres` array in `carousel-layout.js`. Genre names must match J
 | `Jellyfin.Controller` | 10.11.8 |
 | `Newtonsoft.Json` | 13.0.3 |
 
-All packages use `<PrivateAssets>all</PrivateAssets>` and `<ExcludeAssets>runtime</ExcludeAssets>` — they are compile-time references only; Jellyfin provides them at runtime.
-
----
-
-## Configuration Properties (17 total)
-
-| Property | Type | Default | Description |
-|---|---|---|---|
-| `EnableCarouselLayout` | bool | `true` | Master toggle for the carousel layout |
-| `ShowNewReleases` | bool | `true` | Show "Nouveautés" category |
-| `ShowTop10` | bool | `true` | Show "Top 10" category |
-| `ShowContinueWatching` | bool | `true` | Show "Continuer à regarder" category |
-| `ShowRecommended` | bool | `true` | Show "Recommandés" category |
-| `ShowGenreCategories` | bool | `true` | Show genre-based carousels |
-| `ShowNewEpisodesBadge` | bool | `true` | Show "NOUVEAUX ÉPISODES" badge on series |
-| `ShowQualityBadge` | bool | `true` | Show 4K/HD quality badges |
-| `ItemsPerCarousel` | int | `20` | Max items per carousel row |
-| `EnableHoverAnimations` | bool | `true` | Enable zoom-on-hover animation |
-| `ShowCollections` | bool | `true` | Show "Collections" (Boxsets) category |
-| `HeroMode` | string | `"Random"` | Hero banner mode: `Random`, `Latest`, or `Resume` |
-| `EnableFavoritesButton` | bool | `true` | Show heart button on hover |
-| `HighlightColor` | string | `"#00a4dc"` | Accent color (hex code) |
-| `EnableGroqAi` | bool | `false` | Enable Groq AI recommendations |
-| `GroqApiKey` | string | `""` | Groq API key |
-| `GroqModel` | string | `"llama3-8b-8192"` | Groq model to use |
+Toutes avec `<PrivateAssets>all</PrivateAssets>` et `<ExcludeAssets>runtime</ExcludeAssets>` — références compile-time uniquement.
