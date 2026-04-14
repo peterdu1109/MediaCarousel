@@ -1,17 +1,29 @@
-## Changements majeurs
+## Nouveautés de cette version
 
-- **Détection de la page d'accueil entièrement refaite** : 14 sélecteurs DOM + détection URL en fallback
-- **5 stratégies de détection** : viewshow, pageshow, hashchange, MutationObserver, polling 3s
-- **Retry progressif** : jusqu'à 8 tentatives avec délai croissant (500ms → 3s)
-- **Logs détaillés** dans la console du navigateur pour faciliter le diagnostic
-- **Descriptions et changelogs en français** dans le manifest et le README
-- **Version unifiée** : 2.1.4.0 dans le csproj, le manifest et le tag
+### ✨ Nouvelles fonctionnalités
+- Intégration native dans l'interface Jellyfin — les carrousels s'insèrent directement dans ton thème, pas par-dessus
+- Ordre des sections personnalisable par glisser-déposer depuis les paramètres
+- Genres automatiques chargés depuis ta bibliothèque (filtrés par popularité, plus de liste fixe)
+- Sections personnalisées : crée tes propres carrousels par Genre, Studio, Tag ou Recherche
+- Style des cartes au choix : Poster (portrait) ou Paysage (backdrop)
+- Chargement parallèle de toutes les sections — affichage plus rapide
+
+### 🐛 Corrections
+- La page de configuration se sauvegarde maintenant correctement
+- Les carrousels s'affichent bien même avec l'option "Cacher l'interface native" activée
+- Les sections du plugin ne sont plus confondues avec les sections natives lors du nettoyage
+
+### ⚡ Performances
+- Les recommandations IA Groq se chargent en arrière-plan sans bloquer l'affichage
+- Config mise en cache localement pour éviter le flash au chargement
+
+---
 
 ## Installation
 
-Ajoutez ce repo dans vos catalogues Jellyfin :
+Ajoute ce repo dans tes catalogues Jellyfin :
 ```
 https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/manifest.json
 ```
 
-Puis installez "Carousel Layout" depuis le catalogue.
+Puis installe **Carousel Layout** depuis le catalogue et redémarre Jellyfin.

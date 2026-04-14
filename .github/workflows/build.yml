@@ -105,35 +105,83 @@ jobs:
           V=${{ steps.ver.outputs.version }}
           LAST_TAG=$(git tag --sort=-version:refname | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | grep -v "^${V}$" | head -1 || true)
           if [ -z "$LAST_TAG" ]; then
-            LOG=$(git log --no-merges --pretty=format:"- %s" | grep -v "\[skip ci\]" | head -20)
+            RAW=$(git log --no-merges --pretty=format:"%s" | grep -v "\[skip ci\]" | head -30)
           else
-            LOG=$(git log "${LAST_TAG}..HEAD" --no-merges --pretty=format:"- %s" | grep -v "\[skip ci\]")
+            RAW=$(git log "${LAST_TAG}..HEAD" --no-merges --pretty=format:"%s" | grep -v "\[skip ci\]")
           fi
-          [ -z "$LOG" ] && LOG="- Mise a jour et corrections diverses"
+          [ -z "$RAW" ] && RAW="Mise à jour et corrections diverses"
+
+          # Transformer les commits conventionnels en release notes lisibles
+          NOTES=$(python3 - "$RAW" <<'PYEOF'
+import sys, re
+
+raw = sys.argv[1]
+feats, fixes, perfs, others = [], [], [], []
+
+for line in raw.strip().split('\n'):
+    line = line.strip()
+    if not line:
+        continue
+    m = re.match(r'^(\w+)(?:\([^)]*\))?!?:\s*(.+)$', line)
+    if m:
+        t, msg = m.group(1).lower(), m.group(2).strip()
+        msg = msg[0].upper() + msg[1:]
+        if t == 'feat':
+            feats.append(msg)
+        elif t in ('fix', 'hotfix'):
+            fixes.append(msg)
+        elif t == 'perf':
+            perfs.append(msg)
+        elif t not in ('chore', 'build', 'ci', 'docs'):
+            others.append(msg)
+    else:
+        others.append(line[0].upper() + line[1:])
+
+out = []
+if feats:
+    out.append('### ✨ Nouvelles fonctionnalités\n' + '\n'.join(f'- {x}' for x in feats))
+if fixes:
+    out.append('### 🐛 Corrections\n' + '\n'.join(f'- {x}' for x in fixes))
+if perfs:
+    out.append('### ⚡ Performances\n' + '\n'.join(f'- {x}' for x in perfs))
+if others:
+    out.append('### 🔧 Améliorations\n' + '\n'.join(f'- {x}' for x in others))
+if not out:
+    out.append('### 🔧 Améliorations\n- Mise à jour et corrections diverses')
+
+print('\n\n'.join(out))
+PYEOF
+          )
 
           N=/tmp/notes.md
-          echo "## Media Carousel v${V}"                                                                         > "$N"
-          echo ""                                                                                                >> "$N"
-          echo "### Changements"                                                                                 >> "$N"
-          echo ""                                                                                                >> "$N"
-          echo "$LOG"                                                                                            >> "$N"
-          echo ""                                                                                                >> "$N"
-          echo "---"                                                                                             >> "$N"
-          echo ""                                                                                                >> "$N"
-          echo "## Installation"                                                                                 >> "$N"
-          echo ""                                                                                                >> "$N"
-          echo "### Via le catalogue Jellyfin"                                                                   >> "$N"
-          echo "1. Dashboard > Plugins > Catalogues > +"                                                        >> "$N"
-          echo "2. URL :"                                                                                        >> "$N"
-          echo '```'                                                                                             >> "$N"
-          echo "https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/manifest.json"                 >> "$N"
-          echo '```'                                                                                             >> "$N"
-          echo "3. Installe Carousel Layout et redemarre Jellyfin"                                               >> "$N"
-          echo ""                                                                                                >> "$N"
-          echo "**Prerequis :** Jellyfin 10.11.x"                                                               >> "$N"
+          cat > "$N" << NOTES_EOF
+## 🎬 Media Carousel v${V}
+
+${NOTES}
+
+---
+
+## 📦 Installation
+
+### Via le catalogue Jellyfin *(recommandé)*
+1. **Dashboard → Plugins → Catalogues → +**
+2. Colle cette URL :
+\`\`\`
+https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/manifest.json
+\`\`\`
+3. Installe **Carousel Layout** et redémarre Jellyfin
+
+### Mise à jour depuis une version précédente
+Jellyfin détecte et propose automatiquement la mise à jour si tu utilises le catalogue.
+Sinon, télécharge le ZIP ci-dessous, remplace les fichiers dans ton dossier \`plugins/CarouselLayout/\` et redémarre.
+
+---
+
+**Prérequis :** Jellyfin 10.11.x · [Aide & documentation](https://github.com/peterdu1109/MediaCarousel#readme)
+NOTES_EOF
 
           gh release delete "$V" --yes --cleanup-tag 2>/dev/null || true
           gh release create "$V" \
-            --title "Media Carousel v${V}" \
+            --title "🎬 Media Carousel v${V}" \
             --notes-file "$N" \
             JellyfinCarouselPlugin.zip
