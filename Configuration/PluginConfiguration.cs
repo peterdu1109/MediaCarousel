@@ -104,9 +104,14 @@ public class PluginConfiguration : BasePluginConfiguration
 
     /// <summary>
     /// Ordre personnalisé des sections du layout (JSON array d'IDs)
-    /// Ex: "hero,continue,latest,top10,recommended,genres,collections"
+    /// Ex: "hero,continue,native_media,latest,top10,recommended,genres,collections"
     /// </summary>
-    public string SectionOrder { get; set; } = "hero,continue,latest,top10,recommended,genres,collections";
+    public string SectionOrder { get; set; } = "hero,continue,native_media,latest,top10,recommended,genres,collections";
+
+    /// <summary>
+    /// Sections personnalisées de l'utilisateur (JSON array de requêtes)
+    /// </summary>
+    public string CustomSectionsJson { get; set; } = "[]";
 
     /// <summary>
     /// Style des cartes : "poster" (vertical) ou "landscape" (horizontal/backdrop)

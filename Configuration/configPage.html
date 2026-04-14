@@ -142,6 +142,39 @@
                         </ul>
                     </div>
 
+                    <!-- CRÉATION SECTIONS CUSTOM -->
+                    <div class="verticalSection" style="background:var(--theme-background-secondary, rgba(0,0,0,0.2)); padding:15px; border-radius:8px;">
+                        <h3>✨ Créer une section personnalisée</h3>
+                        <p style="color:var(--text-muted, #999); font-size: 0.9em; margin-top: -10px;">Ajoutez des carrousels sur mesure (ex: par Genre, Studio, ou Recherche) qui s'intègrent dans l'ordre ci-dessus.</p>
+                        
+                        <div style="display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap;">
+                            <div class="inputContainer" style="flex:1; min-width:200px; margin-bottom:0;">
+                                <label for="CustomSectionName">Titre de la section</label>
+                                <input is="emby-input" type="text" id="CustomSectionName" placeholder="Ex: Mes films Marvel" />
+                            </div>
+                            
+                            <div class="selectContainer" style="width:150px; margin-bottom:0;">
+                                <label class="selectLabel" for="CustomSectionType">Filtrer par</label>
+                                <select is="emby-select" id="CustomSectionType">
+                                    <option value="Tags">Tag</option>
+                                    <option value="Genres">Genre</option>
+                                    <option value="Studios">Studio</option>
+                                    <option value="SearchTerm">Recherche</option>
+                                </select>
+                            </div>
+                            
+                            <div class="inputContainer" style="flex:1; min-width:150px; margin-bottom:0;">
+                                <label for="CustomSectionValue">Valeur</label>
+                                <input is="emby-input" type="text" id="CustomSectionValue" placeholder="Ex: Marvel" />
+                            </div>
+                            
+                            <button is="emby-button" type="button" class="raised button-submit" id="btnAddCustomSection" style="margin-bottom:0; height:45px;">
+                                <span>Ajouter</span>
+                            </button>
+                        </div>
+                        <input type="hidden" id="CustomSectionsJson" value="[]" />
+                    </div>
+
                     <div class="verticalSection">
                         <h3>🖼️ Style des cartes</h3>
                         <div class="card-style-preview">
@@ -310,13 +343,15 @@
         <script type="text/javascript">
             var CarouselConfigPage = {
                 pluginId: "191bd290-1054-4b55-a137-46c72181266b",
-                config: null
+                config: null,
+                customSections: []
             };
 
             // === Section labels for drag-and-drop ===
             var SECTION_DEFS = {
                 'hero':        { icon: '🎬', label: 'Bannière Hero' },
                 'continue':    { icon: '▶️', label: 'Continuer à regarder' },
+                'native_media':{ icon: '📚', label: 'Vos Bibliothèques Natives (Jellyfin)' },
                 'latest':      { icon: '🆕', label: 'Nouveautés' },
                 'top10':       { icon: '🏆', label: 'Top 10' },
                 'recommended': { icon: '👍', label: 'Recommandés' },
@@ -329,26 +364,84 @@
                 if (!list) return;
                 list.innerHTML = '';
 
-                var order = (orderStr || 'hero,continue,latest,top10,recommended,genres,collections').split(',');
+                var order = (orderStr || 'hero,continue,native_media,latest,top10,recommended,genres,collections').split(',');
 
                 order.forEach(function(sectionId) {
-                    var def = SECTION_DEFS[sectionId.trim()];
+                    sectionId = sectionId.trim();
+                    if (!sectionId) return;
+
+                    var def = SECTION_DEFS[sectionId];
+                    var isCustom = false;
+                    
+                    if (!def && sectionId.startsWith('custom_')) {
+                        // Chercher dans les custom sections
+                        var customData = CarouselConfigPage.customSections.find(c => c.id === sectionId);
+                        if (customData) {
+                            def = { icon: '✨', label: customData.name + ' (' + customData.type + ': ' + customData.value + ')' };
+                            isCustom = true;
+                        }
+                    }
+                    
                     if (!def) return;
 
                     var li = document.createElement('li');
                     li.className = 'layout-section-item';
                     li.setAttribute('draggable', 'true');
-                    li.dataset.sectionId = sectionId.trim();
+                    li.dataset.sectionId = sectionId;
 
-                    li.innerHTML = '<span class="drag-handle">⠿</span>' +
+                    var innerHTML = '<span class="drag-handle">⠿</span>' +
                         '<span class="section-icon">' + def.icon + '</span>' +
                         '<span class="section-label">' + def.label + '</span>';
-
+                        
+                    if (isCustom) {
+                        innerHTML += '<button type="button" class="btn-remove-custom" onclick="removeCustomSection(\\'' + sectionId + '\\')" style="margin-left:auto; background:none; border:none; color:#f00; cursor:pointer;" title="Supprimer">✖</button>';
+                    }
+                        
+                    li.innerHTML = innerHTML;
                     list.appendChild(li);
                 });
 
                 enableDragAndDrop(list);
             }
+
+            // --- Custom Sections Logic ---
+            document.getElementById('btnAddCustomSection').addEventListener('click', function() {
+                var name = document.getElementById('CustomSectionName').value.trim();
+                var type = document.getElementById('CustomSectionType').value;
+                var value = document.getElementById('CustomSectionValue').value.trim();
+                
+                if (!name || !value) {
+                    Dashboard.alert("Veuillez remplir le titre et la valeur de filtrage.");
+                    return;
+                }
+                
+                var newId = 'custom_' + new Date().getTime();
+                CarouselConfigPage.customSections.push({
+                    id: newId,
+                    name: name,
+                    type: type,
+                    value: value
+                });
+                
+                document.getElementById('CustomSectionsJson').value = JSON.stringify(CarouselConfigPage.customSections);
+                
+                // Vider les champs
+                document.getElementById('CustomSectionName').value = '';
+                document.getElementById('CustomSectionValue').value = '';
+                
+                // Ajouter à la liste existante via DOM Serialize
+                var currentOrder = getSectionOrderFromDOM();
+                currentOrder += (currentOrder ? ',' : '') + newId;
+                renderSectionOrder(currentOrder);
+            });
+
+            window.removeCustomSection = function(id) {
+                CarouselConfigPage.customSections = CarouselConfigPage.customSections.filter(c => c.id !== id);
+                document.getElementById('CustomSectionsJson').value = JSON.stringify(CarouselConfigPage.customSections);
+                
+                var currentOrder = getSectionOrderFromDOM().split(',').filter(x => x !== id).join(',');
+                renderSectionOrder(currentOrder);
+            };
 
             function enableDragAndDrop(list) {
                 var dragged = null;
@@ -449,8 +542,14 @@
                     var highlightColorInput = document.querySelector('#HighlightColor');
                     if (highlightColorInput) highlightColorInput.value = config.HighlightColor || '#00a4dc';
 
+                    // Chargement Custom Sections
+                    try {
+                        CarouselConfigPage.customSections = JSON.parse(config.CustomSectionsJson || '[]');
+                    } catch(e) { CarouselConfigPage.customSections = []; }
+                    document.getElementById('CustomSectionsJson').value = JSON.stringify(CarouselConfigPage.customSections);
+
                     // Section order
-                    renderSectionOrder(config.SectionOrder || 'hero,continue,latest,top10,recommended,genres,collections');
+                    renderSectionOrder(config.SectionOrder || 'hero,continue,native_media,latest,top10,recommended,genres,collections');
 
                     // Card style
                     selectCardStyle(config.CardStyle || 'poster');
@@ -502,6 +601,7 @@
                     IncludedLibraries: selectedLibraries,
                     SectionOrder: getSectionOrderFromDOM(),
                     CardStyle: document.querySelector('#CardStyle').value,
+                    CustomSectionsJson: document.getElementById('CustomSectionsJson').value,
                     MinGenreItems: parseInt(document.querySelector('#MinGenreItems').value) || 3,
                     MaxGenres: parseInt(document.querySelector('#MaxGenres').value) || 12,
                     ShowContinueWatching: document.querySelector('#ShowContinueWatching').checked,

@@ -276,6 +276,36 @@
         return container;
     }
 
+    async function loadCustomSectionItems(configData, userId) {
+        let params = {
+            SortBy: 'DateCreated',
+            SortOrder: 'Descending',
+            IncludeItemTypes: 'Movie,Series',
+            Recursive: true,
+            Fields: 'PrimaryImageAspectRatio,BasicSyncInfo,ProductionYear,UserData',
+            Limit: pluginConfig.ItemsPerCarousel,
+            ImageTypeLimit: 1,
+            EnableImageTypes: 'Primary,Backdrop,Banner,Thumb'
+        };
+
+        if (pluginConfig.IncludedLibraries && pluginConfig.IncludedLibraries.length > 0) {
+            params.ParentId = pluginConfig.IncludedLibraries.join(',');
+        }
+
+        if (configData.type === 'Tags') params.Tags = configData.value;
+        if (configData.type === 'Genres') params.Genres = configData.value;
+        if (configData.type === 'Studios') params.Studios = configData.value;
+        if (configData.type === 'SearchTerm') params.SearchTerm = configData.value;
+
+        try {
+            const data = await ApiClient.getJSON(ApiClient.getUrl('Users/' + userId + '/Items', params));
+            return data.Items || [];
+        } catch (e) {
+            console.error('[MediaCarousel] Erreur loadCustomSectionItems:', e);
+            return [];
+        }
+    }
+
     async function loadCategoryItems(category, userId) {
         try {
             const params = {
@@ -574,23 +604,29 @@
         // Supprimer proactivement les doublons natifs si la config le justifie
         removeNativeDuplicates();
 
-        // Éviter la double initialisation
-        const existingContainer = document.getElementById('jellyfin-carousel-layout');
-        if (existingContainer) {
-            existingContainer.remove();
+        const mainContent = document.querySelector('.mainAnimatedPages') || document.body;
+        const sectionsContainer = document.querySelector('.homePage .sections') || mainContent.querySelector('.sections');
+
+        if (!sectionsContainer) {
+            console.error('[MediaCarousel] Container .sections introuvable dans .homePage. Mode de secours activé.');
+            return;
         }
 
-        const carouselContainer = document.createElement('div');
-        carouselContainer.className = 'carousel-main-container';
-        carouselContainer.id = 'jellyfin-carousel-layout';
+        // Activer l'entrelacement Flexbox sur le conteneur natif Jellyfin
+        sectionsContainer.style.display = 'flex';
+        sectionsContainer.style.flexDirection = 'column';
 
-        // Ajouter la classe de style de carte
+        // Nettoyer les précédents carrousels du plugin branchés
+        sectionsContainer.querySelectorAll('.carousel-plugin-row').forEach(c => c.remove());
+
+        // Ajouter la classe de style de carte globale au lieu du conteneur
         if (pluginConfig.CardStyle === 'landscape') {
-            carouselContainer.classList.add('carousel-landscape-mode');
+            document.body.classList.add('carousel-landscape-mode');
+        } else {
+            document.body.classList.remove('carousel-landscape-mode');
         }
 
-        // --- GENRES INTELLIGENTS ---
-        // Charger les Genres dynamiquement, triés par popularité (nombre d'items)
+        // Initialiser le système intelligent de genres
         if (pluginConfig.ShowGenreCategories !== false) {
             try {
                 const maxGenres = pluginConfig.MaxGenres || 12;
@@ -894,17 +930,10 @@
     --carousel-overlay-bg: var(--theme-background, var(--background-color, #141414));
 }
 
-/* Container principal */
-.carousel-main-container {
-    background-color: transparent;
-    color: var(--theme-text);
-    padding: 20px 4%;
-    min-height: 100vh;
-}
-
-/* En-tête de catégorie */
-.carousel-category {
-    margin-bottom: 3rem;
+/* En-tête de catégorie / Conteneur du row fusionné */
+.carousel-category, .carousel-plugin-row {
+    margin-bottom: 2.5rem;
+    padding: 0 4%;
 }
 
 .carousel-category-title {
