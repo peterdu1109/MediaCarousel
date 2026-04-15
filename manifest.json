@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/icon.png",
     "versions": [
       {
+        "version": "2.9.0.0",
+        "changelog": "- feat(ux): user-profile-aware top10, progress bars, ranked cards, modern glass nav arrows",
+        "targetAbi": "10.11.0.0",
+        "sourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/2.9.0/JellyfinCarouselPlugin.zip",
+        "checksum": "5d7555795befe1e6995046d8705000ce",
+        "timestamp": "2026-04-15T06:26:35Z"
+      },
+      {
         "version": "2.8.3.0",
         "changelog": "- ci: fix workflow yaml by extracting release notes python to separate script\n- fix(layout): accurate continue watching, real recommendations, custom sections render\n- docs: update README and user-friendly CI release generation",
         "targetAbi": "10.11.0.0",
