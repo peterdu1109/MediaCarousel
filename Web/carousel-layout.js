@@ -140,18 +140,40 @@
         }
     }
 
-    function createMediaCard(item) {
+    function createMediaCard(item, opts) {
+        opts = opts || {};
         const isLandscape = pluginConfig.CardStyle === 'landscape';
         const card = document.createElement('div');
         card.className = isLandscape ? 'carousel-item carousel-item-landscape' : 'carousel-item';
         card.dataset.id = item.Id;
         card.dataset.type = item.Type;
 
+        // Numéro de rang Top 10 (style Netflix : gros chiffre en filigrane)
+        if (opts.rank) {
+            const rank = document.createElement('span');
+            rank.className = 'carousel-rank';
+            rank.textContent = opts.rank;
+            card.appendChild(rank);
+            card.classList.add('carousel-item-ranked');
+        }
+
         if (hasNewEpisodes(item)) {
             const newBadge = document.createElement('div');
             newBadge.className = 'badge-new-episodes';
             newBadge.textContent = 'Nouveaux épisodes';
             card.appendChild(newBadge);
+        }
+
+        // Barre de progression pour items resumables / partiellement vus
+        const pct = item.UserData && item.UserData.PlayedPercentage;
+        if (pct && pct > 1 && pct < 100) {
+            const bar = document.createElement('div');
+            bar.className = 'carousel-progress';
+            const fill = document.createElement('div');
+            fill.className = 'carousel-progress-fill';
+            fill.style.width = Math.min(100, pct) + '%';
+            bar.appendChild(fill);
+            card.appendChild(bar);
         }
 
         if (pluginConfig.EnableFavoritesButton && item.UserData) {
@@ -207,13 +229,14 @@
         return card;
     }
 
-    function createCarouselDOM(title, items, carouselId = null) {
+    function createCarouselDOM(title, items, carouselId = null, opts = {}) {
         if (!items || items.length === 0) return null;
 
         // Utilise .verticalSection de Jellyfin pour s'intégrer nativement dans le layout
         const container = document.createElement('div');
         container.className = 'verticalSection carousel-section';
         if (carouselId) container.dataset.carouselId = carouselId;
+        if (opts.ranked) container.classList.add('carousel-section-ranked');
 
         // .sectionTitle : classe native Jellyfin pour la typographie des sections
         const h2 = document.createElement('h2');
@@ -224,21 +247,26 @@
         const carouselWrapper = document.createElement('div');
         carouselWrapper.className = 'carousel-container';
 
+        const chevron = (dir) => '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">' +
+            '<path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" d="' +
+            (dir === 'prev' ? 'M15 6l-6 6 6 6' : 'M9 6l6 6-6 6') + '"/></svg>';
+
         const prevBtn = document.createElement('button');
         prevBtn.className = 'carousel-nav-button prev';
         prevBtn.setAttribute('aria-label', 'Précédent');
-        prevBtn.textContent = '‹';
+        prevBtn.innerHTML = chevron('prev');
 
         const nextBtn = document.createElement('button');
         nextBtn.className = 'carousel-nav-button next';
         nextBtn.setAttribute('aria-label', 'Suivant');
-        nextBtn.textContent = '›';
+        nextBtn.innerHTML = chevron('next');
 
         const wrapper = document.createElement('div');
         wrapper.className = 'carousel-wrapper';
 
-        items.forEach(item => {
-            wrapper.appendChild(createMediaCard(item));
+        items.forEach((item, idx) => {
+            const cardOpts = opts.ranked ? { rank: idx + 1 } : {};
+            wrapper.appendChild(createMediaCard(item, cardOpts));
         });
 
         prevBtn.addEventListener('click', () => {
@@ -338,10 +366,18 @@
             if (category.id === 'latest') {
                 params.SortBy = 'DateCreated';
                 params.SortOrder = 'Descending';
+                params.Filters = 'IsUnplayed';
             } else if (category.id === 'top10') {
-                params.SortBy = 'PlayCount';
+                // Top 10 perso : items vraiment regardés par l'utilisateur
+                params.Filters = 'IsPlayed';
+                params.SortBy = 'PlayCount,DatePlayed';
                 params.SortOrder = 'Descending';
                 params.Limit = 10;
+                const personal = await fetchItemsSafely(userId, params);
+                if (personal && personal.length >= 3) return personal;
+                // Fallback : items les plus lus globalement
+                delete params.Filters;
+                return await fetchItemsSafely(userId, params);
             } else if (category.id === 'collections') {
                 params.SortBy = 'SortName';
                 params.SortOrder = 'Ascending';
@@ -817,7 +853,7 @@
                 const category = CONFIG.categories.find(c => c.id === sectionId);
                 if (!category || pluginConfig[category.configKey] === false) return null;
                 const items = await loadCategoryItems(category, userId);
-                const el = createCarouselDOM(category.name, items);
+                const el = createCarouselDOM(category.name, items, null, { ranked: sectionId === 'top10' });
                 return el ? { id: sectionId, el } : null;
             }
         }));
@@ -1139,9 +1175,9 @@
 }
 
 .carousel-item:hover {
-    transform: scale(1.05);
+    transform: translateY(-4px) scale(1.04);
     z-index: 10;
-    box-shadow: 0 8px 24px var(--carousel-shadow);
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.55), 0 2px 6px rgba(0, 0, 0, 0.3);
 }
 
 /* Image de la carte */
@@ -1149,27 +1185,30 @@
     width: 100%;
     height: 100%;
     object-fit: cover;
-    transition: var(--carousel-transition);
+    transition: transform 0.35s cubic-bezier(.2,.7,.2,1), filter 0.35s ease;
 }
 
 .carousel-item:hover .carousel-item-image {
-    filter: brightness(0.7);
+    filter: brightness(0.78);
+    transform: scale(1.03);
 }
 
-/* Overlay avec informations */
+/* Overlay avec informations — fondu doux au survol (plus de glissement clunky) */
 .carousel-item-overlay {
     position: absolute;
     bottom: 0;
     left: 0;
     right: 0;
-    background: linear-gradient(to top, rgba(0, 0, 0, 0.9) 0%, transparent 100%);
-    padding: 1rem;
-    transform: translateY(100%);
-    transition: var(--carousel-transition);
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.92) 0%, rgba(0, 0, 0, 0.55) 55%, transparent 100%);
+    padding: 1rem 0.9rem 0.9rem;
+    opacity: 0;
+    transition: opacity 0.28s ease;
+    pointer-events: none;
 }
 
-.carousel-item:hover .carousel-item-overlay {
-    transform: translateY(0);
+.carousel-item:hover .carousel-item-overlay,
+.carousel-item:focus-within .carousel-item-overlay {
+    opacity: 1;
 }
 
 /* Titre du média */
@@ -1268,40 +1307,95 @@
     opacity: 1;
 }
 
-/* Boutons de navigation */
+/* Boutons de navigation — chevrons circulaires glass */
 .carousel-nav-button {
     position: absolute;
-    top: 0;
-    bottom: 0;
-    background-color: rgba(0, 0, 0, 0.8);
-    color: white;
-    border: none;
-    width: 50px;
+    top: 50%;
+    transform: translateY(-50%) scale(0.92);
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border-radius: 50%;
+    background: rgba(18, 18, 18, 0.55);
+    backdrop-filter: blur(14px) saturate(140%);
+    -webkit-backdrop-filter: blur(14px) saturate(140%);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: #fff;
     cursor: pointer;
     z-index: 5;
     opacity: 0;
-    transition: opacity 0.3s ease;
-    font-size: 2rem;
     display: flex;
     align-items: center;
     justify-content: center;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    transition: opacity 0.25s ease, transform 0.25s ease, background 0.25s ease;
 }
 
-.carousel-container:hover .carousel-nav-button {
+.carousel-nav-button svg { display: block; }
+
+.carousel-container:hover .carousel-nav-button,
+.carousel-container:focus-within .carousel-nav-button {
     opacity: 1;
+    transform: translateY(-50%) scale(1);
 }
 
 .carousel-nav-button:hover {
-    background-color: rgba(0, 0, 0, 0.95);
+    background: rgba(28, 28, 28, 0.82);
+    transform: translateY(-50%) scale(1.08);
 }
 
-.carousel-nav-button.prev {
-    left: 0;
+.carousel-nav-button:active {
+    transform: translateY(-50%) scale(0.94);
 }
 
-.carousel-nav-button.next {
-    right: 0;
+.carousel-nav-button.prev { left: 8px; }
+.carousel-nav-button.next { right: 8px; }
+
+@media (hover: none) {
+    .carousel-nav-button { display: none; }
 }
+
+/* Barre de progression sur les cartes partiellement vues */
+.carousel-progress {
+    position: absolute;
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
+    height: 3px;
+    background: rgba(255, 255, 255, 0.18);
+    border-radius: 2px;
+    overflow: hidden;
+    z-index: 3;
+    pointer-events: none;
+}
+.carousel-progress-fill {
+    height: 100%;
+    background: var(--carousel-highlight, #00a4dc);
+    border-radius: 2px;
+    transition: width 0.4s ease;
+}
+
+/* Numéro de rang Top 10 — chiffre géant en bordure */
+.carousel-item-ranked {
+    position: relative;
+    padding-left: 2.4em;
+}
+.carousel-rank {
+    position: absolute;
+    left: -0.15em;
+    bottom: -0.15em;
+    font-size: 5.2em;
+    font-weight: 900;
+    line-height: 0.85;
+    color: transparent;
+    -webkit-text-stroke: 3px rgba(255, 255, 255, 0.92);
+    letter-spacing: -0.08em;
+    font-family: 'Helvetica Neue', 'Arial Black', sans-serif;
+    z-index: 1;
+    pointer-events: none;
+    text-shadow: 4px 6px 16px rgba(0, 0, 0, 0.55);
+}
+.carousel-section-ranked .carousel-wrapper { gap: 1.2rem; }
 
 /* Hero section (premier élément en grand) */
 .carousel-hero {
@@ -1466,16 +1560,12 @@
 /* Appareils tactiles : toujours afficher overlay, favori et boutons de navigation */
 @media (hover: none) {
     .carousel-item-overlay {
-        transform: translateY(0);
-        background: linear-gradient(to top, rgba(0, 0, 0, 0.8) 0%, transparent 70%);
+        opacity: 1;
+        background: linear-gradient(to top, rgba(0, 0, 0, 0.82) 0%, transparent 70%);
     }
 
     .carousel-favorite-btn {
         opacity: 1;
-    }
-
-    .carousel-nav-button {
-        display: none;
     }
 
     .carousel-item:hover {
