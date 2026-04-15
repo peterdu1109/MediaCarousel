@@ -38,7 +38,8 @@
         SectionOrder: 'hero,continue,latest,top10,recommended,genres,collections',
         CardStyle: 'poster',
         MinGenreItems: 3,
-        MaxGenres: 12
+        MaxGenres: 12,
+        CustomSectionsJson: '[]'
     };
 
     const CONFIG = {
@@ -311,6 +312,14 @@
 
     async function loadCategoryItems(category, userId) {
         try {
+            // Cas spéciaux — API dédiées Jellyfin
+            if (category.id === 'continue') {
+                return await loadContinueWatching(userId);
+            }
+            if (category.id === 'recommended') {
+                return await loadRecommended(userId);
+            }
+
             const params = {
                 UserId: userId,
                 Recursive: true,
@@ -326,20 +335,13 @@
                 params.IncludeItemTypes = 'Movie,Series';
             }
 
-            if (category.id === 'continue') {
-                params.Filters = 'IsResumable';
-                params.SortBy = 'DatePlayed';
-                params.SortOrder = 'Descending';
-            } else if (category.id === 'latest') {
+            if (category.id === 'latest') {
                 params.SortBy = 'DateCreated';
                 params.SortOrder = 'Descending';
             } else if (category.id === 'top10') {
                 params.SortBy = 'PlayCount';
                 params.SortOrder = 'Descending';
                 params.Limit = 10;
-            } else if (category.id === 'recommended') {
-                params.SortBy = 'IsFavoriteOrLiked,Random';
-                params.SortOrder = 'Descending';
             } else if (category.id === 'collections') {
                 params.SortBy = 'SortName';
                 params.SortOrder = 'Ascending';
@@ -350,6 +352,106 @@
             console.error('Erreur lors du chargement de la catégorie:', category.name, error);
             return [];
         }
+    }
+
+    // "À suivre" façon Jellyfin natif : prochains épisodes non vus + films/séries resumables
+    async function loadContinueWatching(userId) {
+        const limit = pluginConfig.ItemsPerCarousel || 20;
+        const libs = pluginConfig.IncludedLibraries || [];
+        const parentIds = libs.length > 0 ? libs : [null];
+
+        const tasks = [];
+        // NextUp — prochains épisodes par série
+        parentIds.forEach(pid => {
+            const p = {
+                UserId: userId,
+                Limit: limit,
+                Fields: 'PrimaryImageAspectRatio,MediaStreams,UserData',
+                ImageTypeLimit: 1,
+                EnableImageTypes: 'Primary,Backdrop,Thumb'
+            };
+            if (pid) p.ParentId = pid;
+            tasks.push(ApiClient.getJSON(ApiClient.getUrl('Shows/NextUp', p))
+                .then(r => (r && r.Items) ? r.Items : [])
+                .catch(() => []));
+        });
+        // Resumable films (reprise en cours)
+        parentIds.forEach(pid => {
+            const p = {
+                Recursive: true,
+                Filters: 'IsResumable',
+                IncludeItemTypes: 'Movie',
+                SortBy: 'DatePlayed',
+                SortOrder: 'Descending',
+                Limit: limit,
+                Fields: 'PrimaryImageAspectRatio,MediaStreams,UserData',
+                ImageTypeLimit: 1,
+                EnableImageTypes: 'Primary,Backdrop'
+            };
+            if (pid) p.ParentId = pid;
+            tasks.push(ApiClient.getItems(userId, p)
+                .then(r => (r && r.Items) ? r.Items : [])
+                .catch(() => []));
+        });
+
+        const results = await Promise.all(tasks);
+        const merged = [].concat(...results);
+        // Dédupe par Id
+        const seen = new Set();
+        const unique = merged.filter(it => {
+            if (!it || !it.Id || seen.has(it.Id)) return false;
+            seen.add(it.Id);
+            return true;
+        });
+        // Tri par date lue desc (fallback sur DateCreated)
+        unique.sort((a, b) => {
+            const da = new Date(a.UserData?.LastPlayedDate || a.DateCreated || 0);
+            const db = new Date(b.UserData?.LastPlayedDate || b.DateCreated || 0);
+            return db - da;
+        });
+        return unique.slice(0, limit);
+    }
+
+    // Recommandations — API dédiée Jellyfin, fallback sur favoris/random
+    async function loadRecommended(userId) {
+        const limit = pluginConfig.ItemsPerCarousel || 20;
+        try {
+            const url = ApiClient.getUrl('Movies/Recommendations', {
+                UserId: userId,
+                ItemLimit: 8,
+                CategoryLimit: 6,
+                Fields: 'PrimaryImageAspectRatio,MediaStreams,UserData',
+                ImageTypeLimit: 1,
+                EnableImageTypes: 'Primary,Backdrop'
+            });
+            const data = await ApiClient.getJSON(url);
+            const cats = Array.isArray(data) ? data : (data?.Items || []);
+            const merged = [];
+            const seen = new Set();
+            cats.forEach(cat => {
+                (cat.Items || []).forEach(it => {
+                    if (it && it.Id && !seen.has(it.Id)) {
+                        seen.add(it.Id);
+                        merged.push(it);
+                    }
+                });
+            });
+            if (merged.length > 0) return merged.slice(0, limit);
+        } catch (e) {
+            console.warn('[MediaCarousel] Movies/Recommendations indisponible, fallback', e);
+        }
+        // Fallback : favoris + random
+        return await fetchItemsSafely(userId, {
+            UserId: userId,
+            Recursive: true,
+            IncludeItemTypes: 'Movie,Series',
+            Filters: 'IsFavorite',
+            SortBy: 'Random',
+            Limit: limit,
+            Fields: 'PrimaryImageAspectRatio,MediaStreams,UserData',
+            ImageTypeLimit: 1,
+            EnableImageTypes: 'Primary,Backdrop'
+        });
     }
 
     async function loadGenreItems(genre, userId) {
@@ -671,6 +773,18 @@
         const sectionOrder = (pluginConfig.SectionOrder || 'hero,continue,latest,top10,recommended,genres,collections')
             .split(',').map(s => s.trim());
 
+        // Parser les sections personnalisées (CustomSectionsJson)
+        let customSections = [];
+        try {
+            customSections = JSON.parse(pluginConfig.CustomSectionsJson || '[]');
+            if (!Array.isArray(customSections)) customSections = [];
+        } catch (e) {
+            console.warn('[MediaCarousel] CustomSectionsJson invalide', e);
+            customSections = [];
+        }
+        const customById = {};
+        customSections.forEach(cs => { if (cs && cs.id) customById[cs.id] = cs; });
+
         // Supprimer les sections natives dupliquées par nos carrousels
         removeNativeDuplicates();
 
@@ -694,6 +808,11 @@
                 return pluginConfig.ShowGenreCategories !== false
                     ? { id: 'genres', el: genresContainer }
                     : null;
+            } else if (customById[sectionId]) {
+                const cs = customById[sectionId];
+                const items = await loadCustomSectionItems(cs, userId);
+                const el = createCarouselDOM(cs.name || 'Section', items);
+                return el ? { id: sectionId, el } : null;
             } else {
                 const category = CONFIG.categories.find(c => c.id === sectionId);
                 if (!category || pluginConfig[category.configKey] === false) return null;
