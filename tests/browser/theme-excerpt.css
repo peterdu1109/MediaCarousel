@@ -1,0 +1,33 @@
+/*
+ * Extrait des règles d'un thème Jellyfin qui entrent en collision avec nos rangées.
+ * Reproduit fidèlement ce que fait ElegantFin (installé via le Custom CSS de Jellyfin,
+ * donc chargé APRÈS notre <style id="mc-styles">) :
+ *
+ *  - il déclare ses jetons de design sur :root ;
+ *  - il impose un padding-left à .scrollX, classe que notre bande porte pour
+ *    neutraliser le changement d'onglet au balayage ;
+ *  - il redéfinit .verticalSection, classe que nos rangées portent aussi.
+ *
+ * La valeur de --sidePadding est volontairement différente de notre repli (3.3 %)
+ * pour distinguer « le jeton du thème est adopté » de « notre valeur par défaut ».
+ */
+:root {
+    --sidePadding: 10%;
+    --itemColumnGap: 0.5em;
+    --smallRadius: 1em;
+}
+
+.emby-scroller,
+.scrollX {
+    padding-left: calc(var(--sidePadding));
+}
+
+.verticalSection {
+    margin-bottom: 1em;
+    margin-top: 0.5em;
+}
+
+.layout-desktop .sectionTitle,
+.layout-tv .sectionTitle {
+    font-size: 1.5rem !important;
+}

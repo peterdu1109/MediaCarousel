@@ -33,6 +33,22 @@ Check("sans </body> ni </head> : inchange", ScriptTag.Apply(noAnchor) == noAncho
 Check("repli sur </head>", ScriptTag.Apply("<html><head><meta></head>").Contains(ScriptTag.Tag, StringComparison.Ordinal));
 Check("html minifie", ScriptTag.Apply("<body>x</body>").Contains(ScriptTag.Tag, StringComparison.Ordinal));
 
+// Cohabitation avec les autres plugins : chacun insere sa propre balise dans le meme
+// index.html. La notre doit s'ajouter sans jamais toucher aux leurs, et disparaitre
+// seule quand on la retire.
+const string foreign = "<script plugin=\"AutrePlugin\" src=\"/AutrePlugin/script.js\"></script>";
+var shared = html.Replace("</body>", foreign + "</body>", StringComparison.Ordinal);
+
+var withBoth = ScriptTag.Apply(shared);
+Console.WriteLine();
+Check("la balise d'un autre plugin est preservee a l'insertion",
+    withBoth.Contains(foreign, StringComparison.Ordinal) && withBoth.Contains(ScriptTag.Tag, StringComparison.Ordinal));
+Check("insertion idempotente en presence d'un autre plugin", ScriptTag.Apply(withBoth) == withBoth);
+
+var onlyForeign = ScriptTag.Remove(withBoth);
+Check("le retrait n'emporte que la notre",
+    onlyForeign.Contains(foreign, StringComparison.Ordinal) && !onlyForeign.Contains(ScriptTag.Tag, StringComparison.Ordinal));
+
 // Regroupement des variantes de studios. Sans cela, la rangee affiche « Warner Bros. »,
 // « Warner Bros. Pictures » et « Warner Bros. Animation » comme trois studios distincts.
 string Key(string name) => StudioNameNormalizer.Normalize(name);

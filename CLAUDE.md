@@ -231,6 +231,11 @@ si l'administrateur supprime la collection, elle est recréée au recalcul suiva
   honorés.
 - **CSS** : injecté dans un `<style id="mc-styles">`, tout est préfixé `mc-`, rien n'est surchargé
   hors de ces classes.
+- **Cohabitation avec les thèmes** : tous les réglages passent par des variables portées par
+  `.mc-row`, jamais par `:root`. Quand le thème hôte expose déjà un jeton — `--sidePadding`,
+  `--itemColumnGap`, `--smallRadius` — il est adopté, avec la valeur native de Jellyfin en repli.
+  Les couleurs de texte sont héritées : les titres réutilisent `sectionTitle`, donc ils suivent
+  le thème sans effort.
 - **Cache client** : `jellyfin-web` reconstruit le conteneur à chaque affichage de l'accueil, donc
   `render()` repart de zéro à chaque visite. `loadCached` mémorise les réponses cinq minutes —
   sans quoi chaque retour sur l'accueil relancerait les quatre requêtes alors que les classements
@@ -314,8 +319,9 @@ dotnet run --project tests/ScriptTag.Tests -c Release
 cd tests/browser && npm install && node home-rows.test.mjs && node config-page.test.mjs
 ```
 
-Trois suites sans framework — 78 assertions — exécutées en CI avant la publication ; voir
-`tests/README.md`.
+Trois suites sans framework — 88 assertions — exécutées en CI avant la publication ; voir
+`tests/README.md`. L'une charge un extrait des règles d'ElegantFin **après** les nôtres pour
+vérifier que la cohabitation tient.
 Les deux suites navigateur chargent le vrai `media-carousel.js` et le vrai `configPage.html`
 dans Chromium, avec un `ApiClient` simulé. L'une d'elles **rejoue `allowSwipe()` de
 `jellyfin-web`** : le correctif du balayage mobile tient à une classe CSS, ce test est ce qui
@@ -376,6 +382,17 @@ tout le reste de la réponse.
 **Le navigateur met `index.html` en cache :** après un changement d'intégration, un rechargement
 forcé (Ctrl+Maj+R) est nécessaire. `AssetsController` place la version du plugin en `ETag` pour
 qu'une mise à jour invalide l'ancien script.
+
+**Nos sélecteurs portent deux classes :** les rangées réutilisent `verticalSection`,
+`sectionTitle` et `scrollX` pour hériter du style natif, mais les thèmes ciblent aussi ces
+classes — ElegantFin impose par exemple `padding-left` à `.scrollX` et redéfinit
+`.verticalSection`. À spécificité égale, le vainqueur dépend de l'ordre d'insertion des
+feuilles de style, et le Custom CSS de Jellyfin est injecté **après** le nôtre. D'où
+`.mc-row .mc-strip` plutôt que `.mc-strip`, et `.verticalSection.mc-row` plutôt que `.mc-row`.
+
+**Ne masquer que les sections de Jellyfin :** `hideNativeSections` ne vise que les conteneurs
+`.section{N}` construits par `loadSections()`. Masquer tout enfant du conteneur emporterait
+les rangées injectées par d'autres plugins.
 
 **Défilement horizontal et changement d'onglet :** `allowSwipe()`
 (`jellyfin-web/src/components/maintabsmanager.js`) remonte le DOM depuis la cible du geste et

@@ -18,6 +18,8 @@
     var ROW_CLASS = 'mc-row';
     var STYLE_ID = 'mc-styles';
     var RETRY_DELAYS = [0, 400, 1200, 3000];
+    // Les sections que Jellyfin construit lui-même : `<div class="verticalSection section0">`.
+    var NATIVE_SECTION = /(^|\s)section\d+(\s|$)/;
 
     // Les classements ne sont recalculés que toutes les quelques heures côté serveur.
     // Sans ce cache, chaque retour sur l'accueil relancerait les quatre requêtes, alors que
@@ -113,99 +115,139 @@
         document.head.appendChild(style);
     }
 
+    /**
+     * Feuille de style de nos rangées.
+     *
+     * Deux règles de cohabitation avec les thèmes (ElegantFin, Custom CSS de Jellyfin) :
+     *
+     * 1. Tout est réglé par des variables portées par `.mc-row`, jamais par `:root`.
+     *    Quand le thème hôte expose déjà un jeton — `--sidePadding`, `--itemColumnGap`,
+     *    `--smallRadius` — on l'adopte, avec la valeur native de Jellyfin en repli.
+     *    Un thème ou l'administrateur peut redéfinir n'importe quel `--mc-*` sans
+     *    avoir à surcharger nos règles.
+     *
+     * 2. Nos sélecteurs portent toujours deux classes. Nos rangées réutilisent
+     *    volontairement `verticalSection`, `sectionTitle` et `scrollX` pour hériter du
+     *    style natif — mais ElegantFin cible aussi ces classes, à égalité de
+     *    spécificité. Sans ce doublement, le vainqueur dépendrait de l'ordre
+     *    d'insertion des feuilles de style, qui n'est pas sous notre contrôle.
+     */
     function buildCss(accent) {
         return [
-            ':root{--mc-accent:' + accent + ';}',
+            '.mc-row{',
+            '--mc-accent:' + accent + ';',
+            /* Jetons repris du thème hôte quand il en expose. */
+            '--mc-side-padding:var(--sidePadding,3.3%);',
+            '--mc-gap:var(--itemColumnGap,.7em);',
+            '--mc-radius:var(--smallRadius,5px);',
+            /* Jetons propres au plugin. */
+            '--mc-poster-width:120px;--mc-poster-height:180px;',
+            '--mc-tile-width:172px;--mc-tile-height:104px;',
+            '--mc-rank-size:8.5rem;--mc-rank-stroke:3px;',
+            '--mc-rank-fill:rgba(255,255,255,.16);',
+            '--mc-rank-outline:rgba(255,255,255,.62);',
+            '--mc-surface:rgba(255,255,255,.07);',
+            '--mc-surface-hover:rgba(255,255,255,.13);',
+            '--mc-scrim:rgba(0,0,0,.45);',
+            '--mc-shadow:0 4px 14px rgba(0,0,0,.45);',
+            '--mc-shadow-hover:0 8px 22px rgba(0,0,0,.6);',
+            '}',
 
-            /* Ne pas dependre de la remise a zero du client hote pour nos propres dimensions. */
+            /* Ne pas dépendre de la remise à zéro du client hôte pour nos dimensions. */
             '.mc-row *,.mc-row *::before,.mc-row *::after{box-sizing:border-box;}',
 
-            '.mc-row{margin:0 0 2.4em;}',
-            '.mc-row-header{display:flex;align-items:center;gap:.6em;flex-wrap:wrap;}',
-            '.mc-row-header .mc-row-title{margin:0;}',
+            '.verticalSection.mc-row{margin:0 0 2.4em;}',
+            '.mc-row .mc-row-header{display:flex;align-items:center;gap:.6em;flex-wrap:wrap;}',
+            '.mc-row .mc-row-header .mc-row-title{margin:0;}',
 
-            '.mc-strip-wrap{position:relative;}',
-            /* Repli si les classes natives scrollX/hiddenScrollX venaient a manquer. */
-            '.mc-strip{display:flex;gap:.7em;overflow-x:auto;overflow-y:hidden;',
-            'padding:1.6em 3.4vw 1.2em;scrollbar-width:none;-ms-overflow-style:none;}',
-            '.mc-strip::-webkit-scrollbar{display:none;}',
+            '.mc-row .mc-strip-wrap{position:relative;}',
+            /* Le padding est répété ici : ElegantFin impose son propre padding-left
+               à `.scrollX`, que notre bande porte pour neutraliser le swipe d'onglet. */
+            '.mc-row .mc-strip{display:flex;gap:var(--mc-gap);overflow-x:auto;overflow-y:hidden;',
+            'padding:1.6em var(--mc-side-padding) 1.2em;scrollbar-width:none;-ms-overflow-style:none;}',
+            '.mc-row .mc-strip::-webkit-scrollbar{display:none;}',
 
             /* Carte classée : le chiffre géant est en retrait derrière l'affiche. */
-            '.mc-card{position:relative;display:flex;align-items:flex-end;flex:0 0 auto;',
+            '.mc-row .mc-card{position:relative;display:flex;align-items:flex-end;flex:0 0 auto;',
             'text-decoration:none;color:inherit;transition:transform .18s ease;transform-origin:center bottom;}',
-            '.mc-card:hover,.mc-card:focus-visible{transform:scale(1.06);z-index:2;}',
-            '.mc-card:focus-visible{outline:3px solid var(--mc-accent);outline-offset:3px;border-radius:6px;}',
+            '.mc-row .mc-card:hover,.mc-row .mc-card:focus-visible{transform:scale(1.06);z-index:2;}',
+            '.mc-row .mc-card:focus-visible{outline:3px solid var(--mc-accent);outline-offset:3px;border-radius:6px;}',
 
             /* La couleur pleine sert de repli : sans -webkit-text-stroke, le chiffre reste lisible. */
-            '.mc-rank{font-size:8.5rem;line-height:.72;font-weight:900;font-style:italic;',
-            'color:rgba(255,255,255,.16);-webkit-text-stroke:3px rgba(255,255,255,.62);',
+            '.mc-row .mc-rank{font-size:var(--mc-rank-size);line-height:.72;font-weight:900;font-style:italic;',
+            'color:var(--mc-rank-fill);-webkit-text-stroke:var(--mc-rank-stroke) var(--mc-rank-outline);',
             'margin:0 -.28em 0 0;user-select:none;pointer-events:none;flex:0 0 auto;}',
-            '.mc-card:hover .mc-rank{-webkit-text-stroke-color:var(--mc-accent);}',
-            '.mc-rank-10{letter-spacing:-.06em;}',
+            '.mc-row .mc-card:hover .mc-rank{-webkit-text-stroke-color:var(--mc-accent);}',
+            '.mc-row .mc-rank-10{letter-spacing:-.06em;}',
 
             /* display:block est indispensable : hors conteneur flex, un span reste inline
                et ignore width/height, ce qui aplatit les cartes des rangées de genre. */
-            '.mc-poster{position:relative;display:block;width:120px;height:180px;border-radius:5px;overflow:hidden;',
-            'background:rgba(255,255,255,.07);box-shadow:0 4px 14px rgba(0,0,0,.45);flex:0 0 auto;}',
-            '.mc-poster img{width:100%;height:100%;object-fit:cover;display:block;}',
-            '.mc-card:hover .mc-poster{box-shadow:0 8px 22px rgba(0,0,0,.6);}',
+            '.mc-row .mc-poster{position:relative;display:block;overflow:hidden;flex:0 0 auto;',
+            'width:var(--mc-poster-width);height:var(--mc-poster-height);',
+            'border-radius:var(--mc-radius);background:var(--mc-surface);box-shadow:var(--mc-shadow);}',
+            '.mc-row .mc-poster img{width:100%;height:100%;object-fit:cover;display:block;}',
+            '.mc-row .mc-card:hover .mc-poster{box-shadow:var(--mc-shadow-hover);}',
 
-            '.mc-fallback{display:flex;align-items:center;justify-content:center;height:100%;',
+            '.mc-row .mc-fallback{display:flex;align-items:center;justify-content:center;height:100%;',
             'padding:.6em;text-align:center;font-size:.78em;line-height:1.25;opacity:.85;}',
 
-            '.mc-unavailable .mc-poster{opacity:.55;}',
-            '.mc-unavailable .mc-poster::after{content:attr(data-label);position:absolute;left:0;right:0;bottom:0;',
+            '.mc-row .mc-unavailable .mc-poster{opacity:.55;}',
+            '.mc-row .mc-unavailable .mc-poster::after{content:attr(data-label);position:absolute;left:0;right:0;bottom:0;',
             'padding:.3em;font-size:.62em;text-align:center;background:rgba(0,0,0,.72);}',
 
             /* Carte de studio : vignette large centrée sur le logo. */
-            '.mc-tile{flex:0 0 auto;width:172px;height:104px;border-radius:6px;overflow:hidden;position:relative;',
+            '.mc-row .mc-tile{flex:0 0 auto;position:relative;overflow:hidden;',
+            'width:var(--mc-tile-width);height:var(--mc-tile-height);border-radius:var(--mc-radius);',
             'display:flex;align-items:center;justify-content:center;padding:.9em;text-align:center;',
-            'background:rgba(255,255,255,.07);text-decoration:none;color:inherit;',
+            'background:var(--mc-surface);text-decoration:none;color:inherit;',
             'transition:transform .18s ease,background .18s ease;}',
-            '.mc-tile:hover,.mc-tile:focus-visible{transform:scale(1.05);background:rgba(255,255,255,.13);z-index:2;}',
-            '.mc-tile:focus-visible{outline:3px solid var(--mc-accent);outline-offset:3px;}',
-            '.mc-tile img{max-width:100%;max-height:100%;object-fit:contain;display:block;}',
-            '.mc-tile-name{font-size:.86em;font-weight:600;line-height:1.2;}',
+            '.mc-row .mc-tile:hover,.mc-row .mc-tile:focus-visible{transform:scale(1.05);',
+            'background:var(--mc-surface-hover);z-index:2;}',
+            '.mc-row .mc-tile:focus-visible{outline:3px solid var(--mc-accent);outline-offset:3px;}',
+            '.mc-row .mc-tile img{max-width:100%;max-height:100%;object-fit:contain;display:block;}',
+            '.mc-row .mc-tile-name{font-size:.86em;font-weight:600;line-height:1.2;}',
 
             /* Carte simple, utilisée par les rangées de genre. */
-            '.mc-plain{flex:0 0 auto;width:120px;text-decoration:none;color:inherit;',
-            'transition:transform .18s ease;}',
-            '.mc-plain:hover,.mc-plain:focus-visible{transform:scale(1.06);z-index:2;}',
-            '.mc-plain:focus-visible{outline:3px solid var(--mc-accent);outline-offset:3px;border-radius:6px;}',
-            '.mc-plain .mc-poster{width:120px;}',
-            '.mc-plain-name{margin-top:.4em;font-size:.78em;line-height:1.25;',
+            '.mc-row .mc-plain{flex:0 0 auto;width:var(--mc-poster-width);text-decoration:none;',
+            'color:inherit;transition:transform .18s ease;}',
+            '.mc-row .mc-plain:hover,.mc-row .mc-plain:focus-visible{transform:scale(1.06);z-index:2;}',
+            '.mc-row .mc-plain:focus-visible{outline:3px solid var(--mc-accent);outline-offset:3px;border-radius:6px;}',
+            '.mc-row .mc-plain-name{margin-top:.4em;font-size:.78em;line-height:1.25;',
             'display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}',
 
-            '.mc-empty{padding:0 3.4vw 1em;opacity:.6;font-size:.85em;}',
+            '.mc-row .mc-empty{padding:0 var(--mc-side-padding) 1em;opacity:.6;font-size:.85em;}',
+
+            /* Seule règle hors de notre arbre : elle s'applique aux sections de Jellyfin,
+               et doit l'emporter sur le display d'un thème. */
             '.mc-hidden-native{display:none!important;}',
 
             /* Flèches de défilement : confort souris, masquées au clavier et au tactile. */
-            '.mc-arrow{position:absolute;top:0;bottom:0;width:3.2vw;min-width:34px;border:0;cursor:pointer;',
-            'background:rgba(0,0,0,.45);color:#fff;font-size:1.5em;line-height:1;opacity:0;',
+            '.mc-row .mc-arrow{position:absolute;top:0;bottom:0;width:3.2vw;min-width:34px;border:0;cursor:pointer;',
+            'background:var(--mc-scrim);color:#fff;font-size:1.5em;line-height:1;opacity:0;',
             'transition:opacity .18s ease;z-index:3;}',
-            '.mc-arrow-prev{left:0;}',
-            '.mc-arrow-next{right:0;}',
-            '.mc-strip-wrap:hover .mc-arrow{opacity:1;}',
-            '.mc-arrow:disabled{opacity:0!important;pointer-events:none;}',
+            '.mc-row .mc-arrow-prev{left:0;}',
+            '.mc-row .mc-arrow-next{right:0;}',
+            '.mc-row .mc-strip-wrap:hover .mc-arrow{opacity:1;}',
+            '.mc-row .mc-arrow:disabled{opacity:0!important;pointer-events:none;}',
 
+            /* Les points de rupture ne redéfinissent que des jetons. */
             '@media (max-width:800px){',
-            '.mc-rank{font-size:5.6rem;-webkit-text-stroke-width:2px;}',
-            '.mc-poster,.mc-plain,.mc-plain .mc-poster{width:88px;}',
-            '.mc-poster{height:132px;}',
-            '.mc-tile{width:132px;height:80px;}',
-            '.mc-strip{padding:1.1em 3.4vw .9em;}',
+            '.mc-row{--mc-rank-size:5.6rem;--mc-rank-stroke:2px;',
+            '--mc-poster-width:88px;--mc-poster-height:132px;',
+            '--mc-tile-width:132px;--mc-tile-height:80px;}',
+            '.mc-row .mc-strip{padding:1.1em var(--mc-side-padding) .9em;}',
             '}',
 
-            '@media (hover:none){.mc-arrow{display:none;}',
-            '.mc-card:hover,.mc-tile:hover,.mc-plain:hover{transform:none;}}',
+            '@media (hover:none){.mc-row .mc-arrow{display:none;}',
+            '.mc-row .mc-card:hover,.mc-row .mc-tile:hover,.mc-row .mc-plain:hover{transform:none;}}',
 
             '@media (prefers-reduced-motion:reduce){',
-            '.mc-card,.mc-tile,.mc-plain{transition:none;}.mc-strip{scroll-behavior:auto;}',
+            '.mc-row .mc-card,.mc-row .mc-tile,.mc-row .mc-plain{transition:none;}',
+            '.mc-row .mc-strip{scroll-behavior:auto;}',
             '}',
 
             '@media (prefers-contrast:more){',
-            '.mc-rank{color:rgba(255,255,255,.5);}',
-            '.mc-tile,.mc-poster{background:rgba(255,255,255,.2);}',
+            '.mc-row{--mc-rank-fill:rgba(255,255,255,.5);--mc-surface:rgba(255,255,255,.2);}',
             '}'
         ].join('');
     }
@@ -409,6 +451,10 @@
      * Masque les sections natives de Jellyfin pour ne laisser que les bibliothèques et nos
      * rangées. N'est appliqué qu'une fois nos rangées en place : si elles n'ont pas pu être
      * chargées, la page d'accueil reste celle de Jellyfin plutôt que de se retrouver vide.
+     *
+     * Seuls les conteneurs `.section{N}` construits par `loadSections()` sont visés. Un
+     * autre plugin qui insère son propre élément dans ce conteneur n'est jamais masqué :
+     * ce réglage sert à écarter les sections de Jellyfin, pas celles des voisins.
      */
     function hideNativeSections(container, librarySection) {
         var sections = container.children;
@@ -416,7 +462,9 @@
         for (var i = 0; i < sections.length; i++) {
             var section = sections[i];
 
-            if (section === librarySection || section.classList.contains(ROW_CLASS)) {
+            if (section === librarySection
+                || section.classList.contains(ROW_CLASS)
+                || !NATIVE_SECTION.test(section.className)) {
                 continue;
             }
 

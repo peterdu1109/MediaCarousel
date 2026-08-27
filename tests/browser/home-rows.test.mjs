@@ -181,6 +181,37 @@ await page.evaluate(() => {
   document.body.style.fontFamily = 'Noto Sans, sans-serif';
 });
 
+// Troisieme passage : un theme charge APRES nos styles, comme le Custom CSS de Jellyfin.
+const themed = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+themed.on('pageerror', e => errors.push('pageerror(theme): ' + e.message));
+await themed.goto('file://' + path.join(here, 'home.html'));
+await themed.evaluate(stub);
+await themed.evaluate(script);
+await themed.waitForFunction(() => document.querySelectorAll('.mc-row').length === 8, { timeout: 8000 });
+await themed.addStyleTag({ path: path.join(here, 'theme-excerpt.css') });
+await themed.waitForTimeout(300);
+
+const theme = await themed.evaluate(() => {
+  const row = document.querySelector('.mc-row');
+  const strip = row.querySelector('.mc-strip');
+  const poster = row.querySelector('.mc-poster');
+  const styleTag = document.getElementById('mc-styles');
+  const themeTag = document.querySelector('style:last-of-type');
+  return {
+    themeLoadedAfter: styleTag.compareDocumentPosition(themeTag) & Node.DOCUMENT_POSITION_FOLLOWING ? true : false,
+    // Le jeton du theme doit etre adopte : 10 % de la largeur de la bande.
+    stripPadding: getComputedStyle(strip).paddingLeft,
+    expectedPadding: (strip.clientWidth * 0.10).toFixed(0),
+    // Notre marge doit resister a la regle .verticalSection du theme.
+    rowMarginBottom: getComputedStyle(row).marginBottom,
+    // Le rayon du theme doit etre repris.
+    posterRadius: getComputedStyle(poster).borderTopLeftRadius,
+    posterHeight: poster.getBoundingClientRect().height,
+    gap: getComputedStyle(strip).columnGap
+  };
+});
+await themed.close();
+
 // Second passage, sections natives masquees.
 const hidePage = await browser.newPage({ viewport: { width: 1280, height: 900 } });
 hidePage.on('pageerror', e => errors.push('pageerror(hide): ' + e.message));
@@ -189,6 +220,20 @@ await hidePage.goto('file://' + path.join(here, 'home.html'));
 await hidePage.evaluate(stub);
 await hidePage.evaluate(script);
 await hidePage.waitForFunction(() => document.querySelectorAll('.mc-row').length === 8, { timeout: 8000 });
+
+// Un autre plugin insere son propre element dans le conteneur de l'accueil.
+await hidePage.evaluate(() => {
+  const container = document.querySelector('#homeTab .homeSectionsContainer');
+  const foreign = document.createElement('div');
+  foreign.className = 'verticalSection otherPluginRow';
+  foreign.textContent = 'Rangee d un autre plugin';
+  container.appendChild(foreign);
+});
+await hidePage.evaluate(() => {
+  // Force un nouveau rendu pour que le masquage soit reapplique.
+  document.querySelector('#homeTab .homeSectionsContainer').appendChild(document.createElement('span'));
+});
+await hidePage.waitForTimeout(700);
 
 const hidden = await hidePage.evaluate(() => {
   const container = document.querySelector('#homeTab .homeSectionsContainer');
@@ -199,7 +244,8 @@ const hidden = await hidePage.evaluate(() => {
     libraryDisplayed: getComputedStyle(library).display !== 'none',
     nativeHidden: kids.filter(k => k.classList.contains('mc-hidden-native')).length,
     ourRowsVisible: kids.filter(k => k.classList.contains('mc-row')
-      && !k.classList.contains('mc-hidden-native')).length
+      && !k.classList.contains('mc-hidden-native')).length,
+    foreignVisible: !document.querySelector('.otherPluginRow').classList.contains('mc-hidden-native')
   };
 });
 
@@ -244,6 +290,17 @@ check('CACHE: seul le genre vide est re-interroge (resultat vide non memorise)',
 check('MASQUAGE: bibliotheques conservees', hidden.libraryVisible && hidden.libraryDisplayed, hidden);
 check('MASQUAGE: 3 sections natives masquees', hidden.nativeHidden === 3, hidden.nativeHidden);
 check('MASQUAGE: nos 8 rangees restent visibles', hidden.ourRowsVisible === 8, hidden.ourRowsVisible);
+check('MASQUAGE: la rangee d un autre plugin est epargnee', hidden.foreignVisible === true, hidden);
+
+check('THEME: la feuille du theme est bien chargee apres la notre', theme.themeLoadedAfter === true, theme);
+check('THEME: le jeton --sidePadding du theme est adopte',
+  Math.abs(parseFloat(theme.stripPadding) - Number(theme.expectedPadding)) < 2, theme);
+check('THEME: notre marge de rangee resiste a .verticalSection',
+  theme.rowMarginBottom !== '16px' && parseFloat(theme.rowMarginBottom) > 20, theme.rowMarginBottom);
+check('THEME: le rayon du theme est repris', theme.posterRadius === '16px', theme.posterRadius);
+check('THEME: la gouttiere du theme est reprise', theme.gap === '8px', theme.gap);
+check('THEME: les affiches gardent leur hauteur', theme.posterHeight === 180, theme.posterHeight);
+
 check('aucune erreur js', errors.length === 0, errors);
 
 console.log(failed === 0 ? '\nTous les tests passent.' : '\n' + failed + ' echec(s).');

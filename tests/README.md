@@ -25,6 +25,11 @@ HTML, le chargement différé des genres, le cache client, le masquage des secti
 l'accessibilité — et **rejoue la fonction `allowSwipe()` de `jellyfin-web`** pour garantir
 qu'un balayage horizontal sur mobile ne bascule pas vers l'onglet Favoris.
 
+Un dernier passage charge `theme-excerpt.css` **après** nos styles, comme le fait le Custom
+CSS de Jellyfin : c'est un extrait fidèle des règles d'ElegantFin qui entrent en collision
+avec les nôtres. Il vérifie que les jetons du thème sont adoptés et que nos propres règles
+résistent à égalité de spécificité.
+
 ## `browser/config-page.test.mjs` — page de configuration
 
 ```bash
