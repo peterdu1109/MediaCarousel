@@ -33,4 +33,22 @@ public sealed class ClientOptionsDto
 
     /// <summary>Obtient ou définit le nombre d'entrées de la rangée du Top mondial.</summary>
     public int GlobalRowSize { get; set; }
+
+    /// <summary>Obtient ou définit une valeur indiquant si la rangée des studios est active.</summary>
+    public bool ShowStudioRow { get; set; }
+
+    /// <summary>Obtient ou définit le titre de la rangée des studios.</summary>
+    public string StudioRowTitle { get; set; } = string.Empty;
+
+    /// <summary>Obtient ou définit le nombre de studios affichés.</summary>
+    public int StudioRowSize { get; set; }
+
+    /// <summary>Obtient ou définit une valeur indiquant si les rangées par genre sont actives.</summary>
+    public bool ShowGenreRows { get; set; }
+
+    /// <summary>Obtient ou définit le nombre de rangées de genre.</summary>
+    public int GenreRowCount { get; set; }
+
+    /// <summary>Obtient ou définit le nombre de titres par rangée de genre.</summary>
+    public int GenreRowItemCount { get; set; }
 }

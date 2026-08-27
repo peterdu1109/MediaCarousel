@@ -116,7 +116,13 @@ public class TopListsController : ControllerBase
             GlobalRowTitle = config.GlobalRowTitle,
             HighlightColor = config.HighlightColor,
             LocalRowSize = config.LocalTopSize,
-            GlobalRowSize = config.GlobalTopSize
+            GlobalRowSize = config.GlobalTopSize,
+            ShowStudioRow = config.EnableStudioRow,
+            StudioRowTitle = config.StudioRowTitle,
+            StudioRowSize = config.StudioRowSize,
+            ShowGenreRows = config.EnableGenreRows,
+            GenreRowCount = config.GenreRowCount,
+            GenreRowItemCount = config.GenreRowItemCount
         });
     }
 

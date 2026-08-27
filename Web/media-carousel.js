@@ -1,13 +1,15 @@
 /*
- * Media Carousel — rangées « Top 10 » façon Netflix sur la page d'accueil Jellyfin.
+ * Media Carousel — rangées d'accueil façon Netflix pour Jellyfin.
  *
  * Jellyfin ne propose aucun point d'extension serveur pour la page d'accueil : ses sections
  * sont une énumération fermée rendue par le client web. Ce script est donc la seule façon
  * d'y ajouter une rangée. Il reste volontairement minimal : il ne remplace pas la page
  * d'accueil, ne masque rien, et se contente d'insérer ses rangées sous les bibliothèques.
  *
- * Toutes les données viennent du backend du plugin, déjà calculées et mises en cache :
- * ce script ne fait aucun calcul et n'interroge jamais la bibliothèque directement.
+ * Les classements et catalogues viennent du backend du plugin, déjà calculés et mis en cache.
+ * Seules les rangées par genre interrogent l'API native de Jellyfin, page par page : ce sont
+ * des requêtes indexées et filtrées par utilisateur, exactement ce que fait la page d'accueil
+ * native pour ses propres rangées.
  */
 (function () {
     'use strict';
@@ -20,6 +22,7 @@
     var options = null;
     var rendering = false;
     var scheduled = null;
+    var sequence = 0;
     var supportsSmoothScroll = typeof document.documentElement.style.scrollBehavior === 'string';
 
     // ------------------------------------------------------------------
@@ -51,20 +54,56 @@
         return window.ApiClient.getJSON(window.ApiClient.getUrl(path, params || {}));
     }
 
+    function serverId() {
+        return window.ApiClient.serverId ? window.ApiClient.serverId() : '';
+    }
+
+    /**
+     * Reproduit les règles de routage de appRouter pour les types que nous affichons.
+     * Un dossier ouvre une liste filtrée, tout le reste ouvre une fiche.
+     */
+    function routeUrl(item) {
+        var suffix = '&serverId=' + encodeURIComponent(item.ServerId || serverId() || '');
+
+        if (item.IsFolder) {
+            return '#/list?parentId=' + encodeURIComponent(item.Id) + suffix;
+        }
+
+        return '#/details?id=' + encodeURIComponent(item.Id) + suffix;
+    }
+
+    function imageUrl(item, type, maxWidth) {
+        var tags = item.ImageTags || {};
+
+        if (!tags[type]) {
+            return null;
+        }
+
+        return window.ApiClient.getImageUrl(item.Id, {
+            type: type,
+            maxWidth: maxWidth,
+            tag: tags[type]
+        });
+    }
+
     // ------------------------------------------------------------------
     // Styles
     // ------------------------------------------------------------------
 
     function injectStyles(accent) {
+        var css = buildCss(accent);
         var existing = document.getElementById(STYLE_ID);
+
         if (existing) {
-            existing.textContent = buildCss(accent);
+            if (existing.textContent !== css) {
+                existing.textContent = css;
+            }
             return;
         }
 
         var style = document.createElement('style');
         style.id = STYLE_ID;
-        style.textContent = buildCss(accent);
+        style.textContent = css;
         document.head.appendChild(style);
     }
 
@@ -72,21 +111,26 @@
         return [
             ':root{--mc-accent:' + accent + ';}',
 
+            /* Ne pas dependre de la remise a zero du client hote pour nos propres dimensions. */
+            '.mc-row *,.mc-row *::before,.mc-row *::after{box-sizing:border-box;}',
+
             '.mc-row{margin:0 0 2.4em;}',
-            '.mc-row-header{display:flex;align-items:center;gap:.6em;}',
+            '.mc-row-header{display:flex;align-items:center;gap:.6em;flex-wrap:wrap;}',
             '.mc-row-header .mc-row-title{margin:0;}',
             '.mc-row-badge{font-size:.62em;font-weight:700;letter-spacing:.08em;text-transform:uppercase;',
             'padding:.25em .6em;border-radius:3px;background:var(--mc-accent);color:#fff;white-space:nowrap;}',
 
             '.mc-strip-wrap{position:relative;}',
-            '.mc-strip{display:flex;gap:.7em;overflow-x:auto;overflow-y:hidden;scroll-behavior:smooth;',
+            /* Repli si les classes natives scrollX/hiddenScrollX venaient a manquer. */
+            '.mc-strip{display:flex;gap:.7em;overflow-x:auto;overflow-y:hidden;',
             'padding:1.6em 3.4vw 1.2em;scrollbar-width:none;-ms-overflow-style:none;}',
             '.mc-strip::-webkit-scrollbar{display:none;}',
 
-            /* Carte : le chiffre géant est en retrait derrière l'affiche, comme sur Netflix. */
+            /* Carte classée : le chiffre géant est en retrait derrière l'affiche. */
             '.mc-card{position:relative;display:flex;align-items:flex-end;flex:0 0 auto;',
             'text-decoration:none;color:inherit;transition:transform .18s ease;transform-origin:center bottom;}',
-            '.mc-card:hover,.mc-card:focus-visible{transform:scale(1.06);z-index:2;outline:none;}',
+            '.mc-card:hover,.mc-card:focus-visible{transform:scale(1.06);z-index:2;}',
+            '.mc-card:focus-visible{outline:3px solid var(--mc-accent);outline-offset:3px;border-radius:6px;}',
 
             /* La couleur pleine sert de repli : sans -webkit-text-stroke, le chiffre reste lisible. */
             '.mc-rank{font-size:8.5rem;line-height:.72;font-weight:900;font-style:italic;',
@@ -95,12 +139,13 @@
             '.mc-card:hover .mc-rank{-webkit-text-stroke-color:var(--mc-accent);}',
             '.mc-rank-10{letter-spacing:-.06em;}',
 
-            '.mc-poster{position:relative;width:120px;height:180px;border-radius:5px;overflow:hidden;',
+            /* display:block est indispensable : hors conteneur flex, un span reste inline
+               et ignore width/height, ce qui aplatit les cartes des rangées de genre. */
+            '.mc-poster{position:relative;display:block;width:120px;height:180px;border-radius:5px;overflow:hidden;',
             'background:rgba(255,255,255,.07);box-shadow:0 4px 14px rgba(0,0,0,.45);flex:0 0 auto;}',
             '.mc-poster img{width:100%;height:100%;object-fit:cover;display:block;}',
             '.mc-card:hover .mc-poster{box-shadow:0 8px 22px rgba(0,0,0,.6);}',
 
-            /* Repli quand aucune affiche n'est disponible. */
             '.mc-fallback{display:flex;align-items:center;justify-content:center;height:100%;',
             'padding:.6em;text-align:center;font-size:.78em;line-height:1.25;opacity:.85;}',
 
@@ -108,7 +153,29 @@
             '.mc-unavailable .mc-poster::after{content:attr(data-label);position:absolute;left:0;right:0;bottom:0;',
             'padding:.3em;font-size:.62em;text-align:center;background:rgba(0,0,0,.72);}',
 
-            /* Flèches de défilement, masquées au tactile. */
+            /* Carte de studio : vignette large centrée sur le logo. */
+            '.mc-tile{flex:0 0 auto;width:172px;height:104px;border-radius:6px;overflow:hidden;position:relative;',
+            'display:flex;align-items:center;justify-content:center;padding:.9em;text-align:center;',
+            'background:rgba(255,255,255,.07);text-decoration:none;color:inherit;',
+            'transition:transform .18s ease,background .18s ease;}',
+            '.mc-tile:hover,.mc-tile:focus-visible{transform:scale(1.05);background:rgba(255,255,255,.13);z-index:2;}',
+            '.mc-tile:focus-visible{outline:3px solid var(--mc-accent);outline-offset:3px;}',
+            '.mc-tile img{max-width:100%;max-height:100%;object-fit:contain;display:block;}',
+            '.mc-tile-name{font-size:.86em;font-weight:600;line-height:1.2;}',
+            '.mc-tile-count{position:absolute;right:.5em;bottom:.35em;font-size:.62em;opacity:.65;}',
+
+            /* Carte simple, utilisée par les rangées de genre. */
+            '.mc-plain{flex:0 0 auto;width:120px;text-decoration:none;color:inherit;',
+            'transition:transform .18s ease;}',
+            '.mc-plain:hover,.mc-plain:focus-visible{transform:scale(1.06);z-index:2;}',
+            '.mc-plain:focus-visible{outline:3px solid var(--mc-accent);outline-offset:3px;border-radius:6px;}',
+            '.mc-plain .mc-poster{width:120px;}',
+            '.mc-plain-name{margin-top:.4em;font-size:.78em;line-height:1.25;',
+            'display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}',
+
+            '.mc-empty{padding:0 3.4vw 1em;opacity:.6;font-size:.85em;}',
+
+            /* Flèches de défilement : confort souris, masquées au clavier et au tactile. */
             '.mc-arrow{position:absolute;top:0;bottom:0;width:3.2vw;min-width:34px;border:0;cursor:pointer;',
             'background:rgba(0,0,0,.45);color:#fff;font-size:1.5em;line-height:1;opacity:0;',
             'transition:opacity .18s ease;z-index:3;}',
@@ -119,73 +186,118 @@
 
             '@media (max-width:800px){',
             '.mc-rank{font-size:5.6rem;-webkit-text-stroke-width:2px;}',
-            '.mc-poster{width:88px;height:132px;}',
+            '.mc-poster,.mc-plain,.mc-plain .mc-poster{width:88px;}',
+            '.mc-poster{height:132px;}',
+            '.mc-tile{width:132px;height:80px;}',
             '.mc-strip{padding:1.1em 3.4vw .9em;}',
             '}',
 
-            '@media (hover:none){.mc-arrow{display:none;}.mc-card:hover{transform:none;}}',
+            '@media (hover:none){.mc-arrow{display:none;}',
+            '.mc-card:hover,.mc-tile:hover,.mc-plain:hover{transform:none;}}',
 
             '@media (prefers-reduced-motion:reduce){',
-            '.mc-card{transition:none;}.mc-strip{scroll-behavior:auto;}',
+            '.mc-card,.mc-tile,.mc-plain{transition:none;}.mc-strip{scroll-behavior:auto;}',
+            '}',
+
+            '@media (prefers-contrast:more){',
+            '.mc-rank{color:rgba(255,255,255,.5);}',
+            '.mc-tile,.mc-poster{background:rgba(255,255,255,.2);}',
             '}'
         ].join('');
     }
 
     // ------------------------------------------------------------------
-    // Rendu
+    // Cartes
     // ------------------------------------------------------------------
 
-    function buildCard(entry, serverId) {
+    function buildRankedCard(entry) {
         var item = entry.Item;
         var inLibrary = !!item;
-        var title = escapeHtml(inLibrary ? item.Name : entry.Name);
-        var rank = entry.Rank;
-
-        var poster = '';
-        if (inLibrary && item.ImageTags && item.ImageTags.Primary) {
-            poster = '<img loading="lazy" alt="" src="' + escapeHtml(window.ApiClient.getImageUrl(item.Id, {
-                type: 'Primary',
-                maxWidth: 300,
-                tag: item.ImageTags.Primary
-            })) + '">';
-        } else if (!inLibrary && entry.PosterUrl) {
-            poster = '<img loading="lazy" alt="" src="' + escapeHtml(entry.PosterUrl) + '">';
-        } else {
-            poster = '<div class="mc-fallback">' + title + '</div>';
-        }
-
-        var attributes = 'class="mc-card' + (inLibrary ? '' : ' mc-unavailable') + '"'
-            + ' title="' + title + (entry.ProductionYear ? ' (' + entry.ProductionYear + ')' : '') + '"';
-
-        var inner = '<span class="mc-rank' + (rank >= 10 ? ' mc-rank-10' : '') + '" aria-hidden="true">' + rank + '</span>'
-            + '<span class="mc-poster"' + (inLibrary ? '' : ' data-label="Absent"') + '>' + poster + '</span>';
+        var name = inLibrary ? item.Name : entry.Name;
+        var label = name + (entry.ProductionYear ? ' (' + entry.ProductionYear + ')' : '');
+        var poster;
 
         if (inLibrary) {
-            return '<a ' + attributes + ' href="#/details?id=' + encodeURIComponent(item.Id)
-                + '&serverId=' + encodeURIComponent(item.ServerId || serverId || '') + '">' + inner + '</a>';
+            var url = imageUrl(item, 'Primary', 300);
+            poster = url
+                ? '<img loading="lazy" alt="" src="' + escapeHtml(url) + '">'
+                : '<div class="mc-fallback">' + escapeHtml(name) + '</div>';
+        } else if (entry.PosterUrl) {
+            poster = '<img loading="lazy" alt="" src="' + escapeHtml(entry.PosterUrl) + '">';
+        } else {
+            poster = '<div class="mc-fallback">' + escapeHtml(name) + '</div>';
+        }
+
+        var inner = '<span class="mc-rank' + (entry.Rank >= 10 ? ' mc-rank-10' : '') + '" aria-hidden="true">' + entry.Rank + '</span>'
+            + '<span class="mc-poster"' + (inLibrary ? '' : ' data-label="Absent"') + '>' + poster + '</span>';
+
+        var aria = escapeHtml('Numéro ' + entry.Rank + ' : ' + label);
+
+        if (inLibrary) {
+            return '<a role="listitem" class="mc-card" href="' + escapeHtml(routeUrl(item)) + '"'
+                + ' aria-label="' + aria + '">' + inner + '</a>';
         }
 
         // Titre absent de la bibliothèque : carte non cliquable plutôt qu'un lien mort.
-        return '<span ' + attributes + '>' + inner + '</span>';
+        return '<span role="listitem" class="mc-card mc-unavailable" aria-label="' + aria
+            + escapeHtml(' — absent de la bibliothèque') + '">' + inner + '</span>';
     }
 
-    function buildRow(title, badge, entries, serverId) {
-        var section = document.createElement('div');
-        section.className = 'verticalSection ' + ROW_CLASS;
+    function buildTileCard(entry) {
+        var item = entry.Item;
+        var name = entry.Name || (item && item.Name) || '';
+        var logo = item ? (imageUrl(item, 'Logo', 300) || imageUrl(item, 'Thumb', 300)) : null;
 
-        var cards = entries.map(function (entry) {
-            return buildCard(entry, serverId);
-        }).join('');
+        var content = logo
+            ? '<img loading="lazy" alt="" src="' + escapeHtml(logo) + '">'
+            : '<span class="mc-tile-name">' + escapeHtml(name) + '</span>';
+
+        var count = entry.ItemCount
+            ? '<span class="mc-tile-count" aria-hidden="true">' + entry.ItemCount + '</span>'
+            : '';
+
+        var aria = escapeHtml(name + (entry.ItemCount ? ' — ' + entry.ItemCount + ' titres' : ''));
+        var href = item ? routeUrl(item) : '#';
+
+        return '<a role="listitem" class="mc-tile" href="' + escapeHtml(href) + '"'
+            + ' aria-label="' + aria + '">' + content + count + '</a>';
+    }
+
+    function buildPlainCard(item) {
+        var url = imageUrl(item, 'Primary', 300);
+        var poster = url
+            ? '<img loading="lazy" alt="" src="' + escapeHtml(url) + '">'
+            : '<div class="mc-fallback">' + escapeHtml(item.Name) + '</div>';
+
+        return '<a role="listitem" class="mc-plain" href="' + escapeHtml(routeUrl(item)) + '"'
+            + ' aria-label="' + escapeHtml(item.Name) + '">'
+            + '<span class="mc-poster">' + poster + '</span>'
+            + '<span class="mc-plain-name">' + escapeHtml(item.Name) + '</span>'
+            + '</a>';
+    }
+
+    // ------------------------------------------------------------------
+    // Rangées
+    // ------------------------------------------------------------------
+
+    function buildRow(title, badge, cardsHtml) {
+        var section = document.createElement('div');
+        var headingId = 'mc-row-title-' + (++sequence);
+
+        section.className = 'verticalSection ' + ROW_CLASS;
+        section.setAttribute('aria-labelledby', headingId);
 
         section.innerHTML =
             '<div class="mc-row-header padded-left">'
-            + '<h2 class="sectionTitle sectionTitle-cards mc-row-title">' + escapeHtml(title) + '</h2>'
+            + '<h2 id="' + headingId + '" class="sectionTitle sectionTitle-cards mc-row-title">' + escapeHtml(title) + '</h2>'
             + (badge ? '<span class="mc-row-badge">' + escapeHtml(badge) + '</span>' : '')
             + '</div>'
             + '<div class="mc-strip-wrap">'
-            + '<button type="button" class="mc-arrow mc-arrow-prev" aria-label="Précédent">&#10094;</button>'
-            + '<div class="mc-strip">' + cards + '</div>'
-            + '<button type="button" class="mc-arrow mc-arrow-next" aria-label="Suivant">&#10095;</button>'
+            + '<button type="button" class="mc-arrow mc-arrow-prev" tabindex="-1" aria-hidden="true">&#10094;</button>'
+            // scrollX est la classe que allowSwipe() de Jellyfin recherche pour ne pas
+            // interpréter un défilement horizontal comme un changement d'onglet.
+            + '<div class="mc-strip scrollX hiddenScrollX smoothScrollX" role="list">' + (cardsHtml || '') + '</div>'
+            + '<button type="button" class="mc-arrow mc-arrow-next" tabindex="-1" aria-hidden="true">&#10095;</button>'
             + '</div>';
 
         wireArrows(section);
@@ -218,9 +330,29 @@
         next.addEventListener('click', function () { scrollBy(1); });
         strip.addEventListener('scroll', refresh, { passive: true });
 
+        section.refreshArrows = refresh;
+
         // Les images arrivent après coup : l'état des flèches doit être recalculé.
         window.setTimeout(refresh, 0);
         window.setTimeout(refresh, 800);
+    }
+
+    function fillRow(section, cardsHtml, emptyMessage) {
+        var strip = section.querySelector('.mc-strip');
+
+        if (cardsHtml) {
+            strip.innerHTML = cardsHtml;
+        } else {
+            strip.innerHTML = '';
+            var empty = document.createElement('p');
+            empty.className = 'mc-empty';
+            empty.textContent = emptyMessage;
+            section.appendChild(empty);
+        }
+
+        if (section.refreshArrows) {
+            section.refreshArrows();
+        }
     }
 
     // ------------------------------------------------------------------
@@ -232,14 +364,16 @@
      * Jellyfin construit `.homeSectionsContainer` avec un div `.section{N}` par section.
      */
     function findSectionsContainer() {
-        var tabs = document.querySelectorAll('#homeTab .homeSectionsContainer, .homeSectionsContainer');
+        var candidates = document.querySelectorAll('#homeTab .homeSectionsContainer, .homeSectionsContainer');
 
-        for (var i = 0; i < tabs.length; i++) {
-            var candidate = tabs[i];
+        for (var i = 0; i < candidates.length; i++) {
+            var candidate = candidates[i];
+
             // Ignore l'onglet Favoris et toute section masquée.
             if (candidate.closest('#favoritesTab')) {
                 continue;
             }
+
             if (candidate.offsetParent !== null || candidate.children.length > 0) {
                 return candidate;
             }
@@ -257,9 +391,11 @@
 
         for (var i = 0; i < sections.length; i++) {
             var section = sections[i];
+
             if (section.classList.contains(ROW_CLASS)) {
                 continue;
             }
+
             if (section.querySelector('.homeLibraryButton, .card[data-type="CollectionFolder"], .card[data-type="UserView"]')) {
                 return section;
             }
@@ -275,11 +411,10 @@
         rows.forEach(function (row) {
             if (anchor) {
                 anchor.insertAdjacentElement('afterend', row);
-                anchor = row;
             } else {
                 container.insertBefore(row, container.firstChild);
-                anchor = row;
             }
+            anchor = row;
         });
     }
 
@@ -298,12 +433,113 @@
         });
     }
 
-    function loadTop(path, limit) {
-        return getJson(path, { limit: limit }).then(function (result) {
+    function loadList(path, params) {
+        return getJson(path, params).then(function (result) {
             return (result && result.Items) || [];
         }, function () {
-            // Un classement indisponible ne doit pas empêcher l'autre de s'afficher.
+            // Une section indisponible ne doit pas empêcher les autres de s'afficher.
             return [];
+        });
+    }
+
+    /**
+     * Charge les titres d'un genre depuis l'API native de Jellyfin : requête indexée,
+     * paginée et déjà filtrée selon les droits de l'utilisateur courant.
+     */
+    function loadGenreItems(genreId, limit) {
+        return loadList('Items', {
+            UserId: window.ApiClient.getCurrentUserId(),
+            GenreIds: genreId,
+            IncludeItemTypes: 'Movie,Series',
+            Recursive: true,
+            Limit: limit,
+            SortBy: 'Random',
+            Fields: 'PrimaryImageAspectRatio',
+            ImageTypeLimit: 1,
+            EnableImageTypes: 'Primary',
+            EnableTotalRecordCount: false
+        });
+    }
+
+    /**
+     * Les rangées de genre sont remplies quand elles approchent du champ de vision,
+     * pour ne pas déclencher toutes les requêtes au chargement de la page.
+     */
+    function deferGenreRow(section, genre, limit) {
+        var loaded = false;
+
+        function load() {
+            if (loaded) {
+                return;
+            }
+            loaded = true;
+
+            loadGenreItems(genre.Id, limit).then(function (items) {
+                fillRow(section, items.map(buildPlainCard).join(''), 'Aucun titre dans ce genre.');
+            });
+        }
+
+        if (typeof window.IntersectionObserver !== 'function') {
+            load();
+            return;
+        }
+
+        var observer = new window.IntersectionObserver(function (entries) {
+            for (var i = 0; i < entries.length; i++) {
+                if (entries[i].isIntersecting) {
+                    observer.disconnect();
+                    load();
+                    return;
+                }
+            }
+        }, { rootMargin: '400px 0px' });
+
+        observer.observe(section);
+    }
+
+    // ------------------------------------------------------------------
+    // Rendu
+    // ------------------------------------------------------------------
+
+    function collectRows(opts) {
+        var requests = [
+            opts.ShowLocalRow ? loadList('MediaCarousel/Top/Local', { limit: opts.LocalRowSize || 10 }) : [],
+            opts.ShowGlobalRow ? loadList('MediaCarousel/Top/Global', { limit: opts.GlobalRowSize || 10 }) : [],
+            opts.ShowStudioRow ? loadList('MediaCarousel/Studios', { limit: opts.StudioRowSize || 20 }) : [],
+            opts.ShowGenreRows ? loadList('MediaCarousel/Genres', { limit: opts.GenreRowCount || 6 }) : []
+        ];
+
+        return Promise.all(requests).then(function (results) {
+            var rows = [];
+
+            if (results[0].length) {
+                rows.push(buildRow(
+                    opts.LocalRowTitle || 'Top 10 sur ce serveur',
+                    'Top 10',
+                    results[0].map(buildRankedCard).join('')));
+            }
+
+            if (results[1].length) {
+                rows.push(buildRow(
+                    opts.GlobalRowTitle || 'Top 10 mondial',
+                    'Monde',
+                    results[1].map(buildRankedCard).join('')));
+            }
+
+            if (results[2].length) {
+                rows.push(buildRow(
+                    opts.StudioRowTitle || 'Par studio',
+                    null,
+                    results[2].map(buildTileCard).join('')));
+            }
+
+            results[3].forEach(function (genre) {
+                var row = buildRow(genre.Name, null, '');
+                rows.push(row);
+                deferGenreRow(row, genre, opts.GenreRowItemCount || 20);
+            });
+
+            return rows;
         });
     }
 
@@ -320,36 +556,21 @@
         rendering = true;
 
         return loadOptions().then(function (opts) {
-            if (!opts.EnableHomeRows || (!opts.ShowLocalRow && !opts.ShowGlobalRow)) {
+            if (!opts.EnableHomeRows) {
                 return null;
             }
 
             injectStyles(opts.HighlightColor || '#e50914');
 
-            return Promise.all([
-                opts.ShowLocalRow ? loadTop('MediaCarousel/Top/Local', opts.LocalRowSize || 10) : [],
-                opts.ShowGlobalRow ? loadTop('MediaCarousel/Top/Global', opts.GlobalRowSize || 10) : []
-            ]).then(function (results) {
+            return collectRows(opts).then(function (rows) {
                 var target = findSectionsContainer();
-                if (!target || target.querySelector('.' + ROW_CLASS)) {
+
+                // La page a pu être reconstruite pendant le chargement des données.
+                if (!target || target.querySelector('.' + ROW_CLASS) || !rows.length) {
                     return null;
                 }
 
-                var serverId = window.ApiClient.serverId ? window.ApiClient.serverId() : '';
-                var rows = [];
-
-                if (results[0].length) {
-                    rows.push(buildRow(opts.LocalRowTitle || 'Top 10 sur ce serveur', 'Top 10', results[0], serverId));
-                }
-
-                if (results[1].length) {
-                    rows.push(buildRow(opts.GlobalRowTitle || 'Top 10 mondial', 'Monde', results[1], serverId));
-                }
-
-                if (rows.length) {
-                    insertRows(target, rows);
-                }
-
+                insertRows(target, rows);
                 return null;
             });
         }).catch(function (error) {

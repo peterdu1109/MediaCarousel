@@ -124,6 +124,50 @@ public class PluginConfiguration : BasePluginConfiguration
     public string MetadataLanguage { get; set; } = "fr-FR";
 
     // ------------------------------------------------------------------
+    // Rangées par studio et par genre
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// Obtient ou définit une valeur indiquant si la rangée des studios est affichée.
+    /// </summary>
+    public bool EnableStudioRow { get; set; } = true;
+
+    /// <summary>
+    /// Obtient ou définit le titre de la rangée des studios.
+    /// </summary>
+    public string StudioRowTitle { get; set; } = "Par studio";
+
+    /// <summary>
+    /// Obtient ou définit le nombre de studios affichés.
+    /// </summary>
+    public int StudioRowSize { get; set; } = 20;
+
+    /// <summary>
+    /// Obtient ou définit le nombre minimal de titres pour qu'un studio soit retenu.
+    /// </summary>
+    public int MinItemsPerStudio { get; set; } = 3;
+
+    /// <summary>
+    /// Obtient ou définit une valeur indiquant si des rangées par genre sont affichées.
+    /// </summary>
+    public bool EnableGenreRows { get; set; } = true;
+
+    /// <summary>
+    /// Obtient ou définit le nombre de genres affichés, du plus fourni au moins fourni.
+    /// </summary>
+    public int GenreRowCount { get; set; } = 6;
+
+    /// <summary>
+    /// Obtient ou définit le nombre de titres affichés par rangée de genre.
+    /// </summary>
+    public int GenreRowItemCount { get; set; } = 20;
+
+    /// <summary>
+    /// Obtient ou définit le nombre minimal de titres pour qu'un genre soit retenu.
+    /// </summary>
+    public int MinItemsPerGenre { get; set; } = 5;
+
+    // ------------------------------------------------------------------
     // Rafraîchissement et exposition
     // ------------------------------------------------------------------
 

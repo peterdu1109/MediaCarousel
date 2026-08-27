@@ -14,12 +14,14 @@
 
 ## Ce que fait le plugin
 
-Media Carousel génère **tout seul** deux classements et les tient à jour.
+Media Carousel génère **tout seul** plusieurs rangées et les tient à jour.
 
-| | Classement | D'où viennent les données |
+| | Rangée | D'où viennent les données |
 |---|---|---|
 | 🏠 | **Top du serveur** | Les statistiques de lecture de **tous** les comptes de ton serveur |
 | 🌍 | **Top mondial** | TMDB ou Trakt, rapproché de ta bibliothèque |
+| 🎬 | **Par studio** | Les studios les mieux représentés, avec leur logo |
+| 🎭 | **Par genre** | Une rangée par genre, les plus fournis en premier |
 
 <div align="center">
   <em>Rang en grand chiffre, affiche, défilement horizontal — sous tes bibliothèques.</em>
@@ -116,6 +118,25 @@ jamais la liste.
 </details>
 
 <details>
+<summary><strong>Studios et genres</strong></summary>
+
+| Réglage | Défaut | À quoi ça sert |
+|---|---|---|
+| Afficher la rangée des studios | ✅ | Vignettes des studios, logo compris |
+| Titre de la rangée | `Par studio` | |
+| Nombre de studios | `20` | |
+| Titres minimum par studio | `3` | Écarte les studios trop peu représentés |
+| Afficher des rangées par genre | ✅ | Une rangée par genre |
+| Nombre de genres | `6` | Les plus fournis en premier |
+| Titres par rangée | `20` | |
+| Titres minimum par genre | `5` | |
+
+Les rangées de genre se chargent au fur et à mesure du défilement, pour ne pas ralentir
+l'ouverture de la page d'accueil.
+
+</details>
+
+<details>
 <summary><strong>Affichage sur la page d'accueil</strong></summary>
 
 | Réglage | Défaut | À quoi ça sert |
@@ -157,6 +178,9 @@ Toutes les routes exigent une authentification Jellyfin (jeton utilisateur ou cl
 |---|---|---|
 | `GET` | `/MediaCarousel/Top/Local?limit=10` | Authentifié |
 | `GET` | `/MediaCarousel/Top/Global?limit=10` | Authentifié |
+| `GET` | `/MediaCarousel/Studios?limit=20` | Authentifié |
+| `GET` | `/MediaCarousel/Genres?limit=6` | Authentifié |
+| `GET` | `/MediaCarousel/Status` | Administrateur |
 | `POST` | `/MediaCarousel/Top/Refresh` | Administrateur |
 
 Les lectures ne déclenchent jamais de calcul : elles renvoient le dernier classement publié,

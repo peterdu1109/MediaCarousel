@@ -39,7 +39,11 @@ MediaCarousel/
 ├── build.yaml                         # Métadonnées du registre (maintenu à la main)
 ├── Api/
 │   ├── TopListsController.cs          # GET Top/Local, Top/Global, ClientOptions ; POST Top/Refresh
+│   ├── CatalogController.cs           # GET Studios, Genres
+│   ├── StatusController.cs            # GET Status (admin) : état des sections
 │   ├── TopListResponseDto.cs          # Contrat de sortie des classements
+│   ├── CatalogResponseDto.cs          # Contrat de sortie des catalogues
+│   ├── PluginStatusDto.cs             # Contrat de la page de configuration
 │   ├── ClientOptionsDto.cs            # Réglages d'affichage, lisibles sans droits admin
 │   └── AssetsController.cs            # Sert media-carousel.js depuis les ressources
 ├── Configuration/
@@ -48,7 +52,10 @@ MediaCarousel/
 ├── Models/
 │   ├── TopListKind.cs                 # Local | Global
 │   ├── TopListEntry.cs                # Une entrée classée
-│   └── TopListSnapshot.cs             # Résultat figé et immuable d'un calcul
+│   ├── TopListSnapshot.cs             # Résultat figé et immuable d'un calcul
+│   ├── CatalogKind.cs                 # Studios | Genres
+│   ├── CatalogEntry.cs                # Un studio ou un genre, avec son décompte
+│   └── CatalogSnapshot.cs             # Résultat figé d'une agrégation
 ├── Providers/
 │   ├── ITrendingProvider.cs           # Contrat d'une source externe
 │   ├── TrendingRequest.cs             # Paramètres d'interrogation
@@ -59,7 +66,9 @@ MediaCarousel/
 │   ├── TopListRefreshTask.cs          # IScheduledTask : démarrage + intervalle
 │   └── ScriptInjectionTask.cs         # IScheduledTask : intègre le script à index.html
 ├── Services/
-│   ├── ITopListStore.cs / TopListStore.cs   # Publication atomique des instantanés
+│   ├── ITopListStore.cs / TopListStore.cs   # Publication atomique des classements
+│   ├── ICatalogStore.cs / CatalogStore.cs   # Publication atomique des catalogues
+│   ├── CatalogBuilder.cs                    # Agrégation studios / genres
 │   ├── LocalTopListBuilder.cs               # Agrégation des statistiques de lecture
 │   ├── GlobalTopListBuilder.cs              # Source externe + rapprochement local
 │   ├── LibraryTitleIndex.cs                 # Index ProviderIds construit en une requête
@@ -126,6 +135,19 @@ deux indépendamment), IMDb, et titre normalisé + année en dernier recours.
 Sur-échantillonnage `size × 5` quand `GlobalTopLibraryOnly` est actif, pour remplir les places
 après filtrage.
 
+### Studios et genres
+
+`CatalogBuilder` s'appuie sur `ILibraryManager.GetStudios` / `GetGenres`, qui renvoient un
+`QueryResult<(BaseItem, ItemCounts)>`. Ces agrégations groupent sur toute la bibliothèque : elles
+sont calculées une fois par la tâche planifiée, jamais par requête. Elles ne portent aucune donnée
+de titre — seulement des noms et des décomptes — et la visibilité réelle reste appliquée par
+Jellyfin quand l'utilisateur ouvre la page d'un studio ou d'un genre.
+
+Les **titres** d'une rangée de genre ne sont pas précalculés : le script les demande à l'API native
+de Jellyfin (`/Items?GenreIds=…`), une requête indexée, paginée et déjà filtrée par utilisateur —
+exactement ce que fait la page d'accueil native pour ses propres rangées. Le chargement est différé
+par `IntersectionObserver` pour ne pas déclencher toutes les requêtes au premier rendu.
+
 ### Tolérance aux pannes
 
 `TopListRefreshService` traite les deux classements indépendamment et **conserve l'instantané
@@ -157,6 +179,11 @@ si l'administrateur supprime la collection, elle est recréée au recalcul suiva
 - **Réinjection** : `jellyfin-web` reconstruit entièrement `.homeSectionsContainer` à chaque
   affichage de l'accueil. Un `MutationObserver` débouncé, plus `hashchange` et `viewshow`,
   déclenchent un nouveau rendu ; le garde `container.querySelector('.mc-row')` évite les doublons.
+- **Accessibilité** : chaque rangée est reliée à son titre par `aria-labelledby`, la bande porte
+  `role="list"` et les cartes `role="listitem"` avec un `aria-label` explicite (« Numéro 3 : … »).
+  Les flèches sont un confort souris : `tabindex="-1"` et `aria-hidden="true"`, la navigation au
+  clavier passant par les cartes elles-mêmes. `prefers-reduced-motion` et `prefers-contrast` sont
+  honorés.
 - **CSS** : injecté dans un `<style id="mc-styles">`, tout est préfixé `mc-`, rien n'est surchargé
   hors de ces classes.
 
@@ -269,6 +296,20 @@ appelle `ApiClient.getPluginConfiguration` échoue en 403 pour un utilisateur st
 **Le navigateur met `index.html` en cache :** après un changement d'intégration, un rechargement
 forcé (Ctrl+Maj+R) est nécessaire. `AssetsController` place la version du plugin en `ETag` pour
 qu'une mise à jour invalide l'ancien script.
+
+**Défilement horizontal et changement d'onglet :** `allowSwipe()`
+(`jellyfin-web/src/components/maintabsmanager.js`) remonte le DOM depuis la cible du geste et
+n'annule le changement d'onglet que si un ancêtre porte la classe `scrollX` ou `animatedScrollX`.
+Une bande à `overflow-x:auto` **sans cette classe** fait basculer l'accueil vers l'onglet Favoris
+au moindre balayage sur mobile. Toute zone défilant horizontalement doit porter
+`scrollX hiddenScrollX smoothScrollX`.
+
+**Un `<span>` reste `display:inline` hors conteneur flex :** `width` et `height` y sont ignorés.
+Les affiches des rangées de genre, qui ne sont pas des enfants directs de la bande flex, exigent
+un `display:block` explicite.
+
+**Ne pas dépendre de la remise à zéro du client hôte :** `box-sizing: border-box` est appliqué
+explicitement sous `.mc-row`, sinon les hauteurs fixes dérivent selon le thème actif.
 
 **Filtrage de visibilité au service, pas au calcul :** le classement est global ; c'est à la lecture
 que `BaseItem.IsVisible(user)` retire ce que l'appelant n'a pas le droit de voir.

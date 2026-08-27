@@ -16,9 +16,11 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
     {
         // L'instantané des classements doit survivre entre deux requêtes : singleton obligatoire.
         serviceCollection.AddSingleton<ITopListStore, TopListStore>();
+        serviceCollection.AddSingleton<ICatalogStore, CatalogStore>();
 
         serviceCollection.AddSingleton<LocalTopListBuilder>();
         serviceCollection.AddSingleton<GlobalTopListBuilder>();
+        serviceCollection.AddSingleton<CatalogBuilder>();
         serviceCollection.AddSingleton<CollectionSynchronizer>();
         serviceCollection.AddSingleton<TopListRefreshService>();
 

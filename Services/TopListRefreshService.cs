@@ -17,8 +17,10 @@ public sealed class TopListRefreshService
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly LocalTopListBuilder _localBuilder;
     private readonly GlobalTopListBuilder _globalBuilder;
+    private readonly CatalogBuilder _catalogBuilder;
     private readonly CollectionSynchronizer _collectionSynchronizer;
     private readonly ITopListStore _store;
+    private readonly ICatalogStore _catalogStore;
     private readonly ILogger<TopListRefreshService> _logger;
 
     /// <summary>
@@ -26,20 +28,26 @@ public sealed class TopListRefreshService
     /// </summary>
     /// <param name="localBuilder">Calculateur du Top local.</param>
     /// <param name="globalBuilder">Calculateur du Top global.</param>
+    /// <param name="catalogBuilder">Agrégateur des studios et des genres.</param>
     /// <param name="collectionSynchronizer">Synchroniseur de collections.</param>
-    /// <param name="store">Stockage des instantanés.</param>
+    /// <param name="store">Stockage des classements.</param>
+    /// <param name="catalogStore">Stockage des catalogues.</param>
     /// <param name="logger">Journal.</param>
     public TopListRefreshService(
         LocalTopListBuilder localBuilder,
         GlobalTopListBuilder globalBuilder,
+        CatalogBuilder catalogBuilder,
         CollectionSynchronizer collectionSynchronizer,
         ITopListStore store,
+        ICatalogStore catalogStore,
         ILogger<TopListRefreshService> logger)
     {
         _localBuilder = localBuilder;
         _globalBuilder = globalBuilder;
+        _catalogBuilder = catalogBuilder;
         _collectionSynchronizer = collectionSynchronizer;
         _store = store;
+        _catalogStore = catalogStore;
         _logger = logger;
     }
 
@@ -82,12 +90,16 @@ public sealed class TopListRefreshService
                 configurationChanged |= await RefreshLocalAsync(config, cancellationToken).ConfigureAwait(false);
             }
 
-            progress?.Report(50);
+            progress?.Report(40);
 
             if (config.EnableGlobalTop)
             {
                 configurationChanged |= await RefreshGlobalAsync(config, cancellationToken).ConfigureAwait(false);
             }
+
+            progress?.Report(75);
+
+            RefreshCatalogs(config, cancellationToken);
 
             if (configurationChanged)
             {
@@ -99,6 +111,40 @@ public sealed class TopListRefreshService
         finally
         {
             _gate.Release();
+        }
+    }
+
+    /// <summary>
+    /// Agrège les studios et les genres. Ces catalogues ne dépendent d'aucune source externe
+    /// et sont peu coûteux : leur échec est isolé de celui des classements.
+    /// </summary>
+    private void RefreshCatalogs(PluginConfiguration config, CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (config.EnableStudioRow)
+            {
+                _catalogStore.Publish(_catalogBuilder.BuildStudios(
+                    config.StudioRowSize,
+                    config.MinItemsPerStudio,
+                    cancellationToken));
+            }
+
+            if (config.EnableGenreRows)
+            {
+                _catalogStore.Publish(_catalogBuilder.BuildGenres(
+                    config.GenreRowCount,
+                    config.MinItemsPerGenre,
+                    cancellationToken));
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Échec de l'agrégation des catalogues ; les précédents sont conservés.");
         }
     }
 
