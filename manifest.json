@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/icon.png",
     "versions": [
       {
+        "version": "3.3.0.0",
+        "changelog": "Nouveautes :\n- Configuration — Page de reglages en onglets, bandeau chiffre et alerte doublon",
+        "targetAbi": "10.11.9.0",
+        "sourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/3.3.0/JellyfinCarouselPlugin.zip",
+        "checksum": "342341372f8de28f0776539e2e3ea6db",
+        "timestamp": "2026-08-27T19:25:10Z"
+      },
+      {
         "version": "3.2.1.0",
         "changelog": "Corrections :\n- Cohabitation avec les themes et les autres plugins",
         "targetAbi": "10.11.9.0",
