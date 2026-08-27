@@ -1,19 +1,24 @@
 """Transforme des commits conventionnels en notes de version lisibles par un utilisateur.
 
-Lit les sujets de commit sur stdin (un par ligne), ecrit du Markdown sur stdout.
+Lit les sujets de commit sur stdin (un par ligne), ecrit sur stdout.
 L'objectif est qu'un utilisateur non developpeur comprenne ce qui change,
 sans jargon de commit ni prefixe technique.
+
+Deux formats :
+  (defaut)  Markdown avec titres de niveau 2, pour les notes de release GitHub.
+  --flat    Liste compacte sans titre Markdown, pour le champ changelog de
+            manifest.json que Jellyfin affiche tel quel dans son catalogue.
 """
 import re
 import sys
 
 # Ordre d'affichage des sections. La cle est le type de commit conventionnel.
 SECTIONS = [
-    ("breaking", "## Attention avant de mettre a jour"),
-    ("feat", "## Nouveautes"),
-    ("fix", "## Corrections"),
-    ("perf", "## Performances"),
-    ("other", "## Autres ameliorations"),
+    ("breaking", "Attention avant de mettre a jour"),
+    ("feat", "Nouveautes"),
+    ("fix", "Corrections"),
+    ("perf", "Performances"),
+    ("other", "Autres ameliorations"),
 ]
 
 # Types purement internes : invisibles pour l'utilisateur, donc masques.
@@ -76,6 +81,7 @@ def classify(line):
 
 
 def main():
+    flat = "--flat" in sys.argv[1:]
     buckets = {key: [] for key, _ in SECTIONS}
 
     for line in sys.stdin.read().splitlines():
@@ -94,13 +100,21 @@ def main():
 
     blocks = []
     for key, heading in SECTIONS:
-        if buckets[key]:
-            blocks.append(heading + "\n\n" + "\n".join("- " + item for item in buckets[key]))
+        if not buckets[key]:
+            continue
+
+        items = "\n".join("- " + item for item in buckets[key])
+        if flat:
+            # Jellyfin affiche ce texte brut : ni titre Markdown, ni gras.
+            blocks.append(heading + " :\n" + items.replace("**", ""))
+        else:
+            blocks.append("## " + heading + "\n\n" + items)
 
     if not blocks:
-        blocks.append("## Autres ameliorations\n\n- Corrections et ajustements divers")
+        fallback = "- Corrections et ajustements divers"
+        blocks.append(fallback if flat else "## Autres ameliorations\n\n" + fallback)
 
-    print("\n\n".join(blocks))
+    print(("\n\n" if not flat else "\n").join(blocks))
 
 
 if __name__ == "__main__":

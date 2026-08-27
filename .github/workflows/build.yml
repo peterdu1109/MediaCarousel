@@ -54,8 +54,10 @@ jobs:
           echo "$CURRENT -> $NEW_FULL"
 
           TODAY=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-          CHANGELOG=$(echo "$COMMITS" | grep -v "\[skip ci\]" | sed 's/^/- /' | head -20)
-          [ -z "$CHANGELOG" ] && CHANGELOG="- Mise a jour et corrections diverses"
+
+          # Meme mise en forme que les notes de release, en version compacte :
+          # Jellyfin affiche ce champ tel quel dans son catalogue d'extensions.
+          CHANGELOG=$(printf '%s\n' "$COMMITS" | python3 .github/scripts/release_notes.py --flat)
 
           # Prépendre une nouvelle entrée — ne jamais écraser l'historique
           jq --arg v "$NEW_FULL" --arg chg "$CHANGELOG" --arg ts "$TODAY" \
