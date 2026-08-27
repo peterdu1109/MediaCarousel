@@ -340,10 +340,30 @@ ZIP → mise à jour de `manifest.json` (`sourceUrl`, checksum, `targetAbi` `10.
 ## Ajouter un réglage
 
 1. **`Configuration/PluginConfiguration.cs`** — propriété + valeur par défaut + commentaire XML français.
-2. **`Configuration/configPage.html`** — contrôle de formulaire, puis ajout de l'identifiant dans le
-   tableau JS correspondant (`checkboxes`, `numbers`, `texts` ou `lists`). Le chargement et la
-   sauvegarde sont pilotés par ces tableaux : aucune autre modification n'est nécessaire.
-3. Consommer le réglage dans le service concerné.
+2. **`Configuration/configPage.html`** — contrôle de formulaire dans le `<div role="tabpanel">` de
+   l'onglet concerné, puis ajout de l'identifiant dans le tableau JS correspondant (`checkboxes`,
+   `numbers`, `decimals`, `texts` ou `lists`). Le chargement et la sauvegarde sont pilotés par ces
+   tableaux : **un champ absent de ces tableaux n'est ni chargé ni enregistré**, quel que soit son
+   emplacement dans la page. Penser à mettre à jour le compteur de l'onglet.
+3. Un réglage de calcul que personne ne touche après l'installation va sous le
+   `<details class="mcCfg-advanced">` de son onglet, jamais en vue directe.
+4. Consommer le réglage dans le service concerné.
+
+### Structure de la page de configuration
+
+Six onglets, un par groupe de réglages, construits avec le motif ARIA standard
+(`role="tablist"/"tab"/"tabpanel"`, `aria-selected`, roving `tabindex`, flèches et Début/Fin).
+Les `emby-tabs` de `jellyfin-web` ne sont volontairement pas utilisés : ils attendent une
+structure interne précise et instancient leur propre scroller, ce qui reviendrait à dépendre de
+détails d'implémentation du client. Seuls les `emby-button` sont réutilisés, pour l'apparence.
+
+Les panneaux d'onglet n'utilisent que `hidden`, jamais `disabled` : `disabled` est réservé à
+`applyToggle`, qui désactive les champs d'un groupe dont la case d'activation est décochée. Les
+deux mécanismes restent ainsi indépendants.
+
+L'avertissement de doublon vit **hors des onglets** : il compare `GlobalRowTitle` (onglet
+Affichage) à `GlobalCollectionName` (onglet Rafraîchissement), deux onglets différents. Le placer
+dans l'un des deux le rendrait invisible depuis l'autre.
 
 ## Ajouter une source de tendances
 
@@ -365,6 +385,11 @@ reviennent vides. De même pour `EnableUserData` et `EnableImages`. Ne demander 
 
 **Pas de calcul dans un contrôleur :** le contrôleur lit l'instantané publié. Ajouter un calcul
 synchrone dans une route bloquerait le serveur sur les grandes bibliothèques.
+
+**Un champ absent des tableaux de la page de configuration est silencieusement perdu :**
+`checkboxes`, `numbers`, `decimals`, `texts` et `lists` pilotent à la fois le chargement et la
+sauvegarde. Le test de la page vérifie que l'ensemble des identifiants du HTML et l'union de ces
+tableaux coïncident exactement.
 
 **`GET /Plugins/{id}/Configuration` est réservé aux administrateurs :** tout script client qui
 appelle `ApiClient.getPluginConfiguration` échoue en 403 pour un utilisateur standard. Passer par

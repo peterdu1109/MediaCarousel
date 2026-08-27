@@ -37,8 +37,10 @@ cd tests/browser && node config-page.test.mjs
 ```
 
 Charge `Configuration/configPage.html` avec un `ApiClient` et un `Dashboard` simulés. Vérifie
-le chargement et l'enregistrement des réglages, la révélation conditionnelle des groupes, le
-panneau d'état et les garanties d'accessibilité.
+le chargement et l'enregistrement des réglages — y compris ceux des onglets masqués et des
+replis « Réglages avancés » —, la navigation par onglets au clic et au clavier, la révélation
+conditionnelle des groupes, le bandeau d'état, l'avertissement de doublon rangée / collection,
+et les garanties d'accessibilité.
 
 ## Chromium
 
