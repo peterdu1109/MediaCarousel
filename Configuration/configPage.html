@@ -4,578 +4,251 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Configuration - Carousel Layout</title>
-    <style>
-        .layout-section-list {
-            list-style: none;
-            padding: 0;
-            margin: 10px 0;
-        }
-        .layout-section-item {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 10px 14px;
-            margin-bottom: 6px;
-            background: rgba(255,255,255,0.05);
-            border: 1px solid rgba(255,255,255,0.1);
-            border-radius: 8px;
-            cursor: grab;
-            user-select: none;
-            transition: background 0.2s, border-color 0.2s, transform 0.15s;
-        }
-        .layout-section-item:hover {
-            background: rgba(255,255,255,0.1);
-            border-color: rgba(255,255,255,0.2);
-        }
-        .layout-section-item.dragging {
-            opacity: 0.4;
-            transform: scale(0.97);
-        }
-        .layout-section-item .drag-handle {
-            color: rgba(255,255,255,0.4);
-            font-size: 1.2em;
-            cursor: grab;
-            flex-shrink: 0;
-        }
-        .layout-section-item .section-label {
-            flex: 1;
-            font-weight: 500;
-        }
-        .layout-section-item .section-icon {
-            font-size: 1.1em;
-            flex-shrink: 0;
-        }
-        .card-style-preview {
-            display: flex;
-            gap: 16px;
-            margin-top: 10px;
-        }
-        .card-style-option {
-            flex: 1;
-            text-align: center;
-            padding: 16px 12px;
-            border: 2px solid rgba(255,255,255,0.1);
-            border-radius: 10px;
-            cursor: pointer;
-            transition: all 0.25s;
-            background: rgba(255,255,255,0.03);
-        }
-        .card-style-option:hover {
-            border-color: rgba(255,255,255,0.3);
-        }
-        .card-style-option.selected {
-            border-color: var(--accent-color, #00a4dc);
-            background: rgba(0,164,220,0.1);
-        }
-        .card-style-option .preview-box {
-            width: 60px;
-            height: 90px;
-            background: rgba(255,255,255,0.15);
-            border-radius: 6px;
-            margin: 0 auto 8px;
-        }
-        .card-style-option.landscape .preview-box {
-            width: 120px;
-            height: 68px;
-        }
-        .card-style-option .style-label {
-            font-size: 0.85em;
-            color: var(--text-muted, #999);
-        }
-    </style>
+    <title>Media Carousel</title>
 </head>
 
 <body>
-    <div id="carouselConfigPage" data-role="page" class="page type-interior pluginConfigurationPage"
-        data-require="emby-input,emby-button,emby-checkbox,emby-select">
-
+    <div id="mediaCarouselConfigPage" data-role="page" class="page type-interior pluginConfigurationPage"
+         data-require="emby-input,emby-button,emby-select,emby-checkbox,emby-textarea">
         <div data-role="content">
             <div class="content-primary">
-                <form id="carouselConfigForm">
+                <form id="mediaCarouselConfigForm">
 
-                    <h2>Configuration du Carousel Layout</h2>
-                    <p style="margin-top: -10px; margin-bottom: 20px; color: var(--text-muted, #999);">
-                        Version installée : <span id="pluginVersionDisplay">Chargement...</span>
+                    <h2 class="sectionTitle">Top du serveur</h2>
+                    <p class="fieldDescription">
+                        Classement calculé à partir des statistiques de lecture de tous les comptes du serveur.
+                        Les épisodes sont comptabilisés au profit de leur série.
                     </p>
 
-                    <div class="verticalSection">
-                        <h3>Options générales</h3>
+                    <div class="checkboxContainer checkboxContainer-withDescription">
+                        <label class="emby-checkbox-label">
+                            <input is="emby-checkbox" type="checkbox" id="EnableLocalTop" />
+                            <span>Activer le Top du serveur</span>
+                        </label>
+                    </div>
 
-                        <div class="checkboxContainer">
-                            <label>
-                                <input is="emby-checkbox" type="checkbox" id="EnableCarouselLayout" />
-                                <span>Activer l'affichage en carrousel</span>
-                            </label>
-                        </div>
+                    <div class="inputContainer">
+                        <input is="emby-input" type="number" id="LocalTopSize" min="1" max="100" step="1"
+                               label="Nombre d'entrées" required />
+                    </div>
 
-                        <div class="checkboxContainer">
-                            <label>
-                                <input is="emby-checkbox" type="checkbox" id="EnableHoverAnimations" />
-                                <span>Activer les animations au survol</span>
-                            </label>
-                        </div>
+                    <div class="selectContainer">
+                        <select is="emby-select" id="LocalTopMediaKind" label="Types de médias">
+                            <option value="Movies">Films</option>
+                            <option value="Series">Séries</option>
+                            <option value="Both">Films et séries</option>
+                        </select>
+                    </div>
 
-                        <div class="checkboxContainer" style="margin-top: 15px;">
-                            <label>
-                                <input is="emby-checkbox" type="checkbox" id="HideNativeHome" />
-                                <span>Cacher l'interface d'accueil native de Jellyfin</span>
-                            </label>
-                            <div class="fieldDescription">Si décoché, les carrousels s'afficheront en haut, et les bibliothèques natives resteront en dessous.</div>
+                    <div class="inputContainer">
+                        <input is="emby-input" type="number" id="LocalTopWindowDays" min="0" max="3650" step="1"
+                               label="Fenêtre d'observation (jours)" required />
+                        <div class="fieldDescription">
+                            0 pour un palmarès historique. 30 pour un classement « tendance du mois ».
                         </div>
                     </div>
 
-                    <div class="verticalSection">
-                        <h3>Bibliothèques incluses</h3>
-                        <p style="color:var(--text-muted, #999); font-size: 0.9em; margin-top: -10px;">Cochez les bibliothèques que le carrousel a le droit d'afficher (si vide = aucune limite).</p>
-                        <div id="librariesContainer" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; margin-top: 10px;">
-                            <div style="color:var(--text-muted, #999);">Chargement des bibliothèques...</div>
+                    <div class="inputContainer">
+                        <input is="emby-input" type="number" id="MaxPlaysCountedPerUser" min="0" max="100" step="1"
+                               label="Lectures comptées au maximum par utilisateur" required />
+                        <div class="fieldDescription">
+                            Plafonne l'influence d'un utilisateur qui revoit sans cesse le même titre. 0 pour ne pas plafonner.
                         </div>
                     </div>
 
-                    <!-- LAYOUT CUSTOMISABLE -->
-                    <div class="verticalSection">
-                        <h3>🎨 Ordre des sections</h3>
-                        <p style="color:var(--text-muted, #999); font-size: 0.9em; margin-top: -10px;">Glissez-déposez pour réorganiser l'ordre d'affichage sur votre page d'accueil.</p>
-                        <ul id="sectionOrderList" class="layout-section-list">
-                            <!-- Rempli dynamiquement -->
-                        </ul>
-                    </div>
-
-                    <!-- CRÉATION SECTIONS CUSTOM -->
-                    <div class="verticalSection" style="background:var(--theme-background-secondary, rgba(0,0,0,0.2)); padding:15px; border-radius:8px;">
-                        <h3>✨ Créer une section personnalisée</h3>
-                        <p style="color:var(--text-muted, #999); font-size: 0.9em; margin-top: -10px;">Ajoutez des carrousels sur mesure (ex: par Genre, Studio, ou Recherche) qui s'intègrent dans l'ordre ci-dessus.</p>
-                        
-                        <div style="display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap;">
-                            <div class="inputContainer" style="flex:1; min-width:200px; margin-bottom:0;">
-                                <label for="CustomSectionName">Titre de la section</label>
-                                <input is="emby-input" type="text" id="CustomSectionName" placeholder="Ex: Mes films Marvel" />
-                            </div>
-                            
-                            <div class="selectContainer" style="width:150px; margin-bottom:0;">
-                                <label class="selectLabel" for="CustomSectionType">Filtrer par</label>
-                                <select is="emby-select" id="CustomSectionType">
-                                    <option value="Tags">Tag</option>
-                                    <option value="Genres">Genre</option>
-                                    <option value="Studios">Studio</option>
-                                    <option value="SearchTerm">Recherche</option>
-                                </select>
-                            </div>
-                            
-                            <div class="inputContainer" style="flex:1; min-width:150px; margin-bottom:0;">
-                                <label for="CustomSectionValue">Valeur</label>
-                                <input is="emby-input" type="text" id="CustomSectionValue" placeholder="Ex: Marvel" />
-                            </div>
-                            
-                            <button is="emby-button" type="button" class="raised button-submit" id="btnAddCustomSection" style="margin-bottom:0; height:45px;">
-                                <span>Ajouter</span>
-                            </button>
-                        </div>
-                        <input type="hidden" id="CustomSectionsJson" value="[]" />
-                    </div>
-
-                    <div class="verticalSection">
-                        <h3>🖼️ Style des cartes</h3>
-                        <div class="card-style-preview">
-                            <div class="card-style-option poster" data-style="poster" onclick="selectCardStyle('poster')">
-                                <div class="preview-box"></div>
-                                <div class="style-label">Poster (affiche)</div>
-                            </div>
-                            <div class="card-style-option landscape" data-style="landscape" onclick="selectCardStyle('landscape')">
-                                <div class="preview-box"></div>
-                                <div class="style-label">Paysage (backdrop)</div>
-                            </div>
-                        </div>
-                        <input type="hidden" id="CardStyle" value="poster" />
-                    </div>
-
-                    <div class="verticalSection">
-                        <h3>Catégories à afficher</h3>
-
-                        <div class="checkboxContainer">
-                            <label>
-                                <input is="emby-checkbox" type="checkbox" id="ShowContinueWatching" />
-                                <span>Continuer à regarder</span>
-                            </label>
-                        </div>
-
-                        <div class="checkboxContainer">
-                            <label>
-                                <input is="emby-checkbox" type="checkbox" id="ShowNewReleases" />
-                                <span>Nouveautés</span>
-                            </label>
-                        </div>
-
-                        <div class="checkboxContainer">
-                            <label>
-                                <input is="emby-checkbox" type="checkbox" id="ShowTop10" />
-                                <span>Top 10</span>
-                            </label>
-                        </div>
-
-                        <div class="checkboxContainer">
-                            <label>
-                                <input is="emby-checkbox" type="checkbox" id="ShowRecommended" />
-                                <span>Recommandés pour vous</span>
-                            </label>
-                        </div>
-
-                        <div class="checkboxContainer">
-                            <label>
-                                <input is="emby-checkbox" type="checkbox" id="ShowGenreCategories" />
-                                <span>Catégories par genre</span>
-                            </label>
-                        </div>
-
-                        <div class="checkboxContainer">
-                            <label>
-                                <input is="emby-checkbox" type="checkbox" id="ShowCollections" />
-                                <span>Collections (Boxsets)</span>
-                            </label>
+                    <div class="inputContainer">
+                        <input is="emby-input" type="number" id="CandidatesPerUser" min="10" max="1000" step="10"
+                               label="Titres candidats extraits par utilisateur" required />
+                        <div class="fieldDescription">
+                            Plus la valeur est élevée, plus le classement est précis et plus le calcul est long.
                         </div>
                     </div>
 
-                    <div class="verticalSection">
-                        <h3>🎯 Filtrage intelligent des genres</h3>
+                    <div class="inputContainer">
+                        <textarea is="emby-textarea" id="ExcludedUserIds" rows="2"
+                                  label="Utilisateurs exclus (identifiants, un par ligne)"></textarea>
+                    </div>
 
-                        <div class="inputContainer">
-                            <label for="MinGenreItems">Nombre minimum d'éléments pour afficher un genre</label>
-                            <input is="emby-input" type="number" id="MinGenreItems" min="1" max="20" step="1" />
-                            <div class="fieldDescription">Les genres avec moins de X éléments seront masqués automatiquement.</div>
-                        </div>
+                    <div class="inputContainer">
+                        <textarea is="emby-textarea" id="ExcludedLibraryIds" rows="2"
+                                  label="Bibliothèques exclues (identifiants, un par ligne)"></textarea>
+                    </div>
 
-                        <div class="inputContainer">
-                            <label for="MaxGenres">Nombre maximum de genres affichés</label>
-                            <input is="emby-input" type="number" id="MaxGenres" min="3" max="30" step="1" />
-                            <div class="fieldDescription">Seuls les genres les plus populaires seront affichés.</div>
+                    <br />
+                    <h2 class="sectionTitle">Top mondial</h2>
+                    <p class="fieldDescription">
+                        Classement récupéré auprès d'une base de données externe, puis rapproché de votre bibliothèque
+                        par identifiant TMDB ou IMDb.
+                    </p>
+
+                    <div class="checkboxContainer checkboxContainer-withDescription">
+                        <label class="emby-checkbox-label">
+                            <input is="emby-checkbox" type="checkbox" id="EnableGlobalTop" />
+                            <span>Activer le Top mondial</span>
+                        </label>
+                    </div>
+
+                    <div class="selectContainer">
+                        <select is="emby-select" id="GlobalTopProvider" label="Source">
+                            <option value="Tmdb">TMDB</option>
+                            <option value="Trakt">Trakt</option>
+                        </select>
+                    </div>
+
+                    <div class="inputContainer">
+                        <input is="emby-input" type="password" id="GlobalTopApiKey"
+                               label="Clé d'API" autocomplete="off" />
+                        <div class="fieldDescription">
+                            TMDB : clé v3 ou jeton d'accès v4. Trakt : identifiant client (Client ID).
                         </div>
                     </div>
 
-                    <div class="verticalSection">
-                        <h3>Badges et indicateurs</h3>
+                    <div class="selectContainer">
+                        <select is="emby-select" id="GlobalTopMediaKind" label="Types de médias">
+                            <option value="Movies">Films</option>
+                            <option value="Series">Séries</option>
+                            <option value="Both">Films et séries</option>
+                        </select>
+                    </div>
 
-                        <div class="checkboxContainer">
-                            <label>
-                                <input is="emby-checkbox" type="checkbox" id="ShowNewEpisodesBadge" />
-                                <span>Badge "NOUVEAUX ÉPISODES"</span>
-                            </label>
-                        </div>
+                    <div class="inputContainer">
+                        <input is="emby-input" type="number" id="GlobalTopSize" min="1" max="100" step="1"
+                               label="Nombre d'entrées" required />
+                    </div>
 
-                        <div class="checkboxContainer">
-                            <label>
-                                <input is="emby-checkbox" type="checkbox" id="ShowQualityBadge" />
-                                <span>Badge de qualité (4K, HD)</span>
-                            </label>
-                        </div>
+                    <div class="checkboxContainer checkboxContainer-withDescription">
+                        <label class="emby-checkbox-label">
+                            <input is="emby-checkbox" type="checkbox" id="GlobalTopLibraryOnly" />
+                            <span>Ne garder que les titres présents dans la bibliothèque</span>
+                        </label>
+                    </div>
 
-                        <div class="checkboxContainer">
-                            <label>
-                                <input is="emby-checkbox" type="checkbox" id="EnableFavoritesButton" />
-                                <span>Bouton "Ajouter aux favoris" au survol</span>
-                            </label>
+                    <div class="inputContainer">
+                        <input is="emby-input" type="text" id="MetadataLanguage" label="Langue des métadonnées" />
+                        <div class="fieldDescription">Code BCP-47, par exemple fr-FR.</div>
+                    </div>
+
+                    <br />
+                    <h2 class="sectionTitle">Rafraîchissement et publication</h2>
+
+                    <div class="inputContainer">
+                        <input is="emby-input" type="number" id="RefreshIntervalHours" min="1" max="168" step="1"
+                               label="Intervalle de recalcul (heures)" required />
+                        <div class="fieldDescription">
+                            La modification prend effet après redémarrage du serveur, ou via
+                            Tableau de bord → Tâches planifiées.
                         </div>
                     </div>
 
-                    <div class="verticalSection">
-                        <h3>Paramètres avancés</h3>
-
-                        <div class="selectContainer">
-                            <label class="selectLabel" for="HeroMode">Mode d'affichage de la bannière (Hero)</label>
-                            <select is="emby-select" id="HeroMode">
-                                <option value="None">Désactivé (Aucun)</option>
-                                <option value="Random">Aléatoire</option>
-                                <option value="Latest">Dernier ajout</option>
-                                <option value="Resume">Reprendre la lecture</option>
-                            </select>
-                        </div>
-
-                        <div class="inputContainer">
-                            <label for="HighlightColor">Couleur de surbrillance (Code Hex)</label>
-                            <input is="emby-input" type="color" id="HighlightColor" />
-                        </div>
-
-                        <div class="inputContainer">
-                            <label for="ItemsPerCarousel">Nombre d'elements par carrousel (max)</label>
-                            <input is="emby-input" type="number" id="ItemsPerCarousel" min="5" max="50" step="5" />
+                    <div class="checkboxContainer checkboxContainer-withDescription">
+                        <label class="emby-checkbox-label">
+                            <input is="emby-checkbox" type="checkbox" id="SyncCollections" />
+                            <span>Publier les classements sous forme de collections</span>
+                        </label>
+                        <div class="fieldDescription">
+                            Seule façon de rendre les listes visibles dans les clients existants sans modifier l'interface.
                         </div>
                     </div>
 
-                    <div class="verticalSection">
-                        <h3>🤖 IA — Recommandations Groq</h3>
-                        <p style="color:var(--text-color-secondary);margin-bottom:1rem;">
-                            Obtenez une clé API gratuite sur <strong>console.groq.com</strong>.
-                            L'IA analyse votre historique et personnalise les carrousels.
-                        </p>
-
-                        <div class="checkboxContainer">
-                            <label>
-                                <input is="emby-checkbox" type="checkbox" id="EnableGroqAi" />
-                                <span>Activer les recommandations IA</span>
-                            </label>
-                        </div>
-
-                        <div class="inputContainer">
-                            <label for="GroqApiKey">Clé API Groq</label>
-                            <input is="emby-input" type="password" id="GroqApiKey" placeholder="gsk_..." />
-                        </div>
-
-                        <div class="selectContainer">
-                            <label class="selectLabel" for="GroqModel">Modèle IA</label>
-                            <select is="emby-select" id="GroqModel">
-                                <option value="llama3-8b-8192">LLaMA 3 8B (rapide)</option>
-                                <option value="llama3-70b-8192">LLaMA 3 70B (précis)</option>
-                                <option value="mixtral-8x7b-32768">Mixtral 8x7B</option>
-                            </select>
-                        </div>
+                    <div class="inputContainer">
+                        <input is="emby-input" type="text" id="LocalCollectionName" label="Nom de la collection — Top du serveur" />
                     </div>
 
+                    <div class="inputContainer">
+                        <input is="emby-input" type="text" id="GlobalCollectionName" label="Nom de la collection — Top mondial" />
+                    </div>
+
+                    <br />
                     <div>
-                        <button is="emby-button" type="button" id="btnSave" class="raised button-submit block">
-                            <span>Sauvegarder</span>
+                        <button is="emby-button" type="submit" class="raised button-submit block">
+                            <span>Enregistrer</span>
+                        </button>
+                        <button is="emby-button" type="button" id="refreshNowButton" class="raised block">
+                            <span>Recalculer maintenant</span>
                         </button>
                     </div>
-
                 </form>
             </div>
         </div>
 
         <script type="text/javascript">
-            var CarouselConfigPage = {
-                pluginId: "191bd290-1054-4b55-a137-46c72181266b",
-                customSections: []
-            };
+            (function () {
+                var pluginId = '191bd290-1054-4b55-a137-46c72181266b';
+                var page = document.querySelector('#mediaCarouselConfigPage');
 
-            var SECTION_DEFS = {
-                'hero':        { icon: '🎬', label: 'Bannière Hero' },
-                'continue':    { icon: '▶️', label: 'Continuer à regarder' },
-                'latest':      { icon: '🆕', label: 'Nouveautés' },
-                'top10':       { icon: '🏆', label: 'Top 10' },
-                'recommended': { icon: '👍', label: 'Recommandés' },
-                'genres':      { icon: '🎭', label: 'Genres' },
-                'collections': { icon: '📦', label: 'Collections' }
-            };
+                var checkboxes = [
+                    'EnableLocalTop', 'EnableGlobalTop', 'GlobalTopLibraryOnly', 'SyncCollections'
+                ];
+                var numbers = [
+                    'LocalTopSize', 'LocalTopWindowDays', 'MaxPlaysCountedPerUser', 'CandidatesPerUser',
+                    'GlobalTopSize', 'RefreshIntervalHours'
+                ];
+                var texts = [
+                    'LocalTopMediaKind', 'GlobalTopProvider', 'GlobalTopApiKey', 'GlobalTopMediaKind',
+                    'MetadataLanguage', 'LocalCollectionName', 'GlobalCollectionName'
+                ];
+                var lists = ['ExcludedUserIds', 'ExcludedLibraryIds'];
 
-            window.selectCardStyle = function(style) {
-                document.getElementById('CardStyle').value = style;
-                document.querySelectorAll('.card-style-option').forEach(function(o) {
-                    o.classList.toggle('selected', o.dataset.style === style);
-                });
-            };
-
-            window.removeCustomSection = function(id) {
-                CarouselConfigPage.customSections = CarouselConfigPage.customSections.filter(function(c) { return c.id !== id; });
-                document.getElementById('CustomSectionsJson').value = JSON.stringify(CarouselConfigPage.customSections);
-                var currentOrder = getSectionOrderFromDOM().split(',').filter(function(x) { return x !== id; }).join(',');
-                renderSectionOrder(currentOrder);
-            };
-
-            function getSectionOrderFromDOM() {
-                var items = document.querySelectorAll('#sectionOrderList .layout-section-item');
-                var order = [];
-                for (var i = 0; i < items.length; i++) order.push(items[i].dataset.sectionId);
-                return order.join(',');
-            }
-
-            function renderSectionOrder(orderStr) {
-                var list = document.getElementById('sectionOrderList');
-                if (!list) return;
-                list.innerHTML = '';
-                var order = (orderStr || 'hero,continue,latest,top10,recommended,genres,collections').split(',');
-                order.forEach(function(sectionId) {
-                    sectionId = sectionId.trim();
-                    if (!sectionId) return;
-                    var def = SECTION_DEFS[sectionId];
-                    var isCustom = false;
-                    if (!def && sectionId.startsWith('custom_')) {
-                        var customData = CarouselConfigPage.customSections.find(function(c) { return c.id === sectionId; });
-                        if (customData) {
-                            def = { icon: '✨', label: customData.name + ' (' + customData.type + ': ' + customData.value + ')' };
-                            isCustom = true;
-                        }
-                    }
-                    if (!def) return;
-                    var li = document.createElement('li');
-                    li.className = 'layout-section-item';
-                    li.setAttribute('draggable', 'true');
-                    li.dataset.sectionId = sectionId;
-                    li.innerHTML = '<span class="drag-handle">⠿</span>' +
-                        '<span class="section-icon">' + def.icon + '</span>' +
-                        '<span class="section-label">' + def.label + '</span>' +
-                        (isCustom ? '<button type="button" onclick="removeCustomSection(\'' + sectionId + '\')" style="margin-left:auto;background:none;border:none;color:#f55;cursor:pointer;" title="Supprimer">✖</button>' : '');
-                    list.appendChild(li);
-                });
-                enableDragAndDrop(list);
-            }
-
-            function enableDragAndDrop(list) {
-                var dragged = null;
-                list.addEventListener('dragstart', function(e) {
-                    dragged = e.target.closest('.layout-section-item');
-                    if (dragged) dragged.classList.add('dragging');
-                });
-                list.addEventListener('dragend', function() {
-                    if (dragged) dragged.classList.remove('dragging');
-                    dragged = null;
-                });
-                list.addEventListener('dragover', function(e) {
-                    e.preventDefault();
-                    var target = e.target.closest('.layout-section-item');
-                    if (target && target !== dragged) {
-                        var items = Array.from(list.children);
-                        if (items.indexOf(dragged) < items.indexOf(target)) {
-                            list.insertBefore(dragged, target.nextSibling);
-                        } else {
-                            list.insertBefore(dragged, target);
-                        }
-                    }
-                });
-            }
-
-            function renderLibrariesCheckboxes(views, includedLibraries) {
-                var container = document.getElementById('librariesContainer');
-                if (!container) return;
-                if (!views || views.length === 0) {
-                    container.innerHTML = '<div style="color:var(--text-muted,#999);">Aucune bibliothèque trouvée.</div>';
-                    return;
+                function field(id) {
+                    return page.querySelector('#' + id);
                 }
-                container.innerHTML = '';
-                views.forEach(function(view) {
-                    var isChecked = !includedLibraries || includedLibraries.length === 0 || includedLibraries.indexOf(view.Id) !== -1;
-                    container.insertAdjacentHTML('beforeend',
-                        '<div class="checkboxContainer" style="margin:0;"><label>' +
-                        '<input is="emby-checkbox" type="checkbox" class="chkLibrary" data-id="' + view.Id + '"' + (isChecked ? ' checked' : '') + ' />' +
-                        '<span>' + view.Name + '</span></label></div>');
-                });
-            }
 
-            function saveConfig() {
-                Dashboard.showLoadingMsg();
+                function toList(value) {
+                    return (value || '')
+                        .split(/[\s,;]+/)
+                        .map(function (entry) { return entry.trim(); })
+                        .filter(function (entry) { return entry.length > 0; });
+                }
 
-                var chkLibraries = document.querySelectorAll('.chkLibrary');
-                var selectedLibraries = [];
-                chkLibraries.forEach(function(el) { if (el.checked) selectedLibraries.push(el.getAttribute('data-id')); });
-                if (selectedLibraries.length === chkLibraries.length) selectedLibraries = [];
+                page.addEventListener('pageshow', function () {
+                    Dashboard.showLoadingMsg();
 
-                var config = {
-                    EnableCarouselLayout:  document.getElementById('EnableCarouselLayout').checked,
-                    EnableHoverAnimations: document.getElementById('EnableHoverAnimations').checked,
-                    HideNativeHome:        document.getElementById('HideNativeHome') ? document.getElementById('HideNativeHome').checked : false,
-                    IncludedLibraries:     selectedLibraries,
-                    SectionOrder:          getSectionOrderFromDOM(),
-                    CardStyle:             document.getElementById('CardStyle').value,
-                    CustomSectionsJson:    document.getElementById('CustomSectionsJson').value,
-                    MinGenreItems:         parseInt(document.getElementById('MinGenreItems').value) || 3,
-                    MaxGenres:             parseInt(document.getElementById('MaxGenres').value) || 12,
-                    ShowContinueWatching:  document.getElementById('ShowContinueWatching').checked,
-                    ShowNewReleases:       document.getElementById('ShowNewReleases').checked,
-                    ShowTop10:             document.getElementById('ShowTop10').checked,
-                    ShowRecommended:       document.getElementById('ShowRecommended').checked,
-                    ShowGenreCategories:   document.getElementById('ShowGenreCategories').checked,
-                    ShowCollections:       document.getElementById('ShowCollections').checked,
-                    ShowNewEpisodesBadge:  document.getElementById('ShowNewEpisodesBadge').checked,
-                    ShowQualityBadge:      document.getElementById('ShowQualityBadge').checked,
-                    EnableFavoritesButton: document.getElementById('EnableFavoritesButton').checked,
-                    ItemsPerCarousel:      parseInt(document.getElementById('ItemsPerCarousel').value) || 20,
-                    HeroMode:             document.getElementById('HeroMode').value,
-                    HighlightColor:        document.getElementById('HighlightColor').value,
-                    EnableGroqAi:          document.getElementById('EnableGroqAi').checked,
-                    GroqApiKey:            document.getElementById('GroqApiKey').value,
-                    GroqModel:             document.getElementById('GroqModel').value
-                };
+                    ApiClient.getPluginConfiguration(pluginId).then(function (config) {
+                        checkboxes.forEach(function (id) { field(id).checked = !!config[id]; });
+                        numbers.forEach(function (id) { field(id).value = config[id]; });
+                        texts.forEach(function (id) { field(id).value = config[id] == null ? '' : String(config[id]); });
+                        lists.forEach(function (id) { field(id).value = (config[id] || []).join('\n'); });
 
-                ApiClient.updatePluginConfiguration(CarouselConfigPage.pluginId, config).then(function() {
-                    Dashboard.hideLoadingMsg();
-                    Dashboard.alert({ message: 'Configuration sauvegardée avec succès.', title: 'Carousel Layout' });
-                }).catch(function(err) {
-                    Dashboard.hideLoadingMsg();
-                    console.error('Erreur sauvegarde:', err);
-                    Dashboard.alert({ message: 'Erreur lors de la sauvegarde.', title: 'Carousel Layout' });
-                });
-            }
-
-            document.querySelector('#carouselConfigPage').addEventListener('pageshow', function() {
-                Dashboard.showLoadingMsg();
-
-                // Bouton Sauvegarder — click direct (emby-button ne déclenche pas form.submit)
-                var btnSave = document.getElementById('btnSave');
-                if (btnSave) btnSave.addEventListener('click', saveConfig);
-
-                // Bouton Ajouter section custom
-                var btnAdd = document.getElementById('btnAddCustomSection');
-                if (btnAdd) btnAdd.addEventListener('click', function() {
-                    var name  = document.getElementById('CustomSectionName').value.trim();
-                    var type  = document.getElementById('CustomSectionType').value;
-                    var value = document.getElementById('CustomSectionValue').value.trim();
-                    if (!name || !value) { Dashboard.alert('Veuillez remplir le titre et la valeur.'); return; }
-                    var newId = 'custom_' + Date.now();
-                    CarouselConfigPage.customSections.push({ id: newId, name: name, type: type, value: value });
-                    document.getElementById('CustomSectionsJson').value = JSON.stringify(CarouselConfigPage.customSections);
-                    document.getElementById('CustomSectionName').value = '';
-                    document.getElementById('CustomSectionValue').value = '';
-                    renderSectionOrder(getSectionOrderFromDOM() + (getSectionOrderFromDOM() ? ',' : '') + newId);
-                });
-
-                // Version plugin
-                try {
-                    ApiClient.getJSON(ApiClient.getUrl('Plugins')).then(function(plugins) {
-                        var plugin = (plugins || []).find(function(p) { return p.Id === CarouselConfigPage.pluginId; });
-                        var el = document.getElementById('pluginVersionDisplay');
-                        if (plugin && el) el.textContent = plugin.Version;
-                    }).catch(function() {});
-                } catch(e) {}
-
-                // Chargement config
-                ApiClient.getPluginConfiguration(CarouselConfigPage.pluginId).then(function(config) {
-                    document.getElementById('EnableCarouselLayout').checked  = config.EnableCarouselLayout !== false;
-                    document.getElementById('EnableHoverAnimations').checked = config.EnableHoverAnimations !== false;
-                    var hnh = document.getElementById('HideNativeHome');
-                    if (hnh) hnh.checked = config.HideNativeHome === true;
-                    document.getElementById('ShowContinueWatching').checked  = config.ShowContinueWatching !== false;
-                    document.getElementById('ShowNewReleases').checked        = config.ShowNewReleases !== false;
-                    document.getElementById('ShowTop10').checked              = config.ShowTop10 !== false;
-                    document.getElementById('ShowRecommended').checked        = config.ShowRecommended !== false;
-                    document.getElementById('ShowGenreCategories').checked    = config.ShowGenreCategories !== false;
-                    document.getElementById('ShowCollections').checked        = config.ShowCollections !== false;
-                    document.getElementById('ShowNewEpisodesBadge').checked   = config.ShowNewEpisodesBadge !== false;
-                    document.getElementById('ShowQualityBadge').checked       = config.ShowQualityBadge !== false;
-                    document.getElementById('EnableFavoritesButton').checked  = config.EnableFavoritesButton !== false;
-                    document.getElementById('ItemsPerCarousel').value         = config.ItemsPerCarousel || 20;
-                    document.getElementById('MinGenreItems').value            = config.MinGenreItems || 3;
-                    document.getElementById('MaxGenres').value                = config.MaxGenres || 12;
-                    document.getElementById('HeroMode').value                 = config.HeroMode || 'Random';
-                    document.getElementById('HighlightColor').value           = config.HighlightColor || '#00a4dc';
-                    document.getElementById('EnableGroqAi').checked           = config.EnableGroqAi === true;
-                    document.getElementById('GroqApiKey').value               = config.GroqApiKey || '';
-                    document.getElementById('GroqModel').value                = config.GroqModel || 'llama3-8b-8192';
-
-                    try {
-                        CarouselConfigPage.customSections = JSON.parse(config.CustomSectionsJson || '[]');
-                    } catch(e) { CarouselConfigPage.customSections = []; }
-                    document.getElementById('CustomSectionsJson').value = JSON.stringify(CarouselConfigPage.customSections);
-
-                    renderSectionOrder(config.SectionOrder || 'hero,continue,latest,top10,recommended,genres,collections');
-                    selectCardStyle(config.CardStyle || 'poster');
-
-                    // Bibliothèques
-                    var userId = ApiClient.getCurrentUserId();
-                    if (userId) {
-                        ApiClient.getUserViews(userId).then(function(result) {
-                            renderLibrariesCheckboxes(result.Items || [], config.IncludedLibraries || []);
-                            Dashboard.hideLoadingMsg();
-                        }).catch(function() {
-                            renderLibrariesCheckboxes([], []);
-                            Dashboard.hideLoadingMsg();
-                        });
-                    } else {
-                        renderLibrariesCheckboxes([], []);
                         Dashboard.hideLoadingMsg();
-                    }
-                }).catch(function(err) {
-                    console.error('Erreur chargement config:', err);
-                    Dashboard.hideLoadingMsg();
+                    }, function () {
+                        Dashboard.hideLoadingMsg();
+                        Dashboard.alert('Impossible de charger la configuration du plugin.');
+                    });
                 });
-            });
+
+                page.querySelector('#mediaCarouselConfigForm').addEventListener('submit', function (event) {
+                    event.preventDefault();
+                    Dashboard.showLoadingMsg();
+
+                    ApiClient.getPluginConfiguration(pluginId).then(function (config) {
+                        checkboxes.forEach(function (id) { config[id] = field(id).checked; });
+                        numbers.forEach(function (id) { config[id] = parseInt(field(id).value, 10) || 0; });
+                        texts.forEach(function (id) { config[id] = field(id).value; });
+                        lists.forEach(function (id) { config[id] = toList(field(id).value); });
+
+                        ApiClient.updatePluginConfiguration(pluginId, config).then(function (result) {
+                            Dashboard.processPluginConfigurationUpdateResult(result);
+                        });
+                    });
+
+                    return false;
+                });
+
+                page.querySelector('#refreshNowButton').addEventListener('click', function () {
+                    Dashboard.showLoadingMsg();
+
+                    ApiClient.ajax({
+                        type: 'POST',
+                        url: ApiClient.getUrl('MediaCarousel/Top/Refresh')
+                    }).then(function () {
+                        Dashboard.hideLoadingMsg();
+                        Dashboard.alert('Recalcul lancé. Consultez le journal du serveur pour suivre son avancement.');
+                    }, function () {
+                        Dashboard.hideLoadingMsg();
+                        Dashboard.alert('Le recalcul n\'a pas pu être lancé.');
+                    });
+                });
+            })();
         </script>
     </div>
 </body>

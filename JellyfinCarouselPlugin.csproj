@@ -7,25 +7,35 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
     <Nullable>enable</Nullable>
+    <!-- Le serveur fournit toutes les dépendances : le paquet ne doit contenir que notre assembly. -->
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Jellyfin.Model" Version="10.11.8">
+    <!--
+      Références de compilation uniquement : Jellyfin charge ses propres assemblys à l'exécution.
+      Jellyfin.Data et Jellyfin.Database.Implementations arrivent transitivement mais sont déclarés
+      explicitement pour que ExcludeAssets s'applique aussi à eux.
+    -->
+    <PackageReference Include="Jellyfin.Controller" Version="10.11.11">
       <PrivateAssets>all</PrivateAssets>
       <ExcludeAssets>runtime</ExcludeAssets>
     </PackageReference>
-    <PackageReference Include="Jellyfin.Controller" Version="10.11.8">
+    <PackageReference Include="Jellyfin.Model" Version="10.11.11">
       <PrivateAssets>all</PrivateAssets>
       <ExcludeAssets>runtime</ExcludeAssets>
     </PackageReference>
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.3">
+    <PackageReference Include="Jellyfin.Data" Version="10.11.11">
+      <PrivateAssets>all</PrivateAssets>
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </PackageReference>
+    <PackageReference Include="Jellyfin.Database.Implementations" Version="10.11.11">
       <PrivateAssets>all</PrivateAssets>
       <ExcludeAssets>runtime</ExcludeAssets>
     </PackageReference>
   </ItemGroup>
 
   <ItemGroup>
-    <EmbeddedResource Include="Web\**\*.*" />
     <EmbeddedResource Include="Configuration\**\*.html" />
   </ItemGroup>
 

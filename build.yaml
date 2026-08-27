@@ -1,8 +1,8 @@
 ---
 guid: 191bd290-1054-4b55-a137-46c72181266b
-name: Carousel Layout
-description: "Transforme la page d'accueil Jellyfin en interface Netflix avec carrousels horizontaux"
-overview: "Interface Netflix pour Jellyfin — carrousels, Hero, 16 genres, IA Groq"
+name: Media Carousel
+description: "Genere automatiquement un Top du serveur (statistiques de lecture) et un Top mondial (TMDB / Trakt), entierement cote serveur"
+overview: "Classements dynamiques cote serveur : Top local et Top mondial"
 category: General
 owner: peterdu1109
 versions:

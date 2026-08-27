@@ -1,3 +1,5 @@
+using JellyfinCarouselPlugin.Providers;
+using JellyfinCarouselPlugin.Services;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Plugins;
 using Microsoft.Extensions.DependencyInjection;
@@ -5,14 +7,23 @@ using Microsoft.Extensions.DependencyInjection;
 namespace JellyfinCarouselPlugin;
 
 /// <summary>
-/// Enregistre les services du plugin dans le conteneur d'injection de dépendances de Jellyfin
+/// Enregistre les services du plugin dans le conteneur d'injection de dépendances de Jellyfin.
 /// </summary>
 public class PluginServiceRegistrator : IPluginServiceRegistrator
 {
     /// <inheritdoc />
     public void RegisterServices(IServiceCollection serviceCollection, IServerApplicationHost applicationHost)
     {
-        // CarouselStartupTask est un IScheduledTask, découvert automatiquement par Jellyfin.
-        // Aucun enregistrement manuel nécessaire.
+        // L'instantané des classements doit survivre entre deux requêtes : singleton obligatoire.
+        serviceCollection.AddSingleton<ITopListStore, TopListStore>();
+
+        serviceCollection.AddSingleton<LocalTopListBuilder>();
+        serviceCollection.AddSingleton<GlobalTopListBuilder>();
+        serviceCollection.AddSingleton<CollectionSynchronizer>();
+        serviceCollection.AddSingleton<TopListRefreshService>();
+
+        // Les sources externes sont injectées en liste ; le fournisseur actif est choisi à l'exécution.
+        serviceCollection.AddSingleton<ITrendingProvider, TmdbTrendingProvider>();
+        serviceCollection.AddSingleton<ITrendingProvider, TraktTrendingProvider>();
     }
 }

@@ -1,130 +1,162 @@
+using System;
 using MediaBrowser.Model.Plugins;
 
 namespace JellyfinCarouselPlugin.Configuration;
 
 /// <summary>
-/// Configuration pour le plugin Carousel Layout
+/// Fournisseur de tendances externes utilisable pour le Top global.
+/// </summary>
+public enum TrendingProviderKind
+{
+    /// <summary>The Movie Database (https://www.themoviedb.org).</summary>
+    Tmdb = 0,
+
+    /// <summary>Trakt (https://trakt.tv).</summary>
+    Trakt = 1
+}
+
+/// <summary>
+/// Type de médias pris en compte par un classement.
+/// </summary>
+public enum TopListMediaKind
+{
+    /// <summary>Films uniquement.</summary>
+    Movies = 0,
+
+    /// <summary>Séries uniquement.</summary>
+    Series = 1,
+
+    /// <summary>Films et séries.</summary>
+    Both = 2
+}
+
+/// <summary>
+/// Configuration du plugin MediaCarousel.
 /// </summary>
 public class PluginConfiguration : BasePluginConfiguration
 {
-    /// <summary>
-    /// Active ou désactive l'affichage en carrousel
-    /// </summary>
-    public bool EnableCarouselLayout { get; set; } = true;
+    // ------------------------------------------------------------------
+    // Top 10 local (statistiques de lecture du serveur)
+    // ------------------------------------------------------------------
 
     /// <summary>
-    /// Active la catégorie "Nouveautés"
+    /// Obtient ou définit une valeur indiquant si le Top local est calculé.
     /// </summary>
-    public bool ShowNewReleases { get; set; } = true;
+    public bool EnableLocalTop { get; set; } = true;
 
     /// <summary>
-    /// Active la catégorie "Top 10"
+    /// Obtient ou définit le nombre d'entrées conservées dans le Top local.
     /// </summary>
-    public bool ShowTop10 { get; set; } = true;
+    public int LocalTopSize { get; set; } = 10;
 
     /// <summary>
-    /// Active la catégorie "Continuer à regarder"
+    /// Obtient ou définit les types de médias classés dans le Top local.
     /// </summary>
-    public bool ShowContinueWatching { get; set; } = true;
+    public TopListMediaKind LocalTopMediaKind { get; set; } = TopListMediaKind.Both;
 
     /// <summary>
-    /// Active la catégorie "Recommandés"
+    /// Obtient ou définit la fenêtre d'observation en jours (0 = depuis toujours).
+    /// Une fenêtre courte produit un classement « tendance », une fenêtre nulle un palmarès historique.
     /// </summary>
-    public bool ShowRecommended { get; set; } = true;
+    public int LocalTopWindowDays { get; set; } = 30;
 
     /// <summary>
-    /// Active les catégories par genre
+    /// Obtient ou définit le nombre maximal de lectures comptabilisées par utilisateur et par titre.
+    /// Empêche qu'un seul utilisateur qui revoit un film 40 fois écrase le classement. 0 = pas de plafond.
     /// </summary>
-    public bool ShowGenreCategories { get; set; } = true;
+    public int MaxPlaysCountedPerUser { get; set; } = 3;
 
     /// <summary>
-    /// Active le badge "NOUVEAUX ÉPISODES"
+    /// Obtient ou définit le nombre de titres candidats extraits par utilisateur avant agrégation.
+    /// Plus la valeur est haute, plus le classement est exact et plus le calcul est long.
     /// </summary>
-    public bool ShowNewEpisodesBadge { get; set; } = true;
+    public int CandidatesPerUser { get; set; } = 100;
 
     /// <summary>
-    /// Active l'affichage de la qualité (4K, HD, etc.)
+    /// Obtient ou définit les identifiants des utilisateurs exclus du calcul (comptes de service, invités).
     /// </summary>
-    public bool ShowQualityBadge { get; set; } = true;
+    public string[] ExcludedUserIds { get; set; } = Array.Empty<string>();
 
     /// <summary>
-    /// Nombre d'éléments par carrousel
+    /// Obtient ou définit les identifiants des bibliothèques exclues des classements.
     /// </summary>
-    public int ItemsPerCarousel { get; set; } = 20;
+    public string[] ExcludedLibraryIds { get; set; } = Array.Empty<string>();
+
+    // ------------------------------------------------------------------
+    // Top 10 global (base de données externe)
+    // ------------------------------------------------------------------
 
     /// <summary>
-    /// Active les animations de hover
+    /// Obtient ou définit une valeur indiquant si le Top global est récupéré.
     /// </summary>
-    public bool EnableHoverAnimations { get; set; } = true;
+    public bool EnableGlobalTop { get; set; }
 
     /// <summary>
-    /// Cache l'interface native de Jellyfin
+    /// Obtient ou définit le fournisseur de tendances externe.
     /// </summary>
-    public bool HideNativeHome { get; set; } = false;
+    public TrendingProviderKind GlobalTopProvider { get; set; } = TrendingProviderKind.Tmdb;
 
     /// <summary>
-    /// Liste des ID de bibliothèques (Views) incluses dans le carrousel
+    /// Obtient ou définit la clé d'API du fournisseur.
+    /// TMDB : clé v3 ou jeton d'accès v4. Trakt : identifiant client.
     /// </summary>
-    public string[] IncludedLibraries { get; set; } = new string[0];
+    public string GlobalTopApiKey { get; set; } = string.Empty;
 
     /// <summary>
-    /// Active la catégorie "Collections"
+    /// Obtient ou définit les types de médias classés dans le Top global.
     /// </summary>
-    public bool ShowCollections { get; set; } = true;
+    public TopListMediaKind GlobalTopMediaKind { get; set; } = TopListMediaKind.Movies;
 
     /// <summary>
-    /// Mode d'affichage du Hero (Random, Latest, Resume, None)
+    /// Obtient ou définit le nombre d'entrées conservées dans le Top global.
     /// </summary>
-    public string HeroMode { get; set; } = "Random";
+    public int GlobalTopSize { get; set; } = 10;
 
     /// <summary>
-    /// Active le bouton Favoris sur les cartes
+    /// Obtient ou définit une valeur indiquant si seuls les titres présents dans la bibliothèque
+    /// sont conservés dans le Top global.
     /// </summary>
-    public bool EnableFavoritesButton { get; set; } = true;
+    public bool GlobalTopLibraryOnly { get; set; } = true;
 
     /// <summary>
-    /// Couleur de surbrillance (ex: #e50914)
+    /// Obtient ou définit la langue des métadonnées demandées au fournisseur (code BCP-47).
     /// </summary>
-    public string HighlightColor { get; set; } = "#00a4dc";
+    public string MetadataLanguage { get; set; } = "fr-FR";
+
+    // ------------------------------------------------------------------
+    // Rafraîchissement et exposition
+    // ------------------------------------------------------------------
 
     /// <summary>
-    /// Active les recommandations IA via Groq
+    /// Obtient ou définit l'intervalle de recalcul automatique, en heures.
     /// </summary>
-    public bool EnableGroqAi { get; set; } = false;
+    public int RefreshIntervalHours { get; set; } = 6;
 
     /// <summary>
-    /// Clé API Groq (https://console.groq.com)
+    /// Obtient ou définit une valeur indiquant si les classements sont matérialisés
+    /// en collections Jellyfin, seule façon de les rendre visibles sans modifier le client.
     /// </summary>
-    public string GroqApiKey { get; set; } = string.Empty;
+    public bool SyncCollections { get; set; }
 
     /// <summary>
-    /// Modèle Groq à utiliser
+    /// Obtient ou définit le nom de la collection du Top local.
     /// </summary>
-    public string GroqModel { get; set; } = "llama3-8b-8192";
+    public string LocalCollectionName { get; set; } = "Top 10 du serveur";
 
     /// <summary>
-    /// Ordre personnalisé des sections du layout (JSON array d'IDs)
-    /// Ex: "hero,continue,native_media,latest,top10,recommended,genres,collections"
+    /// Obtient ou définit le nom de la collection du Top global.
     /// </summary>
-    public string SectionOrder { get; set; } = "hero,continue,latest,top10,recommended,genres,collections";
+    public string GlobalCollectionName { get; set; } = "Top 10 mondial";
 
     /// <summary>
-    /// Sections personnalisées de l'utilisateur (JSON array de requêtes)
+    /// Obtient ou définit l'identifiant de la collection du Top local, mémorisé après création.
+    /// Champ technique, non exposé dans la page de configuration.
     /// </summary>
-    public string CustomSectionsJson { get; set; } = "[]";
+    public string LocalCollectionId { get; set; } = string.Empty;
 
     /// <summary>
-    /// Style des cartes : "poster" (vertical) ou "landscape" (horizontal/backdrop)
+    /// Obtient ou définit l'identifiant de la collection du Top global, mémorisé après création.
+    /// Champ technique, non exposé dans la page de configuration.
     /// </summary>
-    public string CardStyle { get; set; } = "poster";
-
-    /// <summary>
-    /// Nombre minimum d'éléments pour qu'un genre soit affiché
-    /// </summary>
-    public int MinGenreItems { get; set; } = 3;
-
-    /// <summary>
-    /// Nombre maximum de genres à afficher
-    /// </summary>
-    public int MaxGenres { get; set; } = 12;
+    public string GlobalCollectionId { get; set; } = string.Empty;
 }

@@ -38,3 +38,9 @@ logs/
 # Ignore temporary files
 tmp/
 temp/
+
+# Ignore build artifacts and packages produced at repo root
+JellyfinCarouselPlugin.zip
+build_output.txt
+errors.txt
+restore_log.txt

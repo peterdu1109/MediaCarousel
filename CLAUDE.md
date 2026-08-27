@@ -2,12 +2,20 @@
 
 ## Vue d'ensemble
 
-Plugin Jellyfin qui remplace la page d'accueil par un layout Netflix : bannière Hero, carrousels horizontaux par catégorie et par genre, badges qualité, favoris, et recommandations IA optionnelles (Groq).
+Plugin Jellyfin **100 % backend**. Il génère automatiquement deux classements dynamiques :
 
-- **Plugin GUID :** `191bd290-1054-4b55-a137-46c72181266b` — dans `Plugin.cs`, `manifest.json`, `configPage.html`, `carousel-layout.js`
-- **Cible :** Jellyfin 10.11.x (ABI `10.11.0.0`), .NET 9.0
-- **Version actuelle :** 2.7.2.0
-- **Stack :** C# backend, JavaScript vanilla frontend (pas de Node, pas de TypeScript, pas de npm)
+1. **Top du serveur** — les titres les plus regardés d'après les statistiques de lecture de tous les comptes.
+2. **Top mondial** — les titres les plus populaires d'après TMDB ou Trakt, rapprochés de la bibliothèque locale.
+
+Le plugin **ne touche pas au frontend** : ni injection dans `index.html`, ni CSS, ni JavaScript client.
+Les classements sont publiés en collections Jellyfin et via l'API REST du serveur.
+
+- **Plugin GUID :** `191bd290-1054-4b55-a137-46c72181266b` — dans `Plugin.cs`, `manifest.json`, `build.yaml`, `configPage.html`
+- **Cible :** Jellyfin **10.11.9+** (ABI `10.11.9.0`), .NET 9.0, paquets NuGet Jellyfin 10.11.11
+- **Stack :** C# uniquement. Pas de Node, pas de npm, pas de TypeScript, pas de build frontend.
+
+> **ABI 10.11.9 minimum :** `IUserManager.Users` (propriété) est devenu `IUserManager.GetUsers()` (méthode)
+> en 10.11.9. Le plugin ne se charge pas sur une version antérieure.
 
 ---
 
@@ -15,100 +23,120 @@ Plugin Jellyfin qui remplace la page d'accueil par un layout Netflix : bannière
 
 ```
 MediaCarousel/
-├── Plugin.cs                        # BasePlugin<PluginConfiguration> + IHasWebPages
-├── FileTransformationService.cs     # IHostedService — injection du script dans index.html
-├── CarouselIndexTransformer.cs      # Callback statique pour le plugin FileTransformation (réflexion)
-├── PluginServiceRegistrator.cs      # IPluginServiceRegistrator — enregistre FileTransformationService
-├── JellyfinCarouselPlugin.csproj    # .NET 9.0, version 2.7.2.0
-├── manifest.json                    # Catalogue Jellyfin (mis à jour par CI)
-├── build.yaml                       # Métadonnées du registre de plugins
-├── nuget.config                     # Source nuget.org
+├── Plugin.cs                          # BasePlugin<PluginConfiguration> + IHasWebPages
+├── PluginServiceRegistrator.cs        # Enregistrement DI de tous les services
+├── JellyfinCarouselPlugin.csproj      # net9.0, références compile-time uniquement
+├── manifest.json                      # Catalogue Jellyfin (mis à jour par la CI)
+├── build.yaml                         # Métadonnées du registre (maintenu à la main)
+├── Api/
+│   ├── TopListsController.cs          # GET Top/Local, GET Top/Global, POST Top/Refresh
+│   └── TopListResponseDto.cs          # Contrat de sortie de l'API
 ├── Configuration/
-│   ├── PluginConfiguration.cs       # Modèle de config (24 propriétés)
-│   └── configPage.html              # UI admin, ressource embarquée
-└── Web/
-    ├── carousel-layout.js           # Toute la logique frontend — IIFE (~1400 lignes)
-    ├── carousel-styles.css          # Copie CSS de référence (ne pas servir directement)
-    └── icon.png                     # Icône plugin (assets web)
+│   ├── PluginConfiguration.cs         # Modèle de config + enums
+│   └── configPage.html                # UI admin, ressource embarquée
+├── Models/
+│   ├── TopListKind.cs                 # Local | Global
+│   ├── TopListEntry.cs                # Une entrée classée
+│   └── TopListSnapshot.cs             # Résultat figé et immuable d'un calcul
+├── Providers/
+│   ├── ITrendingProvider.cs           # Contrat d'une source externe
+│   ├── TrendingRequest.cs             # Paramètres d'interrogation
+│   ├── TrendingTitle.cs               # Titre renvoyé par une source
+│   ├── TmdbTrendingProvider.cs        # TMDB /trending
+│   └── TraktTrendingProvider.cs       # Trakt /trending
+├── ScheduledTasks/
+│   └── TopListRefreshTask.cs          # IScheduledTask : démarrage + intervalle
+├── Services/
+│   ├── ITopListStore.cs / TopListStore.cs   # Publication atomique des instantanés
+│   ├── LocalTopListBuilder.cs               # Agrégation des statistiques de lecture
+│   ├── GlobalTopListBuilder.cs              # Source externe + rapprochement local
+│   ├── LibraryTitleIndex.cs                 # Index ProviderIds construit en une requête
+│   ├── CollectionSynchronizer.cs            # Matérialisation en BoxSet
+│   └── TopListRefreshService.cs             # Orchestration, verrou, tolérance aux pannes
+└── Web/icon.png                       # Icône (asset du dépôt, pas servi par le plugin)
 ```
-
-> **Critique :** `carousel-styles.css` n'est **pas** lié à Jellyfin. Tout le CSS est injecté en `<style>` inline par `carousel-layout.js`. Modifier `carousel-styles.css` seul n'a aucun effet. Modifier le template literal dans `carousel-layout.js` et garder `carousel-styles.css` en sync manuellement.
 
 ---
 
 ## Architecture
 
-### Backend C# (démarrage uniquement)
+### Principe directeur
 
-Responsabilité unique : injecter le `<script>` du carrousel dans `index.html` de Jellyfin au démarrage du serveur.
+**Tout le travail lourd a lieu dans la tâche planifiée ; les requêtes HTTP ne font que lire.**
 
-**Stratégie d'injection duale (`FileTransformationService.StartAsync`) :**
+```
+TopListRefreshTask ──> TopListRefreshService ──┬─> LocalTopListBuilder  ──> ITopListStore
+   (démarrage +                                ├─> GlobalTopListBuilder ──> ITopListStore
+    intervalle)                                └─> CollectionSynchronizer ──> BoxSet Jellyfin
 
-1. **Primaire — plugin FileTransformation :** Cherche l'assembly du plugin tiers via `AssemblyLoadContext.All`. Si trouvé, enregistre `CarouselIndexTransformer.InjectScript` comme callback de transformation — modifie le contenu de `index.html` à la volée, sans écrire sur le disque.
-2. **Fallback — injection directe :** Modifie `index.html` sur le disque si le plugin FileTransformation n'est pas installé. Idempotent (vérifie la présence de la balise `<script>` avant insertion).
+TopListsController ──> ITopListStore (lecture sans verrou) ──> IDtoService ──> BaseItemDto
+```
 
-**Ordre de résolution du chemin (`TryInjectDirectly`) :**
-1. `{WebPath}/index.html`
-2. `{ProgramDataPath}/jellyfin-web/index.html`
-3. `{BaseDirectory}/jellyfin-web/index.html`
-4. `{BaseDirectory}/web/index.html`
+### Top du serveur — pourquoi une requête par utilisateur
 
-> `CarouselIndexTransformer` est invoqué par réflexion. Les noms de classe et de méthode `InjectScript` sont hardcodés dans `FileTransformationService`. Ne pas renommer sans mettre à jour les deux fichiers.
+Jellyfin ne stocke **aucun compteur de lecture global**. `UserItemData.PlayCount` appartient au couple
+(utilisateur, élément), et `OrderMapper` traduit `ItemSortBy.PlayCount` en
+`e.UserData.FirstOrDefault(f => f.UserId == query.User.Id).PlayCount` : le tri **déréférence
+`query.User`**. Une requête sans utilisateur ne peut donc pas trier par nombre de lectures.
 
-### Frontend JavaScript (toute la logique runtime)
+Conséquence directe : un classement « serveur » demande **une requête bornée par utilisateur**
+(tri et `Limit` délégués à SQL), puis une agrégation en mémoire des candidats. Coût :
+`nbUtilisateurs` requêtes, jamais un balayage complet de la bibliothèque.
 
-`carousel-layout.js` : IIFE unique `(function() { 'use strict'; ... })()`, pas de dépendances externes. Utilise `window.ApiClient` et `window.Dashboard` fournis par Jellyfin.
+Détails d'implémentation :
 
-**Séquence de démarrage :**
-1. Lecture synchrone de `localStorage('MediaCarousel_Config')` — anti-FOUC avant même que Jellyfin soit prêt
-2. `waitForJellyfin()` — polling toutes les 100 ms jusqu'à ce que `ApiClient` et `Dashboard` existent
-3. `triggerLayout()` appelé à 0, 300, 800, 1500 et 3000 ms (5 tentatives progressives)
-4. `observePageChanges()` — écoute les navigations SPA
+- `IncludeItemTypes = [Movie, Episode]` — les compteurs de lecture des séries vivent sur les épisodes.
+  Chaque épisode est reporté sur `Episode.SeriesId`, mémorisé dans un cache local pour éviter un N+1.
+- `DtoOptions(false) { Fields = [ProviderIds], EnableImages = false }` — seules les colonnes utiles
+  sont jointes (voir `BaseItemRepository.PrepareFilterQuery`).
+- Fenêtre d'observation appliquée sur `UserItemData.LastPlayedDate`.
+- Plafond `MaxPlaysCountedPerUser` appliqué au score, `TotalPlays` conservant la valeur brute.
+- Tri final : score, puis nombre de spectateurs distincts, puis dernière lecture.
 
-**Détection de la page d'accueil (`isOnHomePage()`) :**
-- DOM : `#indexPage`, `.homePage`, `#homeTab`, `[data-type="home"]`, `.view.homePage:not(.hide)`, `.page.homePage:not(.hide)`
-- URL fallback : `window.location.hash` — `#!/home`, `#!/home.html`, hash vide, etc.
-- Exclusion explicite : `details`, `config`, `dashboard`, `search`, `list`, `settings`
+### Top mondial
 
-**Détection du container home (`findHomeContainer()`) — 14 sélecteurs en cascade :**
-`.homePage` → `#indexPage .scrollSlider` → `#indexPage .itemsContainer` → ... → `#skinBody .page:not(.hide)`
+`ITrendingProvider` abstrait la source ; `GlobalTopListBuilder` choisit l'implémentation d'après
+`GlobalTopProvider`. Les clients HTTP viennent de `IHttpClientFactory.CreateClient(NamedClient.Default)`
+(client Jellyfin, avec User-Agent et compression). Délai maximal de 30 s, une nouvelle tentative
+sur erreur transitoire.
 
-**Détection de navigation (5 stratégies dans `observePageChanges()`) :**
-1. Événement natif Jellyfin `viewshow`
-2. Événement Jellyfin `pageshow` (variante selon version)
-3. `hashchange` — navigation SPA
-4. `MutationObserver` sur `document.body` — debounce 400 ms
-5. Polling toutes les 3 s — filet de sécurité
+Le rapprochement passe par `LibraryTitleIndex`, construit en **une seule requête** sur les films et
+séries avec `Fields = [ProviderIds]`. Trois index : TMDB (séparé film/série, TMDB numérotant les
+deux indépendamment), IMDb, et titre normalisé + année en dernier recours.
 
-**Activation du layout :**
-- `applySyncLayoutStates()` applique immédiatement les classes anti-FOUC : `media-carousel-init`, `mc-hide-all-native`, `mc-hide-native-resume`, `mc-hide-native-latest`
-- `removeNativeDuplicates()` masque les sections Jellyfin natives dupliquées par correspondance de texte
-- Le layout est inséré via `insertBefore(carouselContainer, mainContent.firstChild)` dans `.mainAnimatedPages || body`
-- `body.media-carousel-active` est ajouté après insertion complète
+Sur-échantillonnage `size × 5` quand `GlobalTopLibraryOnly` est actif, pour remplir les places
+après filtrage.
 
-**Ordre des sections — `SectionOrder` :**
-La config `SectionOrder` est une chaîne CSV (ex. `"hero,continue,latest,top10,recommended,genres,collections"`) qui contrôle l'ordre d'affichage. Les sections inconnues sont ignorées silencieusement.
+### Tolérance aux pannes
 
-**Genres dynamiques :**
-Les genres ne sont plus hardcodés. À chaque chargement, l'API Jellyfin est interrogée (`/Genres`), filtrée par `MinGenreItems`, triée par popularité, limitée à `MaxGenres`. Les genres Groq AI sont chargés en priorité, les autres en lazy via `IntersectionObserver` (marge 200 px).
+`TopListRefreshService` traite les deux classements indépendamment et **conserve l'instantané
+précédent** en cas d'échec. Une coupure réseau ne vide jamais la liste côté client. Un
+`SemaphoreSlim` empêche deux recalculs simultanés (tâche planifiée + bouton manuel).
 
-**Config — cache et invalidation :**
-- Chargée une fois via `ensureConfigLoaded()` puis mise en cache dans `localStorage('MediaCarousel_Config')`
-- Chargée synchronement depuis le cache au démarrage pour éviter le FOUC
-- Les changements de config nécessitent un rechargement complet (F5)
+### Publication en collections
+
+`CollectionSynchronizer` maintient un `BoxSet` par classement. `BoxSet.IsPreSorted` vaut `true` :
+l'ordre des `LinkedChildren` **est** l'ordre affiché, donc le rang est préservé. La synchronisation
+réécrit l'ensemble (`RemoveFromCollectionAsync` puis `AddToCollectionAsync`) plutôt que le delta,
+car l'ordre fait partie du résultat. L'identifiant de la collection est mémorisé dans la config ;
+si l'administrateur supprime la collection, elle est recréée au recalcul suivant.
 
 ---
 
-## Fichiers clés
+## Conventions de code
 
-| Fichier | Rôle | Fréquence de modification |
-|---|---|---|
-| `Web/carousel-layout.js` | Tout le comportement UI, appels API, DOM, CSS inline | Haute |
-| `Configuration/PluginConfiguration.cs` | Modèle de config — doit rester en sync avec `DEFAULT_CONFIG` JS | À chaque nouveau réglage |
-| `Configuration/configPage.html` | UI admin — doit rester en sync avec le modèle C# et les défauts JS | À chaque nouveau réglage |
-| `FileTransformationService.cs` | Injection du script au démarrage | Rare |
-| `CarouselIndexTransformer.cs` | Callback réflexion pour FileTransformation | Rare |
-| `Web/carousel-styles.css` | Copie CSS de référence — garder en sync avec le JS | À chaque changement CSS |
+### C#
+- PascalCase pour classes, méthodes, propriétés ; `_camelCase` pour les champs privés.
+- Commentaires XML (`///`) en français sur **tous** les membres publics (`GenerateDocumentationFile` est actif).
+- `<Nullable>enable</Nullable>` — utiliser `?` et des vérifications explicites.
+- Un fichier par type public.
+- `async`/`await` avec `.ConfigureAwait(false)` dans les services ; jamais de `.Result` ni de `.Wait()`.
+- Tout appel long accepte et honore un `CancellationToken`.
+- Injection de dépendances par constructeur, jamais de service locator.
+
+### Commits
+Conventional Commits : `feat:`, `fix:`, `docs:`, `refactor:`, `chore:`. Messages < 80 caractères.
+Utilisés par la CI pour le versionnage sémantique (`!` ou `BREAKING CHANGE` → majeur, `feat:` → mineur).
 
 ---
 
@@ -120,160 +148,70 @@ Les genres ne sont plus hardcodés. À chaque chargement, l'API Jellyfin est int
 dotnet build -c Release
 ```
 
-Sortie dans `bin/Release/net9.0/`. Le dossier `Web/` est copié via `CopyToOutputDirectory`. `configPage.html` est embarqué comme ressource managée.
+Sortie dans `bin/Release/net9.0/` : **uniquement** `JellyfinCarouselPlugin.dll` (+ `pdb`, `xml`, `deps.json`).
+`CopyLocalLockFileAssemblies=false` et `ExcludeAssets=runtime` garantissent qu'aucune dépendance
+Jellyfin ou EF Core n'est empaquetée — le serveur fournit tout à l'exécution.
 
 ### Package
 
-```powershell
-# Windows
-Compress-Archive -Path "bin\Release\net9.0\*" -DestinationPath "JellyfinCarouselPlugin.zip" -Force
-```
-
 ```bash
-# Linux
 cd bin/Release/net9.0 && zip -r ../../../JellyfinCarouselPlugin.zip .
 ```
 
-### Installation et test
+### Test
 
-1. Extraire le ZIP dans un dossier `CarouselLayout` sous `plugins/` de Jellyfin
-2. Redémarrer le serveur Jellyfin
-3. **Dashboard → Plugins → Carousel Layout → Settings**
-4. Ouvrir la page d'accueil — console browser pour les logs `[MediaCarousel]`
+1. Extraire le ZIP dans `plugins/MediaCarousel/` puis redémarrer Jellyfin.
+2. **Tableau de bord → Extensions → Media Carousel** pour configurer.
+3. **Tableau de bord → Tâches planifiées → Recalcul des classements MediaCarousel** pour déclencher.
+4. Vérifier via `GET /MediaCarousel/Top/Local` et le journal du serveur (préfixe `MediaCarousel`).
 
-Pas de tests automatisés. Tout est manuel sur une instance Jellyfin. Itération JS : éditer directement dans le dossier web Jellyfin + hard reload (Ctrl+Shift+R).
+Pas de tests automatisés. Validation manuelle sur une instance Jellyfin.
 
 ### CI/CD (`.github/workflows/build.yml`)
 
-Déclenché sur push `main` ou `workflow_dispatch` :
-1. **Bump version** — lit `manifest.json`, analyse les commits conventionnels depuis le dernier tag (breaking → majeur, `feat:` → mineur, reste → patch)
-2. **Build** — `dotnet restore` + `dotnet build -c Release`
-3. **Package** — ZIP `bin/Release/net9.0/`
-4. **Mise à jour manifest** — ajoute une entrée de version avec `sourceUrl` et checksum ; met à jour `AssemblyVersion` dans `.csproj`
-5. **Commit** — commit du bump avec `[skip ci]`
-6. **Release** — GitHub release avec changelog auto depuis les messages de commit
+Sur push `main` : bump de version d'après les commits conventionnels → `dotnet build -c Release` →
+ZIP → mise à jour de `manifest.json` (`sourceUrl`, checksum, `targetAbi` `10.11.9.0`) → commit
+`[skip ci]` → release GitHub.
 
 ---
 
-## Conventions de code
+## Ajouter un réglage
 
-### C#
-- PascalCase pour classes, méthodes, propriétés
-- Commentaires XML (`///`) en français sur les membres publics
-- `<Nullable>enable</Nullable>` — utiliser `?` et null checks
-- Un fichier par classe
+1. **`Configuration/PluginConfiguration.cs`** — propriété + valeur par défaut + commentaire XML français.
+2. **`Configuration/configPage.html`** — contrôle de formulaire, puis ajout de l'identifiant dans le
+   tableau JS correspondant (`checkboxes`, `numbers`, `texts` ou `lists`). Le chargement et la
+   sauvegarde sont pilotés par ces tableaux : aucune autre modification n'est nécessaire.
+3. Consommer le réglage dans le service concerné.
 
-### JavaScript
-- camelCase pour fonctions et variables ; SCREAMING_SNAKE_CASE pour constantes module (`PLUGIN_ID`, `DEFAULT_CONFIG`, `CONFIG`)
-- JS vanilla uniquement — pas de modules, pas de TypeScript, pas de npm, pas de build
-- IIFE unique — rien d'exporté en global
-- `async/await` partout ; code top-level avec `.then()` (IIFE non async)
-- Commentaires en français ; identifiants en anglais
+## Ajouter une source de tendances
 
-### CSS
-- kebab-case avec préfixes sémantiques : `.carousel-*`, `.badge-*`, `.carousel-hero-*`, `.carousel-ai-*`
-- Custom properties dans `:root` ; fallbacks sur les variables Jellyfin
-- Breakpoints : 1400 px, 800 px, 500 px + `@media (hover: none)`
-- Toutes les règles de la page d'accueil scopées à `body.media-carousel-active`
-
-### Commits
-Conventional Commits : `feat:`, `fix:`, `docs:`, `refactor:`, `chore:`. Messages < 80 caractères. Utilisés pour le versioning sémantique automatique par CI.
-
----
-
-## Ajouter un réglage de configuration
-
-Trois fichiers à synchroniser :
-
-1. **`PluginConfiguration.cs`** — propriété C# avec valeur par défaut + commentaire XML français
-2. **`configPage.html`** — contrôle de formulaire (`emby-checkbox`, `emby-input`, `emby-select`) + mise à jour des handlers `pageshow` (chargement) et `submit` (sauvegarde)
-3. **`carousel-layout.js`** — clé dans `DEFAULT_CONFIG`, puis utilisation via `pluginConfig.LeNouveauReglage`
-
----
-
-## Ajouter une catégorie carrousel
-
-1. Ajouter une entrée à `CONFIG.categories` dans `carousel-layout.js` :
-   ```js
-   { id: 'mycat', name: 'Ma Catégorie', filter: 'SomeFilter', configKey: 'ShowMyCategory' }
-   ```
-2. Ajouter la logique de filtrage pour ce `id` dans `loadCategoryItems()`
-3. Ajouter `ShowMyCategory` comme réglage de configuration (voir ci-dessus)
-4. Ajouter l'id à `SectionOrder` si besoin
-
----
-
-## Configuration — 24 propriétés
-
-| Propriété | Type | Défaut | Description |
-|---|---|---|---|
-| `EnableCarouselLayout` | bool | `true` | Interrupteur maître |
-| `ShowNewReleases` | bool | `true` | Catégorie "Nouveautés" |
-| `ShowTop10` | bool | `true` | Catégorie "Top 10" |
-| `ShowContinueWatching` | bool | `true` | Catégorie "Continuer à regarder" |
-| `ShowRecommended` | bool | `true` | Catégorie "Recommandés" |
-| `ShowGenreCategories` | bool | `true` | Carrousels par genre |
-| `ShowCollections` | bool | `true` | Catégorie "Collections" (Boxsets) |
-| `ShowNewEpisodesBadge` | bool | `true` | Badge "Nouveaux épisodes" sur les séries |
-| `ShowQualityBadge` | bool | `true` | Badges 4K/HD |
-| `ItemsPerCarousel` | int | `20` | Max items par carrousel |
-| `EnableHoverAnimations` | bool | `true` | Animation zoom au survol |
-| `EnableFavoritesButton` | bool | `true` | Bouton cœur sur les cartes |
-| `HeroMode` | string | `"Random"` | Mode bannière : `Random`, `Latest`, `Resume`, `None` |
-| `HighlightColor` | string | `"#00a4dc"` | Couleur d'accentuation (hex) |
-| `HideNativeHome` | bool | `false` | Masquer toute la page d'accueil native Jellyfin |
-| `IncludedLibraries` | string[] | `[]` | IDs de bibliothèques incluses (vide = toutes) |
-| `SectionOrder` | string | `"hero,continue,..."` | Ordre CSV des sections du layout |
-| `CardStyle` | string | `"poster"` | Style des cartes : `poster` (vertical) ou `landscape` (backdrop) |
-| `MinGenreItems` | int | `3` | Minimum d'items pour afficher un genre |
-| `MaxGenres` | int | `12` | Nombre maximum de genres affichés |
-| `CustomSectionsJson` | string | `"[]"` | Sections personnalisées (JSON array) |
-| `EnableGroqAi` | bool | `false` | Recommandations IA via Groq |
-| `GroqApiKey` | string | `""` | Clé API Groq |
-| `GroqModel` | string | `"llama3-8b-8192"` | Modèle Groq |
+1. Implémenter `ITrendingProvider` dans `Providers/` (renvoyer des `TrendingTitle` avec le plus
+   d'identifiants externes possible : le rapprochement local en dépend).
+2. Ajouter la valeur à `TrendingProviderKind`.
+3. Enregistrer l'implémentation dans `PluginServiceRegistrator`.
+4. Ajouter l'option au `<select>` `GlobalTopProvider` de `configPage.html`.
 
 ---
 
 ## Pièges et contraintes
 
-**CSS dans le JS :** Modifier le template literal dans `carousel-layout.js`, pas seulement `carousel-styles.css`.
+**Tri par `PlayCount` sans utilisateur :** `OrderMapper` déréférence `query.User`. Toute requête triée
+par `PlayCount`, `DatePlayed`, `IsPlayed` ou `IsFavoriteOrLiked` **doit** porter un utilisateur.
 
-**Config cachée par chargement :** Les changements nécessitent F5. C'est intentionnel.
+**`DtoOptions` pilote les jointures SQL :** sans `Fields = [ItemFields.ProviderIds]`, les `ProviderIds`
+reviennent vides. De même pour `EnableUserData` et `EnableImages`. Ne demander que le nécessaire.
 
-**Pas de npm / TypeScript :** Ne pas introduire de `package.json`, webpack, babel, TypeScript ou tout outillage de build pour le JS.
+**Pas de calcul dans un contrôleur :** le contrôleur lit l'instantané publié. Ajouter un calcul
+synchrone dans une route bloquerait le serveur sur les grandes bibliothèques.
 
-**Genres dynamiques :** Les genres sont récupérés depuis l'API Jellyfin à chaque init, filtrés et triés. Pas de liste hardcodée.
+**Filtrage de visibilité au service, pas au calcul :** le classement est global ; c'est à la lecture
+que `BaseItem.IsVisible(user)` retire ce que l'appelant n'a pas le droit de voir.
 
-**Clé Groq exposée côté client :** `GroqApiKey` est accessible à tout utilisateur Jellyfin authentifié via `ApiClient.getPluginConfiguration()`. Compromis assumé.
+**Clé d'API externe :** `GlobalTopApiKey` n'est jamais renvoyée par l'API du plugin. Elle reste dans
+la configuration, lisible uniquement par un administrateur via l'API de configuration de Jellyfin.
 
-**`CarouselIndexTransformer` par réflexion :** Nom de classe et méthode `InjectScript` hardcodés dans `FileTransformationService`. Renommer sans mettre à jour les deux fichiers casse l'intégration silencieusement.
+**`icon.png` en double :** racine du dépôt (référencé par `manifest.json`) et `Web/icon.png`
+(référencé par le README). Synchroniser les deux à la mise à jour.
 
-**`icon.png` en double :** Racine du dépôt (référencé par `manifest.json`) et dans `Web/` (asset servi). Synchroniser les deux à la mise à jour.
-
-**`build.yaml` maintenu manuellement :** Pas mis à jour par CI. La source de vérité des versions est `manifest.json`.
-
-**Artifacts de build à la racine :** `build_output.txt`, `errors.txt`, `restore_log.txt` ne sont pas gitignorés.
-
----
-
-## Intégration Jellyfin
-
-- Config stockée en XML par le sérialiseur `BasePluginConfiguration`
-- Page de config : `/web/configurationpage?name=Carousel+Layout`
-- Asset JS servi : `/plugins/JellyfinCarouselPlugin/Web/carousel-layout.js`
-- `ApiClient.getItems(userId, params)` → `{ Items: [], TotalRecordCount: N }`
-- `ApiClient.getPluginConfiguration(pluginId)` / `updatePluginConfiguration(pluginId, config)` — GUID en string
-- `Dashboard.navigate('details?id=' + itemId)` — navigation SPA vers la fiche item
-- `window.ApiClient` et `window.Dashboard` sont des globaux Jellyfin — toujours vérifier leur existence via `waitForJellyfin()`
-
----
-
-## Dépendances NuGet
-
-| Package | Version |
-|---|---|
-| `Jellyfin.Model` | 10.11.8 |
-| `Jellyfin.Controller` | 10.11.8 |
-| `Newtonsoft.Json` | 13.0.3 |
-
-Toutes avec `<PrivateAssets>all</PrivateAssets>` et `<ExcludeAssets>runtime</ExcludeAssets>` — références compile-time uniquement.
+**`build.yaml` maintenu à la main :** la CI ne le met pas à jour. La source de vérité des versions
+publiées est `manifest.json`.

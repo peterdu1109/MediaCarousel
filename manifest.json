@@ -1,9 +1,9 @@
 [
   {
     "guid": "191bd290-1054-4b55-a137-46c72181266b",
-    "name": "Carousel Layout",
-    "description": "Transforme la page d'accueil Jellyfin en interface Netflix : bannière Hero, carrousels horizontaux par catégorie et par genre, badges qualité, favoris en un clic et recommandations IA optionnelles",
-    "overview": "Interface Netflix pour Jellyfin — carrousels, Hero, 16 genres, IA Groq",
+    "name": "Media Carousel",
+    "description": "Génère automatiquement, côté serveur, un Top du serveur à partir des statistiques de lecture Jellyfin et un Top mondial à partir de TMDB ou Trakt. Publié en collections et via l'API REST, sans aucune modification de l'interface web.",
+    "overview": "Classements dynamiques côté serveur : Top du serveur et Top mondial",
     "owner": "peterdu1109",
     "category": "General",
     "imageUrl": "https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/icon.png",
