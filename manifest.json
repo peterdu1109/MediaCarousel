@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/icon.png",
     "versions": [
       {
+        "version": "3.1.0.0",
+        "changelog": "Nouveautes :\n- Rangees studios et genres, page de config repensee, swipe mobile corrige",
+        "targetAbi": "10.11.9.0",
+        "sourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/3.1.0/JellyfinCarouselPlugin.zip",
+        "checksum": "76cc6d004661c1df8aad2e3cc4d034c4",
+        "timestamp": "2026-08-27T18:00:00Z"
+      },
+      {
         "version": "3.0.1.0",
         "changelog": "Corrections :\n- Changelog du catalogue Jellyfin sans jargon de commit",
         "targetAbi": "10.11.9.0",
