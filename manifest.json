@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/icon.png",
     "versions": [
       {
+        "version": "3.2.0.0",
+        "changelog": "Nouveautes :\n- Persistance, rangees de retour et jamais vu, studios dedupliques, tests en CI",
+        "targetAbi": "10.11.9.0",
+        "sourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/3.2.0/JellyfinCarouselPlugin.zip",
+        "checksum": "a2082b7b7dd4d6a892c0c6690baf34ed",
+        "timestamp": "2026-08-27T18:30:51Z"
+      },
+      {
         "version": "3.1.1.0",
         "changelog": "Performances :\n- Paquet allege de 40 % et requetes reseau supprimees",
         "targetAbi": "10.11.9.0",
