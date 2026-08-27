@@ -115,22 +115,32 @@ jobs:
 
           N=/tmp/notes.md
           {
-            printf '## Media Carousel v%s\n\n' "$V"
+            printf '# Media Carousel v%s\n\n' "$V"
+            printf 'Classements dynamiques generes cote serveur : le Top de ton serveur, calcule\n'
+            printf 'a partir des statistiques de lecture, et le Top mondial issu de TMDB ou Trakt.\n\n'
+            printf -- '---\n\n'
             printf '%s\n\n' "$NOTES"
             printf -- '---\n\n'
-            printf '## Installation\n\n'
-            printf '### Via le catalogue Jellyfin (recommande)\n'
-            printf '1. Dashboard -> Plugins -> Catalogues -> +\n'
-            printf '2. Colle cette URL :\n'
-            printf '```\n'
-            printf 'https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/manifest.json\n'
-            printf '```\n'
-            printf '3. Installe **Carousel Layout** et redemarre Jellyfin\n\n'
-            printf '### Mise a jour depuis une version precedente\n'
-            printf 'Jellyfin detecte et propose automatiquement la mise a jour si tu utilises le catalogue.\n'
-            printf 'Sinon, telecharge le ZIP ci-dessous, remplace les fichiers dans ton dossier `plugins/CarouselLayout/` et redemarre.\n\n'
+            printf '## Installer ou mettre a jour\n\n'
+            printf '**Depuis le catalogue Jellyfin (recommande)** — les mises a jour suivantes sont automatiques :\n\n'
+            printf '1. Tableau de bord -> Extensions -> Depots -> **+**\n'
+            printf '2. Colle cette adresse :\n'
+            printf '   ```\n'
+            printf '   https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/manifest.json\n'
+            printf '   ```\n'
+            printf '3. Extensions -> Catalogue -> installe **Media Carousel**\n'
+            printf '4. Redemarre Jellyfin\n\n'
+            printf '**Manuellement** : telecharge le ZIP ci-dessous, decompresse-le dans\n'
+            printf '`plugins/MediaCarousel/` puis redemarre Jellyfin.\n\n'
             printf -- '---\n\n'
-            printf '**Prerequis :** Jellyfin 10.11.x\n'
+            printf '## Premiere utilisation\n\n'
+            printf '1. Tableau de bord -> Extensions -> **Media Carousel**\n'
+            printf '2. Regle le Top de ton serveur (nombre de titres, fenetre d observation)\n'
+            printf '3. Pour le Top mondial, choisis TMDB ou Trakt et colle ta cle d API\n'
+            printf '4. Clique sur **Recalculer maintenant**\n\n'
+            printf 'Le recalcul se relance ensuite tout seul, au demarrage du serveur et a intervalle regulier.\n\n'
+            printf -- '---\n\n'
+            printf '**Prerequis : Jellyfin 10.11.9 ou plus recent.**\n'
           } > "$N"
 
           gh release delete "$V" --yes --cleanup-tag 2>/dev/null || true
