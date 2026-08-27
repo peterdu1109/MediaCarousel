@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/icon.png",
     "versions": [
       {
+        "version": "3.0.1.0",
+        "changelog": "Corrections :\n- Changelog du catalogue Jellyfin sans jargon de commit",
+        "targetAbi": "10.11.9.0",
+        "sourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/3.0.1/JellyfinCarouselPlugin.zip",
+        "checksum": "c6b4ab685ab3fcfa536c46fa9379ad07",
+        "timestamp": "2026-08-27T13:41:13Z"
+      },
+      {
         "version": "3.0.0.0",
         "changelog": "- feat: rangees Top 10 facon Netflix sur la page d'accueil\n- docs: notes de version lisibles et readme remis au propre\n- refactor!: plugin 100% backend, Top serveur et Top mondial",
         "targetAbi": "10.11.9.0",
