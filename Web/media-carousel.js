@@ -19,6 +19,12 @@
     var STYLE_ID = 'mc-styles';
     var RETRY_DELAYS = [0, 400, 1200, 3000];
 
+    // Les classements ne sont recalculés que toutes les quelques heures côté serveur.
+    // Sans ce cache, chaque retour sur l'accueil relancerait les quatre requêtes, alors que
+    // jellyfin-web reconstruit le conteneur à chaque affichage.
+    var CACHE_TTL = 5 * 60 * 1000;
+
+    var cache = {};
     var options = null;
     var rendering = false;
     var scheduled = null;
@@ -443,18 +449,38 @@
     }
 
     /**
+     * Mémorise le résultat d'une requête pendant CACHE_TTL. Un échec n'est jamais mémorisé :
+     * une panne passagère ne doit pas condamner la rangée pour cinq minutes.
+     */
+    function loadCached(path, params) {
+        var key = path + '|' + JSON.stringify(params || {});
+        var entry = cache[key];
+        var now = Date.now();
+
+        if (entry && now - entry.time < CACHE_TTL) {
+            return Promise.resolve(entry.value);
+        }
+
+        return loadList(path, params).then(function (value) {
+            if (value.length) {
+                cache[key] = { time: now, value: value };
+            }
+            return value;
+        });
+    }
+
+    /**
      * Charge les titres d'un genre depuis l'API native de Jellyfin : requête indexée,
      * paginée et déjà filtrée selon les droits de l'utilisateur courant.
      */
-    function loadGenreItems(genreId, limit) {
-        return loadList('Items', {
+    function loadCachedGenreItems(genreId, limit) {
+        return loadCached('Items', {
             UserId: window.ApiClient.getCurrentUserId(),
             GenreIds: genreId,
             IncludeItemTypes: 'Movie,Series',
             Recursive: true,
             Limit: limit,
             SortBy: 'Random',
-            Fields: 'PrimaryImageAspectRatio',
             ImageTypeLimit: 1,
             EnableImageTypes: 'Primary',
             EnableTotalRecordCount: false
@@ -474,7 +500,7 @@
             }
             loaded = true;
 
-            loadGenreItems(genre.Id, limit).then(function (items) {
+            loadCachedGenreItems(genre.Id, limit).then(function (items) {
                 fillRow(section, items.map(buildPlainCard).join(''), 'Aucun titre dans ce genre.');
             });
         }
@@ -503,10 +529,10 @@
 
     function collectRows(opts) {
         var requests = [
-            opts.ShowLocalRow ? loadList('MediaCarousel/Top/Local', { limit: opts.LocalRowSize || 10 }) : [],
-            opts.ShowGlobalRow ? loadList('MediaCarousel/Top/Global', { limit: opts.GlobalRowSize || 10 }) : [],
-            opts.ShowStudioRow ? loadList('MediaCarousel/Studios', { limit: opts.StudioRowSize || 20 }) : [],
-            opts.ShowGenreRows ? loadList('MediaCarousel/Genres', { limit: opts.GenreRowCount || 6 }) : []
+            opts.ShowLocalRow ? loadCached('MediaCarousel/Top/Local', { limit: opts.LocalRowSize || 10 }) : [],
+            opts.ShowGlobalRow ? loadCached('MediaCarousel/Top/Global', { limit: opts.GlobalRowSize || 10 }) : [],
+            opts.ShowStudioRow ? loadCached('MediaCarousel/Studios', { limit: opts.StudioRowSize || 20 }) : [],
+            opts.ShowGenreRows ? loadCached('MediaCarousel/Genres', { limit: opts.GenreRowCount || 6 }) : []
         ];
 
         return Promise.all(requests).then(function (results) {

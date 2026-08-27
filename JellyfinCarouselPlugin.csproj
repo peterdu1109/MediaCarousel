@@ -5,6 +5,9 @@
     <AssemblyVersion>3.1.0.0</AssemblyVersion>
     <FileVersion>3.1.0.0</FileVersion>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- Les symboles de debogage ne sont pas lus par Jellyfin. -->
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
     <Nullable>enable</Nullable>
     <!-- Le serveur fournit toutes les dépendances : le paquet ne doit contenir que notre assembly. -->
@@ -34,6 +37,15 @@
       <ExcludeAssets>runtime</ExcludeAssets>
     </PackageReference>
   </ItemGroup>
+
+  <!--
+    La documentation XML sert a faire respecter les commentaires a la compilation, mais
+    n'a aucune utilite a l'execution : elle est retiree du dossier de sortie pour ne pas
+    alourdir le paquet de moitie.
+  -->
+  <Target Name="RemoveDocumentationFromOutput" AfterTargets="CopyFilesToOutputDirectory">
+    <Delete Files="$(OutDir)$(AssemblyName).xml" />
+  </Target>
 
   <ItemGroup>
     <EmbeddedResource Include="Configuration\**\*.html" />

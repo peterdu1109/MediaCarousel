@@ -127,7 +127,7 @@ public class CatalogController : ControllerBase
         Fields = Array.Empty<ItemFields>(),
         EnableImages = true,
         ImageTypeLimit = 1,
-        ImageTypes = new[] { ImageType.Logo, ImageType.Thumb, ImageType.Primary, ImageType.Backdrop },
+        ImageTypes = new[] { ImageType.Logo, ImageType.Thumb },
         EnableUserData = false
     };
 }

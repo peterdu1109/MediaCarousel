@@ -186,6 +186,11 @@ si l'administrateur supprime la collection, elle est recréée au recalcul suiva
   honorés.
 - **CSS** : injecté dans un `<style id="mc-styles">`, tout est préfixé `mc-`, rien n'est surchargé
   hors de ces classes.
+- **Cache client** : `jellyfin-web` reconstruit le conteneur à chaque affichage de l'accueil, donc
+  `render()` repart de zéro à chaque visite. `loadCached` mémorise les réponses cinq minutes —
+  sans quoi chaque retour sur l'accueil relancerait les quatre requêtes alors que les classements
+  ne sont recalculés que toutes les quelques heures. Un résultat vide n'est jamais mémorisé :
+  une panne passagère ne doit pas condamner une rangée pour cinq minutes.
 
 ### Intégration à index.html
 
@@ -233,9 +238,16 @@ Utilisés par la CI pour le versionnage sémantique (`!` ou `BREAKING CHANGE` �
 dotnet build -c Release
 ```
 
-Sortie dans `bin/Release/net9.0/` : **uniquement** `JellyfinCarouselPlugin.dll` (+ `pdb`, `xml`, `deps.json`).
-`CopyLocalLockFileAssemblies=false` et `ExcludeAssets=runtime` garantissent qu'aucune dépendance
-Jellyfin ou EF Core n'est empaquetée — le serveur fournit tout à l'exécution.
+Sortie dans `bin/Release/net9.0/` : **uniquement** `JellyfinCarouselPlugin.dll` et `deps.json`.
+
+- `CopyLocalLockFileAssemblies=false` et `ExcludeAssets=runtime` : aucune dépendance Jellyfin
+  ou EF Core n'est empaquetée, le serveur fournit tout à l'exécution.
+- `DebugType=none` : pas de `.pdb`, Jellyfin ne le lit pas.
+- La cible `RemoveDocumentationFromOutput` retire le `.xml` de documentation après la copie.
+  Il reste généré (il fait respecter les commentaires XML à la compilation) mais pesait à lui
+  seul plus de la moitié du paquet.
+
+Ces trois règles ramènent le ZIP de 84 Ko à 50 Ko.
 
 ### Package
 
@@ -292,6 +304,15 @@ synchrone dans une route bloquerait le serveur sur les grandes bibliothèques.
 **`GET /Plugins/{id}/Configuration` est réservé aux administrateurs :** tout script client qui
 appelle `ApiClient.getPluginConfiguration` échoue en 403 pour un utilisateur standard. Passer par
 `ClientOptions`.
+
+**Ne demander au `DtoOptions` que ce que le rendu utilise :** chaque `ItemFields` supplémentaire
+est une jointure SQL de plus et des octets inutiles sur le réseau. Le script n'a besoin que de
+`Id`, `Name`, `ServerId`, `IsFolder` et de l'affiche — `Overview` seul pesait souvent plus que
+tout le reste de la réponse.
+
+**`AssetsController` répond `304` :** la version du plugin sert d'`ETag` et la surcharge
+`File(stream, contentType, lastModified, entityTag)` gère seule `If-None-Match`. Sans cela, les
+26 Ko du script étaient retransmis à chaque chargement de page.
 
 **Le navigateur met `index.html` en cache :** après un changement d'intégration, un rechargement
 forcé (Ctrl+Maj+R) est nécessaire. `AssetsController` place la version du plugin en `ETag` pour

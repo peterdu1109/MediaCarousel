@@ -218,7 +218,8 @@ dotnet build -c Release
 cd bin/Release/net9.0 && zip -r ../../../JellyfinCarouselPlugin.zip .
 ```
 
-Le paquet ne contient que l'assembly du plugin : toutes les dépendances sont fournies par le serveur.
+Le paquet ne contient que l'assembly du plugin (**50 Ko**) : les dépendances sont fournies par le
+serveur, et ni les symboles de débogage ni la documentation XML ne sont empaquetés.
 
 L'architecture interne est documentée dans [CLAUDE.md](CLAUDE.md).
 

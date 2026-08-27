@@ -242,18 +242,17 @@ public class TopListsController : ControllerBase
             : null;
     }
 
+    /// <summary>
+    /// Le rendu n'a besoin que de l'identité de l'élément et de son affiche. Chaque champ
+    /// supplémentaire est une jointure SQL de plus et des octets inutiles sur le réseau :
+    /// le résumé seul pèse souvent plus que tout le reste de la réponse.
+    /// </summary>
     private static DtoOptions CreateDtoOptions() => new(false)
     {
-        Fields = new[]
-        {
-            ItemFields.PrimaryImageAspectRatio,
-            ItemFields.Overview,
-            ItemFields.Genres,
-            ItemFields.ProviderIds
-        },
+        Fields = Array.Empty<ItemFields>(),
         EnableImages = true,
         ImageTypeLimit = 1,
-        ImageTypes = new[] { ImageType.Primary, ImageType.Backdrop, ImageType.Thumb },
-        EnableUserData = true
+        ImageTypes = new[] { ImageType.Primary },
+        EnableUserData = false
     };
 }
