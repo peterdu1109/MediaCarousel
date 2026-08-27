@@ -36,6 +36,9 @@ public sealed class TopListItemDto
     /// <summary>Obtient ou définit la date de dernière lecture (Top local).</summary>
     public DateTime? LastPlayedUtc { get; set; }
 
+    /// <summary>Obtient ou définit l'affiche externe, utilisée quand le titre n'est pas dans la bibliothèque.</summary>
+    public string? PosterUrl { get; set; }
+
     /// <summary>
     /// Obtient ou définit l'élément Jellyfin correspondant, ou <c>null</c> si le titre
     /// n'est pas présent dans la bibliothèque (Top global uniquement).

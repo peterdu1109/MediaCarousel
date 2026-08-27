@@ -87,6 +87,40 @@ public class TopListsController : ControllerBase
         => Ok(BuildResponse(TopListKind.Global, limit, userId));
 
     /// <summary>
+    /// Renvoie les réglages d'affichage nécessaires au script de la page d'accueil.
+    /// </summary>
+    /// <remarks>
+    /// Point d'accès distinct de la configuration du plugin, qui exige des droits
+    /// d'administrateur : un utilisateur standard doit pouvoir afficher les rangées
+    /// sans jamais voir la clé d'API de la source externe.
+    /// </remarks>
+    /// <response code="200">Les réglages d'affichage.</response>
+    /// <returns>Les réglages d'affichage.</returns>
+    [HttpGet("ClientOptions")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public ActionResult<ClientOptionsDto> GetClientOptions()
+    {
+        var config = Plugin.Instance?.Configuration;
+
+        if (config is null)
+        {
+            return Ok(new ClientOptionsDto());
+        }
+
+        return Ok(new ClientOptionsDto
+        {
+            EnableHomeRows = config.EnableHomeRows,
+            ShowLocalRow = config.EnableLocalTop,
+            ShowGlobalRow = config.EnableGlobalTop,
+            LocalRowTitle = config.LocalRowTitle,
+            GlobalRowTitle = config.GlobalRowTitle,
+            HighlightColor = config.HighlightColor,
+            LocalRowSize = config.LocalTopSize,
+            GlobalRowSize = config.GlobalTopSize
+        });
+    }
+
+    /// <summary>
     /// Déclenche un recalcul immédiat des classements.
     /// </summary>
     /// <remarks>
@@ -153,6 +187,7 @@ public class TopListsController : ControllerBase
                 ProductionYear = entry.ProductionYear,
                 TmdbId = entry.TmdbId,
                 ImdbId = entry.ImdbId,
+                PosterUrl = entry.PosterUrl,
                 TotalPlays = entry.TotalPlays,
                 DistinctViewers = entry.DistinctViewers,
                 LastPlayedUtc = entry.LastPlayedUtc

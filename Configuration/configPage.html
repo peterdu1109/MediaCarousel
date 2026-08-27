@@ -129,7 +129,37 @@
                     </div>
 
                     <br />
-                    <h2 class="sectionTitle">Rafraîchissement et publication</h2>
+                    <h2 class="sectionTitle">Affichage sur la page d'accueil</h2>
+                    <p class="fieldDescription">
+                        Les classements apparaissent en rangées façon Netflix, juste sous tes bibliothèques.
+                        Rien à installer : le plugin s'intègre tout seul à l'interface web.
+                    </p>
+
+                    <div class="checkboxContainer checkboxContainer-withDescription">
+                        <label class="emby-checkbox-label">
+                            <input is="emby-checkbox" type="checkbox" id="EnableHomeRows" />
+                            <span>Afficher les rangées sur la page d'accueil</span>
+                        </label>
+                        <div class="fieldDescription">
+                            Prend effet au redémarrage du serveur. Pense à vider le cache de ton navigateur
+                            la première fois (Ctrl+Maj+R).
+                        </div>
+                    </div>
+
+                    <div class="inputContainer">
+                        <input is="emby-input" type="text" id="LocalRowTitle" label="Titre de la rangée — Top du serveur" />
+                    </div>
+
+                    <div class="inputContainer">
+                        <input is="emby-input" type="text" id="GlobalRowTitle" label="Titre de la rangée — Top mondial" />
+                    </div>
+
+                    <div class="inputContainer">
+                        <input is="emby-input" type="color" id="HighlightColor" label="Couleur d'accentuation" />
+                    </div>
+
+                    <br />
+                    <h2 class="sectionTitle">Rafraîchissement</h2>
 
                     <div class="inputContainer">
                         <input is="emby-input" type="number" id="RefreshIntervalHours" min="1" max="168" step="1"
@@ -143,10 +173,10 @@
                     <div class="checkboxContainer checkboxContainer-withDescription">
                         <label class="emby-checkbox-label">
                             <input is="emby-checkbox" type="checkbox" id="SyncCollections" />
-                            <span>Publier les classements sous forme de collections</span>
+                            <span>Créer aussi une collection par classement</span>
                         </label>
                         <div class="fieldDescription">
-                            Seule façon de rendre les listes visibles dans les clients existants sans modifier l'interface.
+                            Utile pour les clients qui n'exécutent pas le script (Kodi, certains boîtiers TV).
                         </div>
                     </div>
 
@@ -177,7 +207,8 @@
                 var page = document.querySelector('#mediaCarouselConfigPage');
 
                 var checkboxes = [
-                    'EnableLocalTop', 'EnableGlobalTop', 'GlobalTopLibraryOnly', 'SyncCollections'
+                    'EnableLocalTop', 'EnableGlobalTop', 'GlobalTopLibraryOnly',
+                    'EnableHomeRows', 'SyncCollections'
                 ];
                 var numbers = [
                     'LocalTopSize', 'LocalTopWindowDays', 'MaxPlaysCountedPerUser', 'CandidatesPerUser',
@@ -185,7 +216,8 @@
                 ];
                 var texts = [
                     'LocalTopMediaKind', 'GlobalTopProvider', 'GlobalTopApiKey', 'GlobalTopMediaKind',
-                    'MetadataLanguage', 'LocalCollectionName', 'GlobalCollectionName'
+                    'MetadataLanguage', 'LocalRowTitle', 'GlobalRowTitle', 'HighlightColor',
+                    'LocalCollectionName', 'GlobalCollectionName'
                 ];
                 var lists = ['ExcludedUserIds', 'ExcludedLibraryIds'];
 

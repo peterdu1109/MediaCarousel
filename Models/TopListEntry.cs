@@ -60,6 +60,12 @@ public sealed class TopListEntry
     public string? ImdbId { get; set; }
 
     /// <summary>
+    /// Obtient ou définit l'affiche fournie par la source externe, utilisée quand le titre
+    /// n'est pas présent dans la bibliothèque.
+    /// </summary>
+    public string? PosterUrl { get; set; }
+
+    /// <summary>
     /// Obtient une valeur indiquant si le titre existe dans la bibliothèque locale.
     /// </summary>
     public bool IsInLibrary => ItemId != Guid.Empty;

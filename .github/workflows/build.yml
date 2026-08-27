@@ -85,8 +85,8 @@ jobs:
 
       - name: Commit version bump
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "peterdu1109"
+          git config user.email "peter1109@hotmail.fr"
           git add manifest.json JellyfinCarouselPlugin.csproj
           git diff --cached --quiet || git commit -m "chore: bump ${{ steps.ver.outputs.version }} [skip ci]"
           git push origin main

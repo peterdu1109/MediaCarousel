@@ -37,6 +37,8 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Configuration\**\*.html" />
+    <!-- Le script de la page d'accueil est servi par AssetsController depuis les ressources. -->
+    <EmbeddedResource Include="Web\media-carousel.js" />
   </ItemGroup>
 
 </Project>

@@ -2,13 +2,14 @@
 
 ## Vue d'ensemble
 
-Plugin Jellyfin **100 % backend**. Il génère automatiquement deux classements dynamiques :
+Plugin Jellyfin qui génère automatiquement deux classements dynamiques :
 
 1. **Top du serveur** — les titres les plus regardés d'après les statistiques de lecture de tous les comptes.
 2. **Top mondial** — les titres les plus populaires d'après TMDB ou Trakt, rapprochés de la bibliothèque locale.
 
-Le plugin **ne touche pas au frontend** : ni injection dans `index.html`, ni CSS, ni JavaScript client.
-Les classements sont publiés en collections Jellyfin et via l'API REST du serveur.
+**Tout le calcul est backend.** Le frontend se limite à un script d'affichage de ~400 lignes qui
+consomme l'API du plugin et insère deux rangées façon Netflix sous les bibliothèques de la page
+d'accueil. Il ne calcule rien, ne remplace pas la page d'accueil et ne masque aucune section native.
 
 - **Plugin GUID :** `191bd290-1054-4b55-a137-46c72181266b` — dans `Plugin.cs`, `manifest.json`, `build.yaml`, `configPage.html`
 - **Cible :** Jellyfin **10.11.9+** (ABI `10.11.9.0`), .NET 9.0, paquets NuGet Jellyfin 10.11.11
@@ -16,6 +17,14 @@ Les classements sont publiés en collections Jellyfin et via l'API REST du serve
 
 > **ABI 10.11.9 minimum :** `IUserManager.Users` (propriété) est devenu `IUserManager.GetUsers()` (méthode)
 > en 10.11.9. Le plugin ne se charge pas sur une version antérieure.
+
+> **Pourquoi un script frontend est inévitable :** les sections de la page d'accueil de Jellyfin
+> sont l'énumération fermée `HomeSectionType` (`None`, `SmallLibraryTiles`, `LibraryButtons`,
+> `ActiveRecordings`, `Resume`, `ResumeAudio`, `LatestMedia`, `NextUp`, `LiveTv`, `ResumeBook`),
+> et `jellyfin-web` les rend via un `switch` dont le `default` vide l'élément
+> (`src/components/homesections/homesections.js`). Aucun point d'extension serveur n'existe :
+> ajouter une rangée impose d'injecter du JavaScript dans le client. Le plugin le fait
+> automatiquement, sans intervention de l'administrateur.
 
 ---
 
@@ -29,8 +38,10 @@ MediaCarousel/
 ├── manifest.json                      # Catalogue Jellyfin (mis à jour par la CI)
 ├── build.yaml                         # Métadonnées du registre (maintenu à la main)
 ├── Api/
-│   ├── TopListsController.cs          # GET Top/Local, GET Top/Global, POST Top/Refresh
-│   └── TopListResponseDto.cs          # Contrat de sortie de l'API
+│   ├── TopListsController.cs          # GET Top/Local, Top/Global, ClientOptions ; POST Top/Refresh
+│   ├── TopListResponseDto.cs          # Contrat de sortie des classements
+│   ├── ClientOptionsDto.cs            # Réglages d'affichage, lisibles sans droits admin
+│   └── AssetsController.cs            # Sert media-carousel.js depuis les ressources
 ├── Configuration/
 │   ├── PluginConfiguration.cs         # Modèle de config + enums
 │   └── configPage.html                # UI admin, ressource embarquée
@@ -45,15 +56,20 @@ MediaCarousel/
 │   ├── TmdbTrendingProvider.cs        # TMDB /trending
 │   └── TraktTrendingProvider.cs       # Trakt /trending
 ├── ScheduledTasks/
-│   └── TopListRefreshTask.cs          # IScheduledTask : démarrage + intervalle
+│   ├── TopListRefreshTask.cs          # IScheduledTask : démarrage + intervalle
+│   └── ScriptInjectionTask.cs         # IScheduledTask : intègre le script à index.html
 ├── Services/
 │   ├── ITopListStore.cs / TopListStore.cs   # Publication atomique des instantanés
 │   ├── LocalTopListBuilder.cs               # Agrégation des statistiques de lecture
 │   ├── GlobalTopListBuilder.cs              # Source externe + rapprochement local
 │   ├── LibraryTitleIndex.cs                 # Index ProviderIds construit en une requête
 │   ├── CollectionSynchronizer.cs            # Matérialisation en BoxSet
-│   └── TopListRefreshService.cs             # Orchestration, verrou, tolérance aux pannes
-└── Web/icon.png                       # Icône (asset du dépôt, pas servi par le plugin)
+│   ├── TopListRefreshService.cs             # Orchestration, verrou, tolérance aux pannes
+│   ├── ScriptTag.cs                         # Balise script : insertion, retrait, migration
+│   └── IndexHtmlTransformer.cs              # Callback FileTransformation (réflexion)
+└── Web/
+    ├── media-carousel.js              # Rangées Top 10 sur la page d'accueil (ressource embarquée)
+    └── icon.png                       # Icône (asset du dépôt, pas servi par le plugin)
 ```
 
 ---
@@ -70,6 +86,9 @@ TopListRefreshTask ──> TopListRefreshService ──┬─> LocalTopListBuild
     intervalle)                                └─> CollectionSynchronizer ──> BoxSet Jellyfin
 
 TopListsController ──> ITopListStore (lecture sans verrou) ──> IDtoService ──> BaseItemDto
+                                                                      ▲
+ScriptInjectionTask ──> index.html ──> media-carousel.js ─────────────┘
+   (FileTransformation, sinon disque)      (rendu des rangées)
 ```
 
 ### Top du serveur — pourquoi une requête par utilisateur
@@ -123,6 +142,38 @@ si l'administrateur supprime la collection, elle est recréée au recalcul suiva
 
 ---
 
+### Couche frontend
+
+`Web/media-carousel.js` est une IIFE sans dépendance, servie par `AssetsController` sur
+`/MediaCarousel/media-carousel.js` (route stable, contrairement au nom du dossier d'installation).
+
+- **Aucun calcul** : le script appelle `Top/Local`, `Top/Global` et `ClientOptions`, puis rend.
+- **`ClientOptions` existe parce que** `GET /Plugins/{id}/Configuration` exige `RequiresElevation` :
+  un utilisateur standard ne peut pas lire la configuration du plugin. Le contrat `ClientOptionsDto`
+  n'expose que ce qui sert au rendu — jamais la clé d'API de la source externe.
+- **Point d'insertion** : la section « Mes médias » est repérée par
+  `.homeLibraryButton, .card[data-type="CollectionFolder"], .card[data-type="UserView"]`,
+  et les rangées sont insérées juste après. À défaut, en tête du conteneur.
+- **Réinjection** : `jellyfin-web` reconstruit entièrement `.homeSectionsContainer` à chaque
+  affichage de l'accueil. Un `MutationObserver` débouncé, plus `hashchange` et `viewshow`,
+  déclenchent un nouveau rendu ; le garde `container.querySelector('.mc-row')` évite les doublons.
+- **CSS** : injecté dans un `<style id="mc-styles">`, tout est préfixé `mc-`, rien n'est surchargé
+  hors de ces classes.
+
+### Intégration à index.html
+
+`ScriptInjectionTask` tente d'abord le plugin **File Transformation** (transformation en mémoire,
+rien sur le disque, insensible aux mises à jour de Jellyfin), sinon modifie `index.html`
+directement. `ScriptTag` centralise la balise, garantit l'idempotence et **retire les balises des
+versions 1.x et 2.x** — sans quoi un navigateur continuerait à demander l'ancien
+`carousel-layout.js` disparu.
+
+La charge utile envoyée à FileTransformation est construite par réflexion à partir du type de
+paramètre déclaré par sa propre méthode (`JObject.Parse`), pour ne pas dépendre d'une version de
+Newtonsoft.Json qui pourrait diverger à l'exécution.
+
+---
+
 ## Conventions de code
 
 ### C#
@@ -133,6 +184,13 @@ si l'administrateur supprime la collection, elle est recréée au recalcul suiva
 - `async`/`await` avec `.ConfigureAwait(false)` dans les services ; jamais de `.Result` ni de `.Wait()`.
 - Tout appel long accepte et honore un `CancellationToken`.
 - Injection de dépendances par constructeur, jamais de service locator.
+
+### JavaScript
+- ES5 uniquement (pas de `let`, d'arrow function ni de template literal) : certains téléviseurs
+  exécutent un moteur ancien. Aucun build, aucun paquet npm, aucun TypeScript.
+- IIFE unique, rien exposé en global.
+- Commentaires en français, identifiants en anglais.
+- Tout HTML construit à partir de données passe par `escapeHtml`.
 
 ### Commits
 Conventional Commits : `feat:`, `fix:`, `docs:`, `refactor:`, `chore:`. Messages < 80 caractères.
@@ -203,6 +261,14 @@ reviennent vides. De même pour `EnableUserData` et `EnableImages`. Ne demander 
 
 **Pas de calcul dans un contrôleur :** le contrôleur lit l'instantané publié. Ajouter un calcul
 synchrone dans une route bloquerait le serveur sur les grandes bibliothèques.
+
+**`GET /Plugins/{id}/Configuration` est réservé aux administrateurs :** tout script client qui
+appelle `ApiClient.getPluginConfiguration` échoue en 403 pour un utilisateur standard. Passer par
+`ClientOptions`.
+
+**Le navigateur met `index.html` en cache :** après un changement d'intégration, un rechargement
+forcé (Ctrl+Maj+R) est nécessaire. `AssetsController` place la version du plugin en `ETag` pour
+qu'une mise à jour invalide l'ancien script.
 
 **Filtrage de visibilité au service, pas au calcul :** le classement est global ; c'est à la lecture
 que `BaseItem.IsVisible(user)` retire ce que l'appelant n'a pas le droit de voir.

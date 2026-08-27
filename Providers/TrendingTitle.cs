@@ -10,6 +10,7 @@ namespace JellyfinCarouselPlugin.Providers;
 /// <param name="ImdbId">Identifiant IMDb, si connu.</param>
 /// <param name="IsMovie"><c>true</c> pour un film, <c>false</c> pour une série.</param>
 /// <param name="Popularity">Score de popularité brut fourni par la source.</param>
+/// <param name="PosterUrl">Affiche fournie par la source, ou <c>null</c>.</param>
 public sealed record TrendingTitle(
     int Rank,
     string Title,
@@ -17,4 +18,5 @@ public sealed record TrendingTitle(
     string? TmdbId,
     string? ImdbId,
     bool IsMovie,
-    double Popularity);
+    double Popularity,
+    string? PosterUrl);

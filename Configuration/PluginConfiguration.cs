@@ -133,8 +133,34 @@ public class PluginConfiguration : BasePluginConfiguration
     public int RefreshIntervalHours { get; set; } = 6;
 
     /// <summary>
-    /// Obtient ou définit une valeur indiquant si les classements sont matérialisés
-    /// en collections Jellyfin, seule façon de les rendre visibles sans modifier le client.
+    /// Obtient ou définit une valeur indiquant si les classements sont affichés directement
+    /// sur la page d'accueil, sous les bibliothèques, sous forme de rangées façon Netflix.
+    /// </summary>
+    /// <remarks>
+    /// Jellyfin ne propose aucun point d'extension serveur pour la page d'accueil : ses sections
+    /// sont une énumération fermée rendue par le client web. Le plugin injecte donc un script
+    /// autonome dans <c>index.html</c>, automatiquement, sans intervention de l'administrateur.
+    /// </remarks>
+    public bool EnableHomeRows { get; set; } = true;
+
+    /// <summary>
+    /// Obtient ou définit le titre de la rangée du Top local sur la page d'accueil.
+    /// </summary>
+    public string LocalRowTitle { get; set; } = "Top 10 sur ce serveur";
+
+    /// <summary>
+    /// Obtient ou définit le titre de la rangée du Top mondial sur la page d'accueil.
+    /// </summary>
+    public string GlobalRowTitle { get; set; } = "Top 10 mondial";
+
+    /// <summary>
+    /// Obtient ou définit la couleur d'accentuation des rangées (hexadécimal).
+    /// </summary>
+    public string HighlightColor { get; set; } = "#e50914";
+
+    /// <summary>
+    /// Obtient ou définit une valeur indiquant si les classements sont aussi matérialisés
+    /// en collections Jellyfin, pour les clients qui n'exécutent pas le script (Kodi, Android TV).
     /// </summary>
     public bool SyncCollections { get; set; }
 

@@ -131,7 +131,8 @@ public sealed class TraktTrendingProvider : ITrendingProvider
                 ? yearElement.GetInt32()
                 : (int?)null;
 
-            titles.Add(new TrendingTitle(++rank, title, year, tmdbId, imdbId, isMovie, watchers));
+            // L'API Trakt ne renvoie pas d'affiche : la carte s'appuiera sur la bibliothèque locale.
+            titles.Add(new TrendingTitle(++rank, title, year, tmdbId, imdbId, isMovie, watchers, PosterUrl: null));
         }
 
         return titles;

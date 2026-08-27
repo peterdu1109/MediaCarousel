@@ -95,7 +95,8 @@ public sealed class GlobalTopListBuilder
                 ProductionYear = title.Year,
                 Score = title.Popularity,
                 TmdbId = title.TmdbId,
-                ImdbId = title.ImdbId
+                ImdbId = title.ImdbId,
+                PosterUrl = title.PosterUrl
             });
 
             if (entries.Count == size)

@@ -19,6 +19,7 @@ namespace JellyfinCarouselPlugin.Providers;
 public sealed class TmdbTrendingProvider : ITrendingProvider
 {
     private const string BaseUrl = "https://api.themoviedb.org/3/trending/";
+    private const string PosterBaseUrl = "https://image.tmdb.org/t/p/w342";
 
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<TmdbTrendingProvider> _logger;
@@ -121,6 +122,8 @@ public sealed class TmdbTrendingProvider : ITrendingProvider
                 ? popularityElement.GetDouble()
                 : 0d;
 
+            var posterPath = ReadString(element, "poster_path");
+
             titles.Add(new TrendingTitle(
                 ++rank,
                 title,
@@ -128,7 +131,8 @@ public sealed class TmdbTrendingProvider : ITrendingProvider
                 tmdbId,
                 ImdbId: null,
                 isMovie,
-                popularity));
+                popularity,
+                string.IsNullOrEmpty(posterPath) ? null : PosterBaseUrl + posterPath));
         }
 
         return titles;

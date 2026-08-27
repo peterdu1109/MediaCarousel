@@ -21,8 +21,15 @@ Media Carousel génère **tout seul** deux classements et les tient à jour.
 | 🏠 | **Top du serveur** | Les statistiques de lecture de **tous** les comptes de ton serveur |
 | 🌍 | **Top mondial** | TMDB ou Trakt, rapproché de ta bibliothèque |
 
-Tout se passe **côté serveur**. Le plugin ne touche pas à l'interface web : aucun fichier de
-Jellyfin n'est modifié, rien à réinstaller après une mise à jour du serveur.
+<div align="center">
+  <em>Rang en grand chiffre, affiche, défilement horizontal — sous tes bibliothèques.</em>
+</div>
+
+Les deux classements s'affichent **directement sur ta page d'accueil**, en rangées façon Netflix,
+juste sous tes bibliothèques — grand chiffre du rang, affiche, défilement horizontal.
+
+Rien à installer ni à bricoler : le plugin s'intègre tout seul à l'interface web au démarrage
+du serveur. Tout le calcul est fait côté serveur, en tâche de fond.
 
 ---
 
@@ -54,9 +61,9 @@ décompresse-le dans `plugins/MediaCarousel/`, puis redémarre Jellyfin.
 1. **Tableau de bord → Extensions → Media Carousel**
 2. Règle le **Top du serveur** : nombre de titres, fenêtre d'observation.
 3. Pour le **Top mondial**, choisis TMDB ou Trakt et colle ta clé d'API.
-4. Coche **Publier les classements sous forme de collections** si tu veux les voir apparaître
-   dans tes clients Jellyfin.
-5. Clique sur **Recalculer maintenant**.
+4. Clique sur **Recalculer maintenant**.
+5. Ouvre ta page d'accueil. Si les rangées n'apparaissent pas tout de suite, vide le cache du
+   navigateur (**Ctrl + Maj + R**) — l'interface web garde l'ancienne page en mémoire.
 
 Ensuite, plus rien à faire : le recalcul se relance au démarrage du serveur et à intervalle régulier.
 
@@ -109,12 +116,27 @@ jamais la liste.
 </details>
 
 <details>
-<summary><strong>Rafraîchissement et publication</strong></summary>
+<summary><strong>Affichage sur la page d'accueil</strong></summary>
+
+| Réglage | Défaut | À quoi ça sert |
+|---|---|---|
+| Afficher les rangées | ✅ | Interrupteur principal du rendu sur l'accueil |
+| Titre — Top du serveur | `Top 10 sur ce serveur` | Titre de la rangée |
+| Titre — Top mondial | `Top 10 mondial` | Titre de la rangée |
+| Couleur d'accentuation | `#e50914` | Couleur du badge et du contour du chiffre au survol |
+
+Le plugin **n'écrase pas** ta page d'accueil : il ajoute ses rangées sous les bibliothèques et
+laisse le reste intact (Continuer à regarder, Derniers ajouts, etc.).
+
+</details>
+
+<details>
+<summary><strong>Rafraîchissement et collections</strong></summary>
 
 | Réglage | Défaut | À quoi ça sert |
 |---|---|---|
 | Intervalle de recalcul | `6` h | Fréquence du recalcul automatique |
-| Publier en collections | ❌ | Crée une collection Jellyfin par classement, visible dans tous les clients |
+| Créer aussi une collection | ❌ | Pour les clients qui n'exécutent pas le script (Kodi, certains boîtiers TV) |
 | Nom de la collection — Top du serveur | `Top 10 du serveur` | |
 | Nom de la collection — Top mondial | `Top 10 mondial` | |
 
