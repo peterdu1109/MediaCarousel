@@ -14,10 +14,15 @@ public sealed class CatalogSnapshot
     /// <param name="kind">Nature du catalogue.</param>
     /// <param name="entries">Entrées déjà triées par nombre de titres décroissant.</param>
     public CatalogSnapshot(CatalogKind kind, IReadOnlyList<CatalogEntry> entries)
+        : this(kind, entries, DateTime.UtcNow)
+    {
+    }
+
+    private CatalogSnapshot(CatalogKind kind, IReadOnlyList<CatalogEntry> entries, DateTime generatedUtc)
     {
         Kind = kind;
         Entries = entries;
-        GeneratedUtc = DateTime.UtcNow;
+        GeneratedUtc = generatedUtc;
     }
 
     /// <summary>
@@ -41,4 +46,16 @@ public sealed class CatalogSnapshot
     /// <param name="kind">Nature du catalogue.</param>
     /// <returns>Un catalogue sans entrée.</returns>
     public static CatalogSnapshot Empty(CatalogKind kind) => new(kind, Array.Empty<CatalogEntry>());
+
+    /// <summary>
+    /// Reconstitue un catalogue lu depuis le disque, en conservant sa date d'agrégation d'origine.
+    /// </summary>
+    /// <param name="kind">Nature du catalogue.</param>
+    /// <param name="entries">Entrées agrégées.</param>
+    /// <param name="generatedUtc">Instant de l'agrégation d'origine.</param>
+    /// <returns>Le catalogue reconstitué.</returns>
+    public static CatalogSnapshot Restore(
+        CatalogKind kind,
+        IReadOnlyList<CatalogEntry> entries,
+        DateTime generatedUtc) => new(kind, entries, generatedUtc);
 }

@@ -15,12 +15,14 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
     public void RegisterServices(IServiceCollection serviceCollection, IServerApplicationHost applicationHost)
     {
         // L'instantané des classements doit survivre entre deux requêtes : singleton obligatoire.
+        serviceCollection.AddSingleton<SnapshotStorage>();
         serviceCollection.AddSingleton<ITopListStore, TopListStore>();
         serviceCollection.AddSingleton<ICatalogStore, CatalogStore>();
 
         serviceCollection.AddSingleton<LocalTopListBuilder>();
         serviceCollection.AddSingleton<GlobalTopListBuilder>();
         serviceCollection.AddSingleton<CatalogBuilder>();
+        serviceCollection.AddSingleton<LibraryRowBuilder>();
         serviceCollection.AddSingleton<CollectionSynchronizer>();
         serviceCollection.AddSingleton<TopListRefreshService>();
 

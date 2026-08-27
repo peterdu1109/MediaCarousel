@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <!-- Permet d'executer les tests sur un runtime plus recent que la cible du plugin. -->
+    <RollForward>Major</RollForward>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>JellyfinCarouselPlugin.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Ces deux classes n'ont aucune dependance Jellyfin : les fichiers sont compiles
+         directement, ce qui evite de referencer le plugin et ses paquets. -->
+    <Compile Include="../../Services/ScriptTag.cs" />
+    <Compile Include="../../Services/StudioNameNormalizer.cs" />
+  </ItemGroup>
+
+</Project>

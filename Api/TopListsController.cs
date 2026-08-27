@@ -87,6 +87,30 @@ public class TopListsController : ControllerBase
         => Ok(BuildResponse(TopListKind.Global, limit, userId));
 
     /// <summary>
+    /// Renvoie les films bien notés que personne n'a encore lancés sur le serveur.
+    /// </summary>
+    /// <param name="limit">Nombre maximal d'entrées renvoyées.</param>
+    /// <param name="userId">Utilisateur pour lequel filtrer la visibilité. Par défaut, l'appelant.</param>
+    /// <response code="200">La rangée « jamais vu ».</response>
+    /// <returns>La rangée « jamais vu ».</returns>
+    [HttpGet("Rows/NeverPlayed")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public ActionResult<TopListResponseDto> GetNeverPlayed([FromQuery] int? limit, [FromQuery] Guid? userId)
+        => Ok(BuildResponse(TopListKind.NeverPlayed, limit, userId));
+
+    /// <summary>
+    /// Renvoie les séries dont des épisodes viennent d'être ajoutés.
+    /// </summary>
+    /// <param name="limit">Nombre maximal d'entrées renvoyées.</param>
+    /// <param name="userId">Utilisateur pour lequel filtrer la visibilité. Par défaut, l'appelant.</param>
+    /// <response code="200">La rangée « de retour ».</response>
+    /// <returns>La rangée « de retour ».</returns>
+    [HttpGet("Rows/Returning")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public ActionResult<TopListResponseDto> GetReturningSeries([FromQuery] int? limit, [FromQuery] Guid? userId)
+        => Ok(BuildResponse(TopListKind.ReturningSeries, limit, userId));
+
+    /// <summary>
     /// Renvoie les réglages d'affichage nécessaires au script de la page d'accueil.
     /// </summary>
     /// <remarks>
@@ -122,7 +146,14 @@ public class TopListsController : ControllerBase
             StudioRowSize = config.StudioRowSize,
             ShowGenreRows = config.EnableGenreRows,
             GenreRowCount = config.GenreRowCount,
-            GenreRowItemCount = config.GenreRowItemCount
+            GenreRowItemCount = config.GenreRowItemCount,
+            ShowNeverPlayedRow = config.EnableNeverPlayedRow,
+            NeverPlayedRowTitle = config.NeverPlayedRowTitle,
+            NeverPlayedRowSize = config.NeverPlayedRowSize,
+            ShowReturningRow = config.EnableReturningRow,
+            ReturningRowTitle = config.ReturningRowTitle,
+            ReturningRowSize = config.ReturningRowSize,
+            HideNativeSections = config.HideNativeHomeSections
         });
     }
 

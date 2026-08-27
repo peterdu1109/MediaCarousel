@@ -44,3 +44,6 @@ JellyfinCarouselPlugin.zip
 build_output.txt
 errors.txt
 restore_log.txt
+
+# Dependances des tests navigateur
+tests/browser/node_modules/

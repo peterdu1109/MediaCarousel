@@ -51,4 +51,28 @@ public sealed class ClientOptionsDto
 
     /// <summary>Obtient ou définit le nombre de titres par rangée de genre.</summary>
     public int GenreRowItemCount { get; set; }
+
+    /// <summary>Obtient ou définit une valeur indiquant si la rangée « jamais vu » est active.</summary>
+    public bool ShowNeverPlayedRow { get; set; }
+
+    /// <summary>Obtient ou définit le titre de la rangée « jamais vu ».</summary>
+    public string NeverPlayedRowTitle { get; set; } = string.Empty;
+
+    /// <summary>Obtient ou définit le nombre d'entrées de la rangée « jamais vu ».</summary>
+    public int NeverPlayedRowSize { get; set; }
+
+    /// <summary>Obtient ou définit une valeur indiquant si la rangée « de retour » est active.</summary>
+    public bool ShowReturningRow { get; set; }
+
+    /// <summary>Obtient ou définit le titre de la rangée « de retour ».</summary>
+    public string ReturningRowTitle { get; set; } = string.Empty;
+
+    /// <summary>Obtient ou définit le nombre d'entrées de la rangée « de retour ».</summary>
+    public int ReturningRowSize { get; set; }
+
+    /// <summary>
+    /// Obtient ou définit une valeur indiquant si les sections natives de Jellyfin
+    /// doivent être masquées sur la page d'accueil.
+    /// </summary>
+    public bool HideNativeSections { get; set; }
 }

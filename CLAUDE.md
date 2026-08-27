@@ -38,7 +38,7 @@ MediaCarousel/
 ├── manifest.json                      # Catalogue Jellyfin (mis à jour par la CI)
 ├── build.yaml                         # Métadonnées du registre (maintenu à la main)
 ├── Api/
-│   ├── TopListsController.cs          # GET Top/Local, Top/Global, ClientOptions ; POST Top/Refresh
+│   ├── TopListsController.cs          # GET Top/*, Rows/*, ClientOptions ; POST Top/Refresh
 │   ├── CatalogController.cs           # GET Studios, Genres
 │   ├── StatusController.cs            # GET Status (admin) : état des sections
 │   ├── TopListResponseDto.cs          # Contrat de sortie des classements
@@ -50,7 +50,7 @@ MediaCarousel/
 │   ├── PluginConfiguration.cs         # Modèle de config + enums
 │   └── configPage.html                # UI admin, ressource embarquée
 ├── Models/
-│   ├── TopListKind.cs                 # Local | Global
+│   ├── TopListKind.cs                 # Local | Global | NeverPlayed | ReturningSeries
 │   ├── TopListEntry.cs                # Une entrée classée
 │   ├── TopListSnapshot.cs             # Résultat figé et immuable d'un calcul
 │   ├── CatalogKind.cs                 # Studios | Genres
@@ -69,6 +69,9 @@ MediaCarousel/
 │   ├── ITopListStore.cs / TopListStore.cs   # Publication atomique des classements
 │   ├── ICatalogStore.cs / CatalogStore.cs   # Publication atomique des catalogues
 │   ├── CatalogBuilder.cs                    # Agrégation studios / genres
+│   ├── StudioNameNormalizer.cs              # Regroupement des variantes d'un studio
+│   ├── LibraryRowBuilder.cs                 # Rangées « jamais vu » et « de retour »
+│   ├── SnapshotStorage.cs                   # Persistance JSON des instantanés
 │   ├── LocalTopListBuilder.cs               # Agrégation des statistiques de lecture
 │   ├── GlobalTopListBuilder.cs              # Source externe + rapprochement local
 │   ├── LibraryTitleIndex.cs                 # Index ProviderIds construit en une requête
@@ -135,10 +138,43 @@ deux indépendamment), IMDb, et titre normalisé + année en dernier recours.
 Sur-échantillonnage `size × 5` quand `GlobalTopLibraryOnly` est actif, pour remplir les places
 après filtrage.
 
+### Jamais vu et de retour cette semaine
+
+`LibraryRowBuilder` produit deux listes qui ne dépendent que de la bibliothèque.
+
+**Jamais vu** croise l'union des films lus par au moins un compte — obtenue par
+`GetItemIds`, qui ne remonte que des identifiants — avec les mieux notés triés par
+`CommunityRating`. Volontairement limité aux films : Jellyfin ne considère une série lue
+que si tous ses épisodes le sont, si bien qu'une série entamée puis abandonnée remonterait
+comme jamais vue. Sur-échantillonnage `size × 20` car la plupart des mieux notés ont déjà
+été vus.
+
+**De retour cette semaine** interroge les épisodes ajoutés depuis N jours, triés par
+`DateCreated` décroissant, et retient la première occurrence de chaque `SeriesId` : l'ordre
+des épisodes donne donc directement le rang des séries. La limite de 1000 épisodes garantit
+qu'une saison ajoutée d'un bloc ne masque pas les séries suivantes.
+
 ### Studios et genres
 
 `CatalogBuilder` s'appuie sur `ILibraryManager.GetStudios` / `GetGenres`, qui renvoient un
-`QueryResult<(BaseItem, ItemCounts)>`. Ces agrégations groupent sur toute la bibliothèque : elles
+`QueryResult<(BaseItem, ItemCounts)>`.
+
+**Les variantes d'un même studio sont fusionnées.** Les fournisseurs de métadonnées écrivent
+la même société sous plusieurs libellés — « Warner Bros. », « Warner Bros. Pictures »,
+« Warner Bros. Animation » sont trois entrées distinctes dans Jellyfin, et la rangée affichait
+donc trois fois le même studio. `StudioNameNormalizer` réduit un nom à son identité (sans
+accents, sans ponctuation, sans les mots décrivant la nature de la société) et sert de clé de
+regroupement. La variante retenue est celle qui **possède un logo**, puis celle qui compte le
+plus de titres : la rangée affiche des logos, un studio sans image y apparaîtrait comme un
+simple libellé. Le classement s'appuie en revanche sur le **total de toutes les variantes**,
+pour qu'un studio éclaté en cinq libellés ne soit pas relégué derrière un studio moins présent.
+
+Ce total n'est pas affiché : il agrège des variantes alors que le lien ne mène qu'à l'une
+d'elles. Il sert au classement et au seuil `MinItemsPerStudio`, pas au rendu.
+
+Un nom composé uniquement de mots génériques — « Studio », « Films » — conserve sa forme sans
+ponctuation comme clé, sinon des sociétés sans rapport se retrouveraient fusionnées sous une
+clé vide. Ces agrégations groupent sur toute la bibliothèque : elles
 sont calculées une fois par la tâche planifiée, jamais par requête. Elles ne portent aucune donnée
 de titre — seulement des noms et des décomptes — et la visibilité réelle reste appliquée par
 Jellyfin quand l'utilisateur ouvre la page d'un studio ou d'un genre.
@@ -147,6 +183,15 @@ Les **titres** d'une rangée de genre ne sont pas précalculés : le script les 
 de Jellyfin (`/Items?GenreIds=…`), une requête indexée, paginée et déjà filtrée par utilisateur —
 exactement ce que fait la page d'accueil native pour ses propres rangées. Le chargement est différé
 par `IntersectionObserver` pour ne pas déclencher toutes les requêtes au premier rendu.
+
+### Persistance
+
+`SnapshotStorage` écrit chaque instantané en JSON dans `Plugin.Instance.DataFolderPath`, et
+les stores le relisent dans leur constructeur. Sans cela, un redémarrage du serveur vide
+toutes les rangées jusqu'à la fin du premier recalcul — qui peut être long sur une grande
+bibliothèque, ou attendre le réseau pour le Top mondial. L'écriture passe par un fichier
+temporaire puis un `File.Move` : un arrêt brutal ne laisse jamais un fichier tronqué, et un
+fichier illisible est simplement ignoré au démarrage.
 
 ### Tolérance aux pannes
 
@@ -262,7 +307,21 @@ cd bin/Release/net9.0 && zip -r ../../../JellyfinCarouselPlugin.zip .
 3. **Tableau de bord → Tâches planifiées → Recalcul des classements MediaCarousel** pour déclencher.
 4. Vérifier via `GET /MediaCarousel/Top/Local` et le journal du serveur (préfixe `MediaCarousel`).
 
-Pas de tests automatisés. Validation manuelle sur une instance Jellyfin.
+### Tests
+
+```bash
+dotnet run --project tests/ScriptTag.Tests -c Release
+cd tests/browser && npm install && node home-rows.test.mjs && node config-page.test.mjs
+```
+
+Trois suites sans framework — 78 assertions — exécutées en CI avant la publication ; voir
+`tests/README.md`.
+Les deux suites navigateur chargent le vrai `media-carousel.js` et le vrai `configPage.html`
+dans Chromium, avec un `ApiClient` simulé. L'une d'elles **rejoue `allowSwipe()` de
+`jellyfin-web`** : le correctif du balayage mobile tient à une classe CSS, ce test est ce qui
+l'empêche de disparaître à un refactor.
+
+Reste à valider à la main sur une instance Jellyfin : l'injection du script et le rendu réel.
 
 ### CI/CD (`.github/workflows/build.yml`)
 
@@ -331,6 +390,11 @@ un `display:block` explicite.
 
 **Ne pas dépendre de la remise à zéro du client hôte :** `box-sizing: border-box` est appliqué
 explicitement sous `.mc-row`, sinon les hauteurs fixes dérivent selon le thème actif.
+
+**Le glob implicite du SDK avale `tests/**` :** sans
+`<DefaultItemExcludes>$(DefaultItemExcludes);tests\**</DefaultItemExcludes>`, le projet du
+plugin compile aussi les fichiers `AssemblyInfo` générés dans les `obj/` des tests et échoue
+sur des attributs dupliqués.
 
 **Filtrage de visibilité au service, pas au calcul :** le classement est global ; c'est à la lecture
 que `BaseItem.IsVisible(user)` retire ce que l'appelant n'a pas le droit de voir.

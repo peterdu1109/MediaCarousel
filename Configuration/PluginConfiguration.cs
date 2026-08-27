@@ -168,6 +168,53 @@ public class PluginConfiguration : BasePluginConfiguration
     public int MinItemsPerGenre { get; set; } = 5;
 
     // ------------------------------------------------------------------
+    // Rangées dérivées de la bibliothèque
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// Obtient ou définit une valeur indiquant si la rangée « jamais vu » est affichée :
+    /// les films bien notés que personne n'a encore lancés sur le serveur.
+    /// </summary>
+    public bool EnableNeverPlayedRow { get; set; } = true;
+
+    /// <summary>
+    /// Obtient ou définit le titre de la rangée « jamais vu ».
+    /// </summary>
+    public string NeverPlayedRowTitle { get; set; } = "Jamais vu";
+
+    /// <summary>
+    /// Obtient ou définit le nombre de films affichés dans la rangée « jamais vu ».
+    /// </summary>
+    public int NeverPlayedRowSize { get; set; } = 20;
+
+    /// <summary>
+    /// Obtient ou définit la note minimale pour qu'un film jamais lu soit proposé.
+    /// </summary>
+    public double NeverPlayedMinRating { get; set; } = 7.0;
+
+    /// <summary>
+    /// Obtient ou définit une valeur indiquant si la rangée « de retour » est affichée :
+    /// les séries dont des épisodes viennent d'être ajoutés.
+    /// </summary>
+    public bool EnableReturningRow { get; set; } = true;
+
+    /// <summary>
+    /// Obtient ou définit le titre de la rangée « de retour ».
+    /// </summary>
+    public string ReturningRowTitle { get; set; } = "De retour cette semaine";
+
+    /// <summary>
+    /// Obtient ou définit la fenêtre, en jours, pendant laquelle un ajout d'épisode
+    /// fait remonter sa série.
+    /// </summary>
+    public int ReturningRowDays { get; set; } = 7;
+
+    /// <summary>
+    /// Obtient ou définit le nombre de séries affichées dans la rangée « de retour ».
+    /// </summary>
+    public int ReturningRowSize { get; set; } = 20;
+
+    // ------------------------------------------------------------------
     // Rafraîchissement et exposition
     // ------------------------------------------------------------------
 
@@ -201,6 +248,17 @@ public class PluginConfiguration : BasePluginConfiguration
     /// Obtient ou définit la couleur d'accentuation des rangées (hexadécimal).
     /// </summary>
     public string HighlightColor { get; set; } = "#e50914";
+
+    /// <summary>
+    /// Obtient ou définit une valeur indiquant si les sections natives de Jellyfin
+    /// (derniers ajouts, reprise de lecture, prochainement…) sont masquées sur la page
+    /// d'accueil, pour ne laisser que les bibliothèques et les rangées du plugin.
+    /// </summary>
+    /// <remarks>
+    /// Désactivé par défaut : ce réglage modifie la page d'accueil de tous les comptes du
+    /// serveur, et les sections natives restent configurables par utilisateur dans Jellyfin.
+    /// </remarks>
+    public bool HideNativeHomeSections { get; set; }
 
     /// <summary>
     /// Obtient ou définit une valeur indiquant si les classements sont aussi matérialisés

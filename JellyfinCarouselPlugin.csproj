@@ -12,6 +12,9 @@
     <Nullable>enable</Nullable>
     <!-- Le serveur fournit toutes les dépendances : le paquet ne doit contenir que notre assembly. -->
     <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+    <!-- Sans cela, le glob implicite du SDK compilerait aussi tests/**, y compris les
+         fichiers AssemblyInfo generes dans leurs dossiers obj. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);tests\**</DefaultItemExcludes>
   </PropertyGroup>
 
   <ItemGroup>

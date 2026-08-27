@@ -69,8 +69,22 @@ jobs:
 
       - name: Build
         run: |
-          dotnet restore --configfile nuget.config
+          dotnet restore JellyfinCarouselPlugin.csproj --configfile nuget.config
           dotnet build JellyfinCarouselPlugin.csproj -c Release --no-restore
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Tests
+        run: |
+          dotnet run --project tests/ScriptTag.Tests -c Release
+          cd tests/browser
+          npm install --no-audit --no-fund
+          npx playwright install --with-deps chromium
+          node home-rows.test.mjs
+          node config-page.test.mjs
 
       - name: Package ZIP
         run: |

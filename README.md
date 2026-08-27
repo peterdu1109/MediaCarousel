@@ -20,7 +20,9 @@ Media Carousel génère **tout seul** plusieurs rangées et les tient à jour.
 |---|---|---|
 | 🏠 | **Top du serveur** | Les statistiques de lecture de **tous** les comptes de ton serveur |
 | 🌍 | **Top mondial** | TMDB ou Trakt, rapproché de ta bibliothèque |
-| 🎬 | **Par studio** | Les studios les mieux représentés, avec leur logo |
+| 📺 | **De retour cette semaine** | Les séries dont des épisodes viennent d'arriver |
+| 💎 | **Jamais vu** | Les films bien notés que personne n'a encore lancés |
+| 🎬 | **Par studio** | Les studios les mieux représentés, avec leur logo — variantes fusionnées |
 | 🎭 | **Par genre** | Une rangée par genre, les plus fournis en premier |
 
 <div align="center">
@@ -118,6 +120,24 @@ jamais la liste.
 </details>
 
 <details>
+<summary><strong>Actualité de la bibliothèque</strong></summary>
+
+| Réglage | Défaut | À quoi ça sert |
+|---|---|---|
+| Afficher « de retour cette semaine » | ✅ | Séries dont des épisodes viennent d'arriver |
+| Fenêtre | `7` jours | |
+| Nombre de séries | `20` | |
+| Afficher « jamais vu » | ✅ | Films bien notés jamais lancés sur le serveur |
+| Note minimale | `7.0` | Note de la communauté, sur 10 |
+| Nombre de films | `20` | |
+
+« Jamais vu » est limité aux films : pour une série, Jellyfin ne la considère lue que si
+**tous** ses épisodes le sont, donc une série abandonnée en cours de route remonterait
+comme jamais vue.
+
+</details>
+
+<details>
 <summary><strong>Studios et genres</strong></summary>
 
 | Réglage | Défaut | À quoi ça sert |
@@ -126,6 +146,10 @@ jamais la liste.
 | Titre de la rangée | `Par studio` | |
 | Nombre de studios | `20` | |
 | Titres minimum par studio | `3` | Écarte les studios trop peu représentés |
+
+« Warner Bros. », « Warner Bros. Pictures » et « Warner Bros. Animation » sont trois entrées
+distinctes dans Jellyfin. Le plugin les regroupe en un seul studio et affiche la variante qui
+possède un logo.
 | Afficher des rangées par genre | ✅ | Une rangée par genre |
 | Nombre de genres | `6` | Les plus fournis en premier |
 | Titres par rangée | `20` | |
@@ -144,7 +168,8 @@ l'ouverture de la page d'accueil.
 | Afficher les rangées | ✅ | Interrupteur principal du rendu sur l'accueil |
 | Titre — Top du serveur | `Top 10 sur ce serveur` | Titre de la rangée |
 | Titre — Top mondial | `Top 10 mondial` | Titre de la rangée |
-| Couleur d'accentuation | `#e50914` | Couleur du badge et du contour du chiffre au survol |
+| Couleur d'accentuation | `#e50914` | Contour du chiffre au survol et anneau de focus |
+| Masquer les sections natives | ❌ | Ne laisse que tes bibliothèques et les rangées du plugin |
 
 Le plugin **n'écrase pas** ta page d'accueil : il ajoute ses rangées sous les bibliothèques et
 laisse le reste intact (Continuer à regarder, Derniers ajouts, etc.).
@@ -178,6 +203,8 @@ Toutes les routes exigent une authentification Jellyfin (jeton utilisateur ou cl
 |---|---|---|
 | `GET` | `/MediaCarousel/Top/Local?limit=10` | Authentifié |
 | `GET` | `/MediaCarousel/Top/Global?limit=10` | Authentifié |
+| `GET` | `/MediaCarousel/Rows/Returning?limit=20` | Authentifié |
+| `GET` | `/MediaCarousel/Rows/NeverPlayed?limit=20` | Authentifié |
 | `GET` | `/MediaCarousel/Studios?limit=20` | Authentifié |
 | `GET` | `/MediaCarousel/Genres?limit=6` | Authentifié |
 | `GET` | `/MediaCarousel/Status` | Administrateur |
@@ -221,7 +248,8 @@ cd bin/Release/net9.0 && zip -r ../../../JellyfinCarouselPlugin.zip .
 Le paquet ne contient que l'assembly du plugin (**50 Ko**) : les dépendances sont fournies par le
 serveur, et ni les symboles de débogage ni la documentation XML ne sont empaquetés.
 
-L'architecture interne est documentée dans [CLAUDE.md](CLAUDE.md).
+Les tests sont décrits dans [tests/README.md](tests/README.md) et tournent en CI avant chaque
+publication. L'architecture interne est documentée dans [CLAUDE.md](CLAUDE.md).
 
 </details>
 

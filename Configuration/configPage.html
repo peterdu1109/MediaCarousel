@@ -278,6 +278,72 @@
                     </fieldset>
 
                     <fieldset class="mcCfg-group">
+                        <legend>Actualité de la bibliothèque</legend>
+                        <p class="mcCfg-group-hint">
+                            Deux rangées construites à partir de votre seule bibliothèque, sans source externe.
+                        </p>
+
+                        <div class="checkboxContainer">
+                            <label class="emby-checkbox-label">
+                                <input is="emby-checkbox" type="checkbox" id="EnableReturningRow"
+                                       aria-describedby="hintReturning" data-toggles="groupReturning" />
+                                <span>Afficher « de retour cette semaine »</span>
+                            </label>
+                            <div class="fieldDescription" id="hintReturning">
+                                Les séries dont des épisodes viennent d'être ajoutés, de l'ajout le plus
+                                récent au plus ancien.
+                            </div>
+                        </div>
+
+                        <div id="groupReturning">
+                            <div class="mcCfg-grid">
+                                <div class="inputContainer">
+                                    <input is="emby-input" type="text" id="ReturningRowTitle" label="Titre de la rangée" />
+                                </div>
+                                <div class="inputContainer">
+                                    <input is="emby-input" type="number" id="ReturningRowDays" min="1" max="365" step="1"
+                                           label="Fenêtre (jours)" required />
+                                </div>
+                                <div class="inputContainer">
+                                    <input is="emby-input" type="number" id="ReturningRowSize" min="1" max="100" step="1"
+                                           label="Nombre de séries" required />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="checkboxContainer">
+                            <label class="emby-checkbox-label">
+                                <input is="emby-checkbox" type="checkbox" id="EnableNeverPlayedRow"
+                                       aria-describedby="hintNeverPlayed" data-toggles="groupNeverPlayed" />
+                                <span>Afficher « jamais vu »</span>
+                            </label>
+                            <div class="fieldDescription" id="hintNeverPlayed">
+                                Les films bien notés que personne n'a encore lancés sur le serveur.
+                                Limité aux films : pour une série, « jamais vu » serait ambigu.
+                            </div>
+                        </div>
+
+                        <div id="groupNeverPlayed">
+                            <div class="mcCfg-grid">
+                                <div class="inputContainer">
+                                    <input is="emby-input" type="text" id="NeverPlayedRowTitle" label="Titre de la rangée" />
+                                </div>
+                                <div class="inputContainer">
+                                    <input is="emby-input" type="number" id="NeverPlayedRowSize" min="1" max="100" step="1"
+                                           label="Nombre de films" required />
+                                </div>
+                                <div class="inputContainer">
+                                    <input is="emby-input" type="number" id="NeverPlayedMinRating" min="0" max="10" step="0.1"
+                                           label="Note minimale" required aria-describedby="hintMinRating" />
+                                    <div class="fieldDescription" id="hintMinRating">
+                                        Note de la communauté, sur 10.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </fieldset>
+
+                    <fieldset class="mcCfg-group">
                         <legend>Affichage sur la page d'accueil</legend>
                         <p class="mcCfg-group-hint" id="hintHome">
                             Les rangées s'insèrent juste sous vos bibliothèques, sans remplacer les
@@ -297,6 +363,20 @@
                         </div>
 
                         <div id="groupHome">
+                            <div class="checkboxContainer">
+                                <label class="emby-checkbox-label">
+                                    <input is="emby-checkbox" type="checkbox" id="HideNativeHomeSections"
+                                           aria-describedby="hintHideNative" />
+                                    <span>Masquer les sections natives de Jellyfin</span>
+                                </label>
+                                <div class="fieldDescription" id="hintHideNative">
+                                    Ne laisse que vos bibliothèques et les rangées du plugin : les derniers
+                                    ajouts, la reprise de lecture et les autres sections natives disparaissent.
+                                    S'applique à tous les comptes du serveur, et reste sans effet tant que les
+                                    rangées du plugin ne sont pas chargées.
+                                </div>
+                            </div>
+
                             <div class="mcCfg-grid">
                                 <div class="inputContainer">
                                     <input is="emby-input" type="text" id="LocalRowTitle"
@@ -374,16 +454,21 @@
 
                 var checkboxes = [
                     'EnableLocalTop', 'EnableGlobalTop', 'GlobalTopLibraryOnly',
-                    'EnableStudioRow', 'EnableGenreRows', 'EnableHomeRows', 'SyncCollections'
+                    'EnableStudioRow', 'EnableGenreRows', 'EnableReturningRow', 'EnableNeverPlayedRow',
+                    'EnableHomeRows', 'HideNativeHomeSections', 'SyncCollections'
                 ];
                 var numbers = [
                     'LocalTopSize', 'LocalTopWindowDays', 'MaxPlaysCountedPerUser', 'CandidatesPerUser',
                     'GlobalTopSize', 'StudioRowSize', 'MinItemsPerStudio',
-                    'GenreRowCount', 'GenreRowItemCount', 'MinItemsPerGenre', 'RefreshIntervalHours'
+                    'GenreRowCount', 'GenreRowItemCount', 'MinItemsPerGenre',
+                    'ReturningRowDays', 'ReturningRowSize', 'NeverPlayedRowSize', 'RefreshIntervalHours'
                 ];
+                // Seul reglage a virgule : parseInt le tronquerait a 7.
+                var decimals = ['NeverPlayedMinRating'];
                 var texts = [
                     'LocalTopMediaKind', 'GlobalTopProvider', 'GlobalTopApiKey', 'GlobalTopMediaKind',
-                    'MetadataLanguage', 'StudioRowTitle', 'LocalRowTitle', 'GlobalRowTitle',
+                    'MetadataLanguage', 'StudioRowTitle', 'ReturningRowTitle', 'NeverPlayedRowTitle',
+                    'LocalRowTitle', 'GlobalRowTitle',
                     'HighlightColor', 'LocalCollectionName', 'GlobalCollectionName'
                 ];
                 var lists = ['ExcludedUserIds', 'ExcludedLibraryIds'];
@@ -391,6 +476,8 @@
                 var statusSections = [
                     { key: 'LocalTop', label: 'Top du serveur' },
                     { key: 'GlobalTop', label: 'Top mondial' },
+                    { key: 'ReturningSeries', label: 'De retour' },
+                    { key: 'NeverPlayed', label: 'Jamais vu' },
                     { key: 'Studios', label: 'Studios' },
                     { key: 'Genres', label: 'Genres' }
                 ];
@@ -484,6 +571,7 @@
                     ApiClient.getPluginConfiguration(pluginId).then(function (config) {
                         checkboxes.forEach(function (id) { field(id).checked = !!config[id]; });
                         numbers.forEach(function (id) { field(id).value = config[id]; });
+                        decimals.forEach(function (id) { field(id).value = config[id]; });
                         texts.forEach(function (id) {
                             field(id).value = config[id] == null ? '' : String(config[id]);
                         });
@@ -506,6 +594,7 @@
                     ApiClient.getPluginConfiguration(pluginId).then(function (config) {
                         checkboxes.forEach(function (id) { config[id] = field(id).checked; });
                         numbers.forEach(function (id) { config[id] = parseInt(field(id).value, 10) || 0; });
+                        decimals.forEach(function (id) { config[id] = parseFloat(field(id).value) || 0; });
                         texts.forEach(function (id) { config[id] = field(id).value; });
                         lists.forEach(function (id) { config[id] = toList(field(id).value); });
 

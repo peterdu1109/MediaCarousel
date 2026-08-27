@@ -1,42 +1,43 @@
 using System;
-using System.Threading;
+using System.Collections.Concurrent;
 using JellyfinCarouselPlugin.Models;
 
 namespace JellyfinCarouselPlugin.Services;
 
 /// <summary>
-/// Implémentation en mémoire de <see cref="ICatalogStore"/>.
-/// Même principe que <see cref="TopListStore"/> : les instantanés sont immuables,
-/// une publication atomique de la référence suffit.
+/// Implémentation de <see cref="ICatalogStore"/>, adossée au disque.
+/// Même principe que <see cref="TopListStore"/> : lecture sans verrou, dernier état connu
+/// relu au démarrage.
 /// </summary>
 public sealed class CatalogStore : ICatalogStore
 {
-    private CatalogSnapshot _studios = CatalogSnapshot.Empty(CatalogKind.Studios);
-    private CatalogSnapshot _genres = CatalogSnapshot.Empty(CatalogKind.Genres);
+    private readonly ConcurrentDictionary<CatalogKind, CatalogSnapshot> _snapshots = new();
+    private readonly SnapshotStorage _storage;
+
+    /// <summary>
+    /// Initialise une nouvelle instance de la classe <see cref="CatalogStore"/>.
+    /// </summary>
+    /// <param name="storage">Persistance des instantanés.</param>
+    public CatalogStore(SnapshotStorage storage)
+    {
+        _storage = storage;
+
+        foreach (var kind in Enum.GetValues<CatalogKind>())
+        {
+            _snapshots[kind] = _storage.LoadCatalog(kind) ?? CatalogSnapshot.Empty(kind);
+        }
+    }
 
     /// <inheritdoc />
-    public CatalogSnapshot Get(CatalogKind kind) => kind switch
-    {
-        CatalogKind.Studios => Volatile.Read(ref _studios),
-        CatalogKind.Genres => Volatile.Read(ref _genres),
-        _ => throw new ArgumentOutOfRangeException(nameof(kind))
-    };
+    public CatalogSnapshot Get(CatalogKind kind)
+        => _snapshots.TryGetValue(kind, out var snapshot) ? snapshot : CatalogSnapshot.Empty(kind);
 
     /// <inheritdoc />
     public void Publish(CatalogSnapshot snapshot)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
 
-        switch (snapshot.Kind)
-        {
-            case CatalogKind.Studios:
-                Volatile.Write(ref _studios, snapshot);
-                break;
-            case CatalogKind.Genres:
-                Volatile.Write(ref _genres, snapshot);
-                break;
-            default:
-                throw new ArgumentOutOfRangeException(nameof(snapshot));
-        }
+        _snapshots[snapshot.Kind] = snapshot;
+        _storage.SaveCatalog(snapshot);
     }
 }

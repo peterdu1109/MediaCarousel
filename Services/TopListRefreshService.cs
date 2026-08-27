@@ -18,6 +18,7 @@ public sealed class TopListRefreshService
     private readonly LocalTopListBuilder _localBuilder;
     private readonly GlobalTopListBuilder _globalBuilder;
     private readonly CatalogBuilder _catalogBuilder;
+    private readonly LibraryRowBuilder _libraryRowBuilder;
     private readonly CollectionSynchronizer _collectionSynchronizer;
     private readonly ITopListStore _store;
     private readonly ICatalogStore _catalogStore;
@@ -29,6 +30,7 @@ public sealed class TopListRefreshService
     /// <param name="localBuilder">Calculateur du Top local.</param>
     /// <param name="globalBuilder">Calculateur du Top global.</param>
     /// <param name="catalogBuilder">Agrégateur des studios et des genres.</param>
+    /// <param name="libraryRowBuilder">Constructeur des rangées dérivées de la bibliothèque.</param>
     /// <param name="collectionSynchronizer">Synchroniseur de collections.</param>
     /// <param name="store">Stockage des classements.</param>
     /// <param name="catalogStore">Stockage des catalogues.</param>
@@ -37,6 +39,7 @@ public sealed class TopListRefreshService
         LocalTopListBuilder localBuilder,
         GlobalTopListBuilder globalBuilder,
         CatalogBuilder catalogBuilder,
+        LibraryRowBuilder libraryRowBuilder,
         CollectionSynchronizer collectionSynchronizer,
         ITopListStore store,
         ICatalogStore catalogStore,
@@ -45,6 +48,7 @@ public sealed class TopListRefreshService
         _localBuilder = localBuilder;
         _globalBuilder = globalBuilder;
         _catalogBuilder = catalogBuilder;
+        _libraryRowBuilder = libraryRowBuilder;
         _collectionSynchronizer = collectionSynchronizer;
         _store = store;
         _catalogStore = catalogStore;
@@ -97,7 +101,11 @@ public sealed class TopListRefreshService
                 configurationChanged |= await RefreshGlobalAsync(config, cancellationToken).ConfigureAwait(false);
             }
 
-            progress?.Report(75);
+            progress?.Report(65);
+
+            RefreshLibraryRows(config, cancellationToken);
+
+            progress?.Report(85);
 
             RefreshCatalogs(config, cancellationToken);
 
@@ -111,6 +119,39 @@ public sealed class TopListRefreshService
         finally
         {
             _gate.Release();
+        }
+    }
+
+    /// <summary>
+    /// Construit les rangées dérivées de la bibliothèque. Elles ne dépendent d'aucune source
+    /// externe : leur échec est isolé de celui des classements.
+    /// </summary>
+    private void RefreshLibraryRows(PluginConfiguration config, CancellationToken cancellationToken)
+    {
+        if (config.EnableNeverPlayedRow)
+        {
+            TryPublish(() => _libraryRowBuilder.BuildNeverPlayed(config, cancellationToken), "jamais vu", cancellationToken);
+        }
+
+        if (config.EnableReturningRow)
+        {
+            TryPublish(() => _libraryRowBuilder.BuildReturningSeries(config, cancellationToken), "de retour", cancellationToken);
+        }
+    }
+
+    private void TryPublish(Func<Models.TopListSnapshot> build, string label, CancellationToken cancellationToken)
+    {
+        try
+        {
+            _store.Publish(build());
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Échec du calcul de la rangée « {Label} » ; la précédente est conservée.", label);
         }
     }
 

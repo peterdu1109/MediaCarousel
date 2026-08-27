@@ -44,6 +44,8 @@ public class StatusController : ControllerBase
 
         var local = _topListStore.Get(TopListKind.Local);
         var global = _topListStore.Get(TopListKind.Global);
+        var neverPlayed = _topListStore.Get(TopListKind.NeverPlayed);
+        var returning = _topListStore.Get(TopListKind.ReturningSeries);
         var studios = _catalogStore.Get(CatalogKind.Studios);
         var genres = _catalogStore.Get(CatalogKind.Genres);
 
@@ -63,6 +65,20 @@ public class StatusController : ControllerBase
                 Count = global.Entries.Count,
                 Source = global.Source,
                 GeneratedUtc = global.Entries.Count > 0 ? global.GeneratedUtc : null
+            },
+            NeverPlayed = new SectionStatusDto
+            {
+                Enabled = config?.EnableNeverPlayedRow ?? false,
+                Count = neverPlayed.Entries.Count,
+                Source = neverPlayed.Source,
+                GeneratedUtc = neverPlayed.Entries.Count > 0 ? neverPlayed.GeneratedUtc : null
+            },
+            ReturningSeries = new SectionStatusDto
+            {
+                Enabled = config?.EnableReturningRow ?? false,
+                Count = returning.Entries.Count,
+                Source = returning.Source,
+                GeneratedUtc = returning.Entries.Count > 0 ? returning.GeneratedUtc : null
             },
             Studios = new SectionStatusDto
             {

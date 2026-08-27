@@ -123,8 +123,6 @@
             '.mc-row{margin:0 0 2.4em;}',
             '.mc-row-header{display:flex;align-items:center;gap:.6em;flex-wrap:wrap;}',
             '.mc-row-header .mc-row-title{margin:0;}',
-            '.mc-row-badge{font-size:.62em;font-weight:700;letter-spacing:.08em;text-transform:uppercase;',
-            'padding:.25em .6em;border-radius:3px;background:var(--mc-accent);color:#fff;white-space:nowrap;}',
 
             '.mc-strip-wrap{position:relative;}',
             /* Repli si les classes natives scrollX/hiddenScrollX venaient a manquer. */
@@ -168,7 +166,6 @@
             '.mc-tile:focus-visible{outline:3px solid var(--mc-accent);outline-offset:3px;}',
             '.mc-tile img{max-width:100%;max-height:100%;object-fit:contain;display:block;}',
             '.mc-tile-name{font-size:.86em;font-weight:600;line-height:1.2;}',
-            '.mc-tile-count{position:absolute;right:.5em;bottom:.35em;font-size:.62em;opacity:.65;}',
 
             /* Carte simple, utilisée par les rangées de genre. */
             '.mc-plain{flex:0 0 auto;width:120px;text-decoration:none;color:inherit;',
@@ -180,6 +177,7 @@
             'display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}',
 
             '.mc-empty{padding:0 3.4vw 1em;opacity:.6;font-size:.85em;}',
+            '.mc-hidden-native{display:none!important;}',
 
             /* Flèches de défilement : confort souris, masquées au clavier et au tactile. */
             '.mc-arrow{position:absolute;top:0;bottom:0;width:3.2vw;min-width:34px;border:0;cursor:pointer;',
@@ -258,15 +256,13 @@
             ? '<img loading="lazy" alt="" src="' + escapeHtml(logo) + '">'
             : '<span class="mc-tile-name">' + escapeHtml(name) + '</span>';
 
-        var count = entry.ItemCount
-            ? '<span class="mc-tile-count" aria-hidden="true">' + entry.ItemCount + '</span>'
-            : '';
-
-        var aria = escapeHtml(name + (entry.ItemCount ? ' — ' + entry.ItemCount + ' titres' : ''));
+        // Le décompte n'est pas affiché : il agrège toutes les variantes du studio, alors
+        // que le lien mène à une seule d'entre elles. Il sert au classement, pas au rendu.
+        var aria = escapeHtml(name);
         var href = item ? routeUrl(item) : '#';
 
         return '<a role="listitem" class="mc-tile" href="' + escapeHtml(href) + '"'
-            + ' aria-label="' + aria + '">' + content + count + '</a>';
+            + ' aria-label="' + aria + '">' + content + '</a>';
     }
 
     function buildPlainCard(item) {
@@ -286,7 +282,7 @@
     // Rangées
     // ------------------------------------------------------------------
 
-    function buildRow(title, badge, cardsHtml) {
+    function buildRow(title, cardsHtml) {
         var section = document.createElement('div');
         var headingId = 'mc-row-title-' + (++sequence);
 
@@ -296,7 +292,6 @@
         section.innerHTML =
             '<div class="mc-row-header padded-left">'
             + '<h2 id="' + headingId + '" class="sectionTitle sectionTitle-cards mc-row-title">' + escapeHtml(title) + '</h2>'
-            + (badge ? '<span class="mc-row-badge">' + escapeHtml(badge) + '</span>' : '')
             + '</div>'
             + '<div class="mc-strip-wrap">'
             + '<button type="button" class="mc-arrow mc-arrow-prev" tabindex="-1" aria-hidden="true">&#10094;</button>'
@@ -410,10 +405,31 @@
         return null;
     }
 
+    /**
+     * Masque les sections natives de Jellyfin pour ne laisser que les bibliothèques et nos
+     * rangées. N'est appliqué qu'une fois nos rangées en place : si elles n'ont pas pu être
+     * chargées, la page d'accueil reste celle de Jellyfin plutôt que de se retrouver vide.
+     */
+    function hideNativeSections(container, librarySection) {
+        var sections = container.children;
+
+        for (var i = 0; i < sections.length; i++) {
+            var section = sections[i];
+
+            if (section === librarySection || section.classList.contains(ROW_CLASS)) {
+                continue;
+            }
+
+            section.classList.add('mc-hidden-native');
+        }
+    }
+
     function insertRows(container, rows) {
         var anchor = findLibrarySection(container);
 
         // Les rangées sont insérées à la suite, dans l'ordre, juste sous les bibliothèques.
+        var librarySection = anchor;
+
         rows.forEach(function (row) {
             if (anchor) {
                 anchor.insertAdjacentElement('afterend', row);
@@ -422,6 +438,8 @@
             }
             anchor = row;
         });
+
+        return librarySection;
     }
 
     // ------------------------------------------------------------------
@@ -531,6 +549,8 @@
         var requests = [
             opts.ShowLocalRow ? loadCached('MediaCarousel/Top/Local', { limit: opts.LocalRowSize || 10 }) : [],
             opts.ShowGlobalRow ? loadCached('MediaCarousel/Top/Global', { limit: opts.GlobalRowSize || 10 }) : [],
+            opts.ShowReturningRow ? loadCached('MediaCarousel/Rows/Returning', { limit: opts.ReturningRowSize || 20 }) : [],
+            opts.ShowNeverPlayedRow ? loadCached('MediaCarousel/Rows/NeverPlayed', { limit: opts.NeverPlayedRowSize || 20 }) : [],
             opts.ShowStudioRow ? loadCached('MediaCarousel/Studios', { limit: opts.StudioRowSize || 20 }) : [],
             opts.ShowGenreRows ? loadCached('MediaCarousel/Genres', { limit: opts.GenreRowCount || 6 }) : []
         ];
@@ -538,29 +558,35 @@
         return Promise.all(requests).then(function (results) {
             var rows = [];
 
-            if (results[0].length) {
-                rows.push(buildRow(
-                    opts.LocalRowTitle || 'Top 10 sur ce serveur',
-                    'Top 10',
-                    results[0].map(buildRankedCard).join('')));
+            // Les deux classements en premier, puis l'actualité de la bibliothèque,
+            // puis les entrées par studio et par genre.
+            function addRanked(entries, title) {
+                if (entries.length) {
+                    rows.push(buildRow(title, entries.map(buildRankedCard).join('')));
+                }
             }
 
-            if (results[1].length) {
-                rows.push(buildRow(
-                    opts.GlobalRowTitle || 'Top 10 mondial',
-                    'Monde',
-                    results[1].map(buildRankedCard).join('')));
+            function addPlain(entries, title) {
+                if (entries.length) {
+                    rows.push(buildRow(title, entries.map(function (entry) {
+                        return entry.Item ? buildPlainCard(entry.Item) : '';
+                    }).join('')));
+                }
             }
 
-            if (results[2].length) {
+            addRanked(results[0], opts.LocalRowTitle || 'Top 10 sur ce serveur');
+            addRanked(results[1], opts.GlobalRowTitle || 'Top 10 mondial');
+            addPlain(results[2], opts.ReturningRowTitle || 'De retour cette semaine');
+            addPlain(results[3], opts.NeverPlayedRowTitle || 'Jamais vu');
+
+            if (results[4].length) {
                 rows.push(buildRow(
                     opts.StudioRowTitle || 'Par studio',
-                    null,
-                    results[2].map(buildTileCard).join('')));
+                    results[4].map(buildTileCard).join('')));
             }
 
-            results[3].forEach(function (genre) {
-                var row = buildRow(genre.Name, null, '');
+            results[5].forEach(function (genre) {
+                var row = buildRow(genre.Name, '');
                 rows.push(row);
                 deferGenreRow(row, genre, opts.GenreRowItemCount || 20);
             });
@@ -596,7 +622,12 @@
                     return null;
                 }
 
-                insertRows(target, rows);
+                var librarySection = insertRows(target, rows);
+
+                if (opts.HideNativeSections) {
+                    hideNativeSections(target, librarySection);
+                }
+
                 return null;
             });
         }).catch(function (error) {

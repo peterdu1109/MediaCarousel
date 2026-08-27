@@ -37,6 +37,12 @@ public sealed class PluginStatusDto
     /// <summary>Obtient ou définit l'état du Top mondial.</summary>
     public SectionStatusDto GlobalTop { get; set; } = new();
 
+    /// <summary>Obtient ou définit l'état de la rangée « jamais vu ».</summary>
+    public SectionStatusDto NeverPlayed { get; set; } = new();
+
+    /// <summary>Obtient ou définit l'état de la rangée « de retour ».</summary>
+    public SectionStatusDto ReturningSeries { get; set; } = new();
+
     /// <summary>Obtient ou définit l'état du catalogue des studios.</summary>
     public SectionStatusDto Studios { get; set; } = new();
 
