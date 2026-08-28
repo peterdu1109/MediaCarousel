@@ -1,3 +1,4 @@
+using System.Linq;
 using JellyfinCarouselPlugin.Models;
 using JellyfinCarouselPlugin.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -18,16 +19,19 @@ public class StatusController : ControllerBase
 {
     private readonly ITopListStore _topListStore;
     private readonly ICatalogStore _catalogStore;
+    private readonly RefreshHealth _health;
 
     /// <summary>
     /// Initialise une nouvelle instance de la classe <see cref="StatusController"/>.
     /// </summary>
     /// <param name="topListStore">Stockage des classements.</param>
     /// <param name="catalogStore">Stockage des catalogues.</param>
-    public StatusController(ITopListStore topListStore, ICatalogStore catalogStore)
+    /// <param name="health">Bilan du dernier recalcul.</param>
+    public StatusController(ITopListStore topListStore, ICatalogStore catalogStore, RefreshHealth health)
     {
         _topListStore = topListStore;
         _catalogStore = catalogStore;
+        _health = health;
     }
 
     /// <summary>
@@ -48,6 +52,7 @@ public class StatusController : ControllerBase
         var returning = _topListStore.Get(TopListKind.ReturningSeries);
         var studios = _catalogStore.Get(CatalogKind.Studios);
         var genres = _catalogStore.Get(CatalogKind.Genres);
+        var (report, running) = _health.Snapshot();
 
         return Ok(new PluginStatusDto
         {
@@ -93,6 +98,15 @@ public class StatusController : ControllerBase
                 Count = genres.Entries.Count,
                 Source = "Jellyfin",
                 GeneratedUtc = genres.Entries.Count > 0 ? genres.GeneratedUtc : null
+            },
+            LastRun = new RefreshReportDto
+            {
+                StartedUtc = report.StartedUtc,
+                DurationSeconds = report.DurationSeconds,
+                Running = running,
+                Failures = report.Failures
+                    .Select(f => new RefreshFailureDto { Section = f.Section, Message = f.Message })
+                    .ToArray()
             }
         });
     }

@@ -22,6 +22,7 @@ public sealed class TopListRefreshService
     private readonly CollectionSynchronizer _collectionSynchronizer;
     private readonly ITopListStore _store;
     private readonly ICatalogStore _catalogStore;
+    private readonly RefreshHealth _health;
     private readonly ILogger<TopListRefreshService> _logger;
 
     /// <summary>
@@ -34,6 +35,7 @@ public sealed class TopListRefreshService
     /// <param name="collectionSynchronizer">Synchroniseur de collections.</param>
     /// <param name="store">Stockage des classements.</param>
     /// <param name="catalogStore">Stockage des catalogues.</param>
+    /// <param name="health">Bilan du dernier recalcul.</param>
     /// <param name="logger">Journal.</param>
     public TopListRefreshService(
         LocalTopListBuilder localBuilder,
@@ -43,6 +45,7 @@ public sealed class TopListRefreshService
         CollectionSynchronizer collectionSynchronizer,
         ITopListStore store,
         ICatalogStore catalogStore,
+        RefreshHealth health,
         ILogger<TopListRefreshService> logger)
     {
         _localBuilder = localBuilder;
@@ -52,6 +55,7 @@ public sealed class TopListRefreshService
         _collectionSynchronizer = collectionSynchronizer;
         _store = store;
         _catalogStore = catalogStore;
+        _health = health;
         _logger = logger;
     }
 
@@ -82,6 +86,10 @@ public sealed class TopListRefreshService
             return;
         }
 
+        // Le bilan couvre tout le passage : chaque échec rattrapé plus bas y est consigné,
+        // sans quoi la tolérance aux pannes rendrait les erreurs invisibles.
+        _health.BeginRun();
+
         try
         {
             var config = plugin.Configuration;
@@ -109,6 +117,8 @@ public sealed class TopListRefreshService
 
             RefreshCatalogs(config, cancellationToken);
 
+            PurgePosterCache();
+
             if (configurationChanged)
             {
                 plugin.UpdateConfiguration(config);
@@ -118,6 +128,7 @@ public sealed class TopListRefreshService
         }
         finally
         {
+            _health.EndRun();
             _gate.Release();
         }
     }
@@ -151,6 +162,7 @@ public sealed class TopListRefreshService
         }
         catch (Exception ex)
         {
+            _health.RecordFailure(label, ex);
             _logger.LogError(ex, "Échec du calcul de la rangée « {Label} » ; la précédente est conservée.", label);
         }
     }
@@ -187,6 +199,7 @@ public sealed class TopListRefreshService
         }
         catch (Exception ex)
         {
+            _health.RecordFailure("studios et genres", ex);
             _logger.LogError(ex, "Échec de l'agrégation des catalogues ; les précédents sont conservés.");
         }
     }
@@ -215,6 +228,7 @@ public sealed class TopListRefreshService
         }
         catch (Exception ex)
         {
+            _health.RecordFailure("Top du serveur", ex);
             _logger.LogError(ex, "Échec du calcul du Top local ; l'instantané précédent est conservé.");
         }
 
@@ -245,10 +259,61 @@ public sealed class TopListRefreshService
         }
         catch (Exception ex)
         {
+            _health.RecordFailure("Top mondial", ex);
             _logger.LogError(ex, "Échec de la récupération du Top global ; l'instantané précédent est conservé.");
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Purge les affiches en cache que plus personne ne demande.
+    /// </summary>
+    /// <remarks>
+    /// Sans cela, le dossier <c>posters/</c> grossit sans limite : chaque affiche TMDB
+    /// téléchargée y reste pour toujours, alors que le Top mondial en change à chaque
+    /// tendance. <see cref="Api.PosterController"/> touche la date d'accès à chaque service
+    /// — les systèmes montés en <c>noatime</c> ne la maintiennent pas d'eux-mêmes — et une
+    /// affiche supprimée à tort se retélécharge simplement à la prochaine requête.
+    /// </remarks>
+    private void PurgePosterCache()
+    {
+        try
+        {
+            var folder = Plugin.Instance?.DataFolderPath;
+            if (string.IsNullOrEmpty(folder))
+            {
+                return;
+            }
+
+            var posters = System.IO.Path.Combine(folder, "posters");
+            if (!System.IO.Directory.Exists(posters))
+            {
+                return;
+            }
+
+            var cutoff = DateTime.UtcNow.AddDays(-30);
+            var removed = 0;
+
+            foreach (var file in System.IO.Directory.EnumerateFiles(posters))
+            {
+                if (System.IO.File.GetLastAccessTimeUtc(file) < cutoff)
+                {
+                    System.IO.File.Delete(file);
+                    removed++;
+                }
+            }
+
+            if (removed > 0)
+            {
+                _logger.LogInformation("Cache d'affiches purgé : {Count} fichier(s) supprimé(s).", removed);
+            }
+        }
+        catch (Exception ex)
+        {
+            // Un cache qui ne se purge pas n'est pas une panne du recalcul.
+            _logger.LogDebug(ex, "Échec de la purge du cache d'affiches.");
+        }
     }
 
     private static bool TryStoreCollectionId(Guid id, string? current, Action<string> setter)

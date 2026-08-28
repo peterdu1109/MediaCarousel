@@ -25,6 +25,7 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton<LibraryRowBuilder>();
         serviceCollection.AddSingleton<CollectionSynchronizer>();
         serviceCollection.AddSingleton<TopListRefreshService>();
+        serviceCollection.AddSingleton<RefreshHealth>();
 
         // Les sources externes sont injectées en liste ; le fournisseur actif est choisi à l'exécution.
         serviceCollection.AddSingleton<ITrendingProvider, TmdbTrendingProvider>();
