@@ -73,7 +73,7 @@ public sealed class CatalogBuilder
             return CatalogSnapshot.Empty(CatalogKind.Studios);
         }
 
-        var groups = new Dictionary<string, StudioGroup>(StringComparer.Ordinal);
+        var groups = new Dictionary<string, NameGroup>(StringComparer.Ordinal);
 
         foreach (var (item, counts) in result.Items)
         {
@@ -91,7 +91,7 @@ public sealed class CatalogBuilder
 
             if (!groups.TryGetValue(key, out var group))
             {
-                group = new StudioGroup();
+                group = new NameGroup();
                 groups[key] = group;
             }
 
@@ -143,39 +143,38 @@ public sealed class CatalogBuilder
             return CatalogSnapshot.Empty(CatalogKind.Genres);
         }
 
-        // Un même genre peut exister sous plusieurs casses selon les sources.
-        var groups = new Dictionary<string, CatalogEntry>(StringComparer.OrdinalIgnoreCase);
+        // Un même genre peut exister sous plusieurs casses selon les sources. Comme pour les
+        // studios, le total de toutes les variantes décide du classement et du seuil : garder
+        // seulement la mieux fournie ferait passer un genre éclaté sous MinItemsPerGenre.
+        var groups = new Dictionary<string, NameGroup>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var (item, counts) in result.Items)
         {
-            var name = item.Name;
-            if (string.IsNullOrWhiteSpace(name))
+            if (string.IsNullOrWhiteSpace(item.Name))
             {
                 continue;
             }
 
-            var total = counts.MovieCount + counts.SeriesCount;
-
-            if (groups.TryGetValue(name, out var existing))
+            if (!groups.TryGetValue(item.Name, out var group))
             {
-                if (total > existing.ItemCount)
-                {
-                    existing.ItemId = item.Id;
-                    existing.Name = name;
-                    existing.ItemCount = total;
-                }
-
-                continue;
+                group = new NameGroup();
+                groups[item.Name] = group;
             }
 
-            groups[name] = new CatalogEntry { ItemId = item.Id, Name = name, ItemCount = total };
+            group.Consider(item, counts.MovieCount + counts.SeriesCount);
         }
 
         var entries = groups.Values
-            .Where(entry => entry.ItemCount >= clampedMinimum)
-            .OrderByDescending(entry => entry.ItemCount)
-            .ThenBy(entry => entry.Name, StringComparer.CurrentCultureIgnoreCase)
+            .Where(group => group.TotalCount >= clampedMinimum)
+            .OrderByDescending(group => group.TotalCount)
+            .ThenBy(group => group.Name, StringComparer.CurrentCultureIgnoreCase)
             .Take(clampedSize)
+            .Select(group => new CatalogEntry
+            {
+                ItemId = group.ItemId,
+                Name = group.Name,
+                ItemCount = group.TotalCount
+            })
             .ToArray();
 
         _logger.LogInformation("Catalogue Genres agrégé : {Count} entrée(s) retenue(s).", entries.Length);
@@ -209,9 +208,9 @@ public sealed class CatalogBuilder
     }
 
     /// <summary>
-    /// Variantes d'un même studio, dont on ne gardera qu'un représentant.
+    /// Variantes d'un même nom — studio ou genre — dont on ne gardera qu'un représentant.
     /// </summary>
-    private sealed class StudioGroup
+    private sealed class NameGroup
     {
         public Guid ItemId { get; private set; }
 
