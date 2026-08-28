@@ -213,7 +213,7 @@ check('groupe inactif masque', loaded.globalHidden === true && loaded.genreHidde
 check('groupe inactif hors parcours clavier', loaded.globalDisabled === true && loaded.genreDisabled === true, loaded);
 check('groupe actif utilisable', loaded.localVisible === true, loaded.localVisible);
 check('bascule revele le groupe', afterToggle.hidden === false && afterToggle.disabled === false, afterToggle);
-check('7 groupes avec legende conserves', loaded.legends.length === 7, loaded.legends);
+check('8 groupes avec legende conserves', loaded.legends.length === 8, loaded.legends);
 check('6 onglets', loaded.tabCount === 6, loaded.tabCount);
 check('un seul panneau visible', loaded.visiblePanels === 1 && loaded.firstTabSelected, loaded);
 check('roving tabindex : un seul onglet focalisable', loaded.tabbable === 1, loaded.tabbable);

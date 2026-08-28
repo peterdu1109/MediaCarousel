@@ -266,7 +266,9 @@ const theme = await themed.evaluate(() => {
     // Le rayon du theme doit etre repris.
     posterRadius: getComputedStyle(poster).borderTopLeftRadius,
     posterHeight: poster.getBoundingClientRect().height,
-    gap: getComputedStyle(strip).columnGap
+    // La gouttiere passe desormais par la marge des cartes, `gap` n'existant pas
+    // en flexbox avant Chromium 84 : le jeton du theme doit s'y retrouver.
+    cardGutter: getComputedStyle(strip.querySelector('.mc-card')).marginRight
   };
 });
 await themed.close();
@@ -327,6 +329,76 @@ const hidden = await hidePage.evaluate(() => {
   };
 });
 
+// ---------------------------------------------------------------------------
+// Dimensionnement adaptatif et compatibilite Tizen.
+//
+// La feuille de styles est un tableau de chaines JS assemble par join('') : une
+// accolade oubliee la casse entierement, sans erreur visible. Ces controles la
+// font parser par le navigateur et verifient qu'elle produit bien des regles.
+// ---------------------------------------------------------------------------
+
+const sizing = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+sizing.on('pageerror', e => errors.push('pageerror(sizing): ' + e.message));
+await sizing.goto('file://' + path.join(here, 'home.html'));
+await sizing.evaluate(stub);
+await sizing.evaluate(script);
+await sizing.waitForFunction(() => document.querySelectorAll('.mc-row').length === 9, { timeout: 8000 });
+
+// Largeur d'affiche reellement rendue a chaque palier.
+const widths = {};
+for (const [label, size] of [
+  ['phonePortrait', { width: 380, height: 800 }],
+  ['phoneLandscape', { width: 700, height: 500 }],
+  ['desktop', { width: 1280, height: 900 }],
+  ['wide', { width: 1600, height: 1000 }],
+  ['tv1080', { width: 1920, height: 1080 }],
+  ['tv4k', { width: 2560, height: 1440 }]
+]) {
+  await sizing.setViewportSize(size);
+  await sizing.waitForTimeout(120);
+  widths[label] = await sizing.evaluate(
+    () => document.querySelector('.mc-row .mc-poster').getBoundingClientRect().width);
+}
+
+// Ecran large mais bas : un televiseur 720p, ou une fenetre aplatie.
+await sizing.setViewportSize({ width: 1280, height: 560 });
+await sizing.waitForTimeout(120);
+widths.shortScreen = await sizing.evaluate(
+  () => document.querySelector('.mc-row .mc-poster').getBoundingClientRect().width);
+
+await sizing.setViewportSize({ width: 1280, height: 900 });
+await sizing.waitForTimeout(120);
+
+const styling = await sizing.evaluate(() => {
+  const sheet = document.getElementById('mc-styles');
+  const css = sheet.textContent;
+  const strip = document.querySelector('.mc-row .mc-strip');
+  const cards = strip.querySelectorAll('.mc-card');
+  const poster = document.querySelector('.mc-row .mc-poster');
+
+  return {
+    // Une accolade manquante ferait chuter ce nombre sans rien signaler.
+    ruleCount: sheet.sheet ? sheet.sheet.cssRules.length : 0,
+    mediaCount: sheet.sheet
+      ? Array.prototype.filter.call(sheet.sheet.cssRules, r => r.type === CSSRule.MEDIA_RULE).length
+      : 0,
+    bracesBalanced: (css.match(/{/g) || []).length === (css.match(/}/g) || []).length,
+
+    // Tizen <= 6.0 est en Chromium 76 : `gap` en flexbox n'y existe pas.
+    stripUsesGapProperty: /\.mc-strip\{[^}]*gap:/.test(css),
+    firstCardMargin: cards.length > 1
+      ? parseFloat(getComputedStyle(cards[0]).marginRight) : 0,
+    lastCardMargin: parseFloat(getComputedStyle(cards[cards.length - 1]).marginRight),
+
+    // Tizen n'a pas `:focus-visible` : le contour doit tenir sur `:focus` seul.
+    hasPlainFocusRule: /\.mc-card:focus,[^{]*\{[^}]*outline:/.test(css),
+    focusVisibleOnlyGuard: css.indexOf(':focus:not(:focus-visible)') !== -1,
+
+    posterRatio: poster.getBoundingClientRect().height / poster.getBoundingClientRect().width
+  };
+});
+await sizing.close();
+
 await browser.close();
 
 let failed = 0;
@@ -366,9 +438,9 @@ check('a11y: libelle de carte explicite', result.cardAria === 'Numéro 1 : Film 
 check('a11y: fleches hors du parcours clavier', result.arrowsHidden === true, result.arrowsHidden);
 check('a11y: roles list/listitem', result.listRoles === true, result.listRoles);
 check('titre absent non cliquable', result.unavailableIsLink === false, result.unavailableIsLink);
-check('affiche dimensionnee', result.posterHeight === 180, result.posterHeight);
-check('affiche de genre dimensionnee', result.genrePosterHeight === 180, result.genrePosterHeight);
-check('vignette de studio dimensionnee', result.tileHeight === 104, result.tileHeight);
+check('affiche dimensionnee (1280 px : 142x213)', result.posterHeight === 213, result.posterHeight);
+check('affiche de genre dimensionnee (1280 px)', result.genrePosterHeight === 213, result.genrePosterHeight);
+check('vignette de studio dimensionnee (1280 px)', result.tileHeight === 118, result.tileHeight);
 check('pas de duplication sur mutation', afterMutation === 9, afterMutation);
 check('reinjection apres reconstruction', afterRebuild === 9, afterRebuild);
 const extraCalls = callsAfterRebuild.slice(callsBeforeRebuild.length);
@@ -387,8 +459,8 @@ check('THEME: le jeton --sidePadding du theme est adopte',
 check('THEME: notre marge de rangee resiste a .verticalSection',
   theme.rowMarginBottom !== '16px' && parseFloat(theme.rowMarginBottom) > 20, theme.rowMarginBottom);
 check('THEME: le rayon du theme est repris', theme.posterRadius === '16px', theme.posterRadius);
-check('THEME: la gouttiere du theme est reprise', theme.gap === '8px', theme.gap);
-check('THEME: les affiches gardent leur hauteur', theme.posterHeight === 180, theme.posterHeight);
+check('THEME: la gouttiere du theme est reprise', theme.cardGutter === '8px', theme.cardGutter);
+check('THEME: les affiches gardent leur hauteur', theme.posterHeight === 213, theme.posterHeight);
 
 check('C1: chiffres lisibles au repos (contour .85, remplissage .25)',
   result.rankFill === 'rgba(255,255,255,.25)' && result.rankOutline === 'rgba(255,255,255,.85)', result);
@@ -397,6 +469,37 @@ check('D1: une couleur invalide retombe sur le defaut',
   accent.applied === '#775BF4', accent.applied);
 check('D1: aucune declaration injectee dans la feuille',
   !accent.css.includes('body{display:none}') && accent.bodyVisible, accent.css.slice(0, 120));
+
+check('CSS: la feuille produit bien des regles', styling.ruleCount > 30, styling.ruleCount);
+check('CSS: accolades equilibrees', styling.bracesBalanced === true, styling.bracesBalanced);
+check('CSS: les 10 points de rupture sont presents', styling.mediaCount === 10, styling.mediaCount);
+
+check('TAILLE: telephone portrait plus petit que paysage',
+  widths.phonePortrait < widths.phoneLandscape, widths);
+check('TAILLE: paysage plus petit que bureau',
+  widths.phoneLandscape < widths.desktop, widths);
+check('TAILLE: bureau plus petit que grand ecran',
+  widths.desktop < widths.wide, widths);
+check('TAILLE: grand ecran plus petit qu un televiseur 1080p',
+  widths.wide < widths.tv1080, widths);
+check('TAILLE: televiseur 1080p plus petit qu un 4K',
+  widths.tv1080 < widths.tv4k, widths);
+check('TAILLE: l affiche double entre le telephone et le televiseur 4K',
+  widths.tv4k >= widths.phonePortrait * 2, widths);
+check('TAILLE: un ecran bas reduit les affiches', widths.shortScreen < widths.desktop, widths);
+check('TAILLE: proportion d affiche 2:3 conservee',
+  Math.abs(styling.posterRatio - 1.5) < 0.02, styling.posterRatio);
+
+check('TIZEN: la bande n utilise pas `gap` (absent avant Chromium 84)',
+  styling.stripUsesGapProperty === false, styling.stripUsesGapProperty);
+check('TIZEN: l espacement passe par des marges',
+  styling.firstCardMargin > 0, styling.firstCardMargin);
+check('TIZEN: pas de marge sur la derniere carte',
+  styling.lastCardMargin === 0, styling.lastCardMargin);
+check('TIZEN: le contour de focus tient sur :focus seul',
+  styling.hasPlainFocusRule === true, styling.hasPlainFocusRule);
+check('TIZEN: le retrait au clic souris est isole dans une regle ecartable',
+  styling.focusVisibleOnlyGuard === true, styling.focusVisibleOnlyGuard);
 
 check('aucune erreur js', errors.length === 0, errors);
 

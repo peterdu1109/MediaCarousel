@@ -300,6 +300,13 @@ si l'administrateur supprime la collection, elle est recréée au recalcul suiva
   honorés.
 - **CSS** : injecté dans un `<style id="mc-styles">`, tout est préfixé `mc-`, rien n'est surchargé
   hors de ces classes.
+- **Dimensionnement adaptatif** : sept paliers, du téléphone en portrait au téléviseur 4K, plus un
+  palier pour les écrans bas et larges. Les points de rupture ne redéfinissent **que des jetons**,
+  jamais une règle. `clamp()` serait plus concis mais demande Chromium 79, que les téléviseurs
+  Tizen n'ont pas. Les affiches gardent partout la proportion 2:3, et les libellés grossissent plus
+  vite que les affiches sur les grands écrans — ils se lisent de loin.
+- **Contraintes Tizen** (voir la section dédiée) : pas de `gap` en flexbox, contour de focus porté
+  par `:focus` et non `:focus-visible`, pas de `clamp()`.
 - **Cohabitation avec les thèmes** : tous les réglages passent par des variables portées par
   `.mc-row`, jamais par `:root`. Quand le thème hôte expose déjà un jeton — `--sidePadding`,
   `--itemColumnGap`, `--smallRadius` — il est adopté, avec la valeur native de Jellyfin en repli.
@@ -322,6 +329,17 @@ versions 1.x et 2.x** — sans quoi un navigateur continuerait à demander l'anc
 La charge utile envoyée à FileTransformation est construite par réflexion à partir du type de
 paramètre déclaré par sa propre méthode (`JObject.Parse`), pour ne pas dépendre d'une version de
 Newtonsoft.Json qui pourrait diverger à l'exécution.
+
+**Les applications Tizen et webOS ne chargent jamais ce fichier.** `jellyfin-tizen` empaquette
+`jellyfin-web/dist` dans le `.wgt` installé sur le téléviseur — son `index.html` redirige vers
+`www/index.html`, local à l'application — et `JELLYFIN_WEB_DIR` permet de choisir quelle interface
+web est empaquetée. Le `index.html` du serveur, celui que `ScriptInjectionTask` complète, n'y est
+donc pas lu. **Aucun réglage serveur ne peut y changer quoi que ce soit :** les rangées
+n'apparaissent sur ces téléviseurs que si leur paquet est reconstruit à partir d'une interface web
+portant déjà la balise. La page de configuration l'explique et affiche la balise à copier. Le seul
+canal que ces applications récupèrent bien du serveur est le CSS personnalisé (`/Branding/Css`),
+qui ne peut pas créer de rangée. Le rendu, lui, reste écrit pour ces téléviseurs — c'est ce qui
+sert le jour où le paquet est reconstruit, et cela ne coûte rien ailleurs.
 
 **L'écriture sur disque passe par un fichier temporaire puis un `File.Move`.** `index.html` est le
 point d'entrée de toute l'interface web : une coupure de courant au milieu d'un
@@ -395,7 +413,7 @@ dotnet run --project tests/ScriptTag.Tests -c Release
 cd tests/browser && npm install && node home-rows.test.mjs && node config-page.test.mjs
 ```
 
-Trois suites sans framework — 169 assertions — exécutées en CI avant la publication ; voir
+Trois suites sans framework — 185 assertions — exécutées en CI avant la publication ; voir
 `tests/README.md`. L'une charge un extrait des règles d'ElegantFin **après** les nôtres pour
 vérifier que la cohabitation tient.
 Les deux suites navigateur chargent le vrai `media-carousel.js` et le vrai `configPage.html`
@@ -483,6 +501,14 @@ tout le reste de la réponse.
 **Le navigateur met `index.html` en cache :** après un changement d'intégration, un rechargement
 forcé (Ctrl+Maj+R) est nécessaire. `AssetsController` place la version du plugin en `ETag` pour
 qu'une mise à jour invalide l'ancien script.
+
+**Pas de `gap` en flexbox, pas de `:focus-visible` seul :** l'espacement des cartes passe par
+`margin-right` sur les enfants de la bande, et le contour de focus est déclaré sur `:focus`, une
+règle `:focus:not(:focus-visible)` le retirant ensuite au clic souris. `gap` en flexbox arrive
+avec Chromium 84 et `:focus-visible` avec Chromium 86 ; les téléviseurs Tizen plafonnent à
+Chromium 76 (Tizen 6.0) et 85 (Tizen 6.5). Sans ces deux replis, les cartes s'y collent et la
+télécommande déplace un focus **invisible**. Les moteurs qui ignorent `:focus-visible` jugent la
+règle de retrait invalide et l'écartent entièrement — c'est le comportement recherché.
 
 **Nos sélecteurs portent deux classes :** les rangées réutilisent `verticalSection`,
 `sectionTitle` et `scrollX` pour hériter du style natif, mais les thèmes ciblent aussi ces

@@ -36,6 +36,13 @@ juste sous tes bibliothèques — grand chiffre du rang, affiche, défilement ho
 Rien à installer ni à bricoler : le plugin s'intègre tout seul à l'interface web au démarrage
 du serveur. Tout le calcul est fait côté serveur, en tâche de fond.
 
+Les rangées **s'adaptent à l'écran** : du téléphone en portrait au téléviseur 4K, les affiches
+et les chiffres de rang changent de taille à sept paliers.
+
+> **Téléviseurs Samsung et LG.** Les applications Tizen et webOS embarquent leur propre copie de
+> l'interface web et ne chargent jamais celle du serveur : les rangées n'y apparaissent pas, et
+> aucun réglage ne peut le changer. Voir [Téléviseurs](#téléviseurs-samsung-et-lg).
+
 ---
 
 ## Installation
@@ -241,6 +248,41 @@ autre plugin reste intact. De même, la balise `<script>` insérée dans `index.
 
 Ces variables sont redéfinies aux points de rupture mobile : les surcharger sur `.mc-row`
 suffit pour les deux tailles, sauf si vous ciblez vous-même un média.
+
+## Téléviseurs Samsung et LG
+
+Les rangées s'affichent partout où le client charge l'interface web **du serveur** : navigateur,
+application de bureau, mobile, Android TV.
+
+Les applications **Tizen** (Samsung) et **webOS** (LG) font exception. Elles embarquent leur propre
+copie de l'interface web dans le paquet installé sur le téléviseur — `jellyfin-tizen` package
+`jellyfin-web/dist` dans le `.wgt` — et ne chargent donc jamais le `index.html` du serveur, celui
+que le plugin complète au démarrage. **Aucun réglage ne peut y changer quoi que ce soit** : ce
+n'est pas une limite du plugin mais la façon dont ces applications sont construites.
+
+Pour les y faire apparaître, il faut reconstruire le paquet du téléviseur à partir d'une interface
+web où cette balise a été ajoutée avant `</body>` :
+
+```html
+<script plugin="MediaCarousel" defer="defer" src="/MediaCarousel/media-carousel.js"></script>
+```
+
+`jellyfin-tizen` accepte la variable d'environnement `JELLYFIN_WEB_DIR`, qui désigne l'interface
+web à empaqueter : il suffit de la faire pointer sur une copie modifiée.
+
+Le rendu, lui, est écrit pour ces téléviseurs :
+
+- **Pas de `gap` en flexbox** — la propriété arrive avec Chromium 84, et Tizen 6.0 (téléviseurs
+  2021) tourne en Chromium 76. L'espacement des cartes passe par des marges.
+- **Contour de focus sur `:focus`**, pas seulement `:focus-visible` — celui-ci arrive avec
+  Chromium 86, et même Tizen 6.5 (téléviseurs 2022) est en Chromium 85. Sans ce repli, la
+  télécommande déplacerait un focus **invisible**. Le contour reste retiré au clic souris sur les
+  navigateurs récents.
+- **Pas de `clamp()`** pour les tailles — Chromium 79. Le dimensionnement passe par des paliers.
+- Affiches et libellés agrandis au-delà de 1920 px, la largeur que déclare un téléviseur 4K
+  sous Tizen.
+
+---
 
 ## Pour les développeurs
 

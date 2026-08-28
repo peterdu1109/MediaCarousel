@@ -149,10 +149,12 @@
             '--mc-side-padding:var(--sidePadding,3.3%);',
             '--mc-gap:var(--itemColumnGap,.7em);',
             '--mc-radius:var(--smallRadius,5px);',
-            /* Jetons propres au plugin. */
-            '--mc-poster-width:120px;--mc-poster-height:180px;',
+            /* Dimensions par défaut : ordinateur de bureau. Les points de rupture plus bas
+               ne redéfinissent que ces jetons, jamais une règle. */
+            '--mc-poster-width:124px;--mc-poster-height:186px;',
             '--mc-tile-width:172px;--mc-tile-height:104px;',
-            '--mc-rank-size:8.5rem;--mc-rank-stroke:3px;',
+            '--mc-rank-size:7rem;--mc-rank-stroke:3px;',
+            '--mc-label-size:.78em;--mc-strip-pad-y:1.6em;',
             '--mc-rank-fill:rgba(255,255,255,.25);',
             '--mc-rank-outline:rgba(255,255,255,.85);',
             '--mc-surface:rgba(255,255,255,.07);',
@@ -166,21 +168,27 @@
             '.mc-row *,.mc-row *::before,.mc-row *::after{box-sizing:border-box;}',
 
             '.verticalSection.mc-row{margin:0 0 2.4em;}',
-            '.mc-row .mc-row-header{display:flex;align-items:center;gap:.6em;flex-wrap:wrap;}',
+            /* L'espacement passe par des marges, jamais par `gap` : la propriété n'arrive
+               qu'avec Chromium 84 en flexbox, et les téléviseurs Tizen jusqu'à la 6.0
+               tournent en Chromium 76 — les cartes s'y colleraient les unes aux autres. */
+            '.mc-row .mc-row-header{display:flex;align-items:center;flex-wrap:wrap;}',
+            '.mc-row .mc-row-header>*{margin-right:.6em;}',
+            '.mc-row .mc-row-header>*:last-child{margin-right:0;}',
             '.mc-row .mc-row-header .mc-row-title{margin:0;}',
 
             '.mc-row .mc-strip-wrap{position:relative;}',
             /* Le padding est répété ici : ElegantFin impose son propre padding-left
                à `.scrollX`, que notre bande porte pour neutraliser le swipe d'onglet. */
-            '.mc-row .mc-strip{display:flex;gap:var(--mc-gap);overflow-x:auto;overflow-y:hidden;',
-            'padding:1.6em var(--mc-side-padding) 1.2em;scrollbar-width:none;-ms-overflow-style:none;}',
+            '.mc-row .mc-strip{display:flex;overflow-x:auto;overflow-y:hidden;',
+            'padding:var(--mc-strip-pad-y) var(--mc-side-padding);scrollbar-width:none;-ms-overflow-style:none;}',
             '.mc-row .mc-strip::-webkit-scrollbar{display:none;}',
+            '.mc-row .mc-strip>*{margin-right:var(--mc-gap);}',
+            '.mc-row .mc-strip>*:last-child{margin-right:0;}',
 
             /* Carte classée : le chiffre géant est en retrait derrière l'affiche. */
             '.mc-row .mc-card{position:relative;display:flex;align-items:flex-end;flex:0 0 auto;',
             'text-decoration:none;color:inherit;transition:transform .18s ease;transform-origin:center bottom;}',
-            '.mc-row .mc-card:hover,.mc-row .mc-card:focus-visible{transform:scale(1.06);z-index:2;}',
-            '.mc-row .mc-card:focus-visible{outline:3px solid var(--mc-accent);outline-offset:3px;border-radius:6px;}',
+            '.mc-row .mc-card:hover{transform:scale(1.06);z-index:2;}',
 
             /* La couleur pleine sert de repli : sans -webkit-text-stroke, le chiffre reste lisible. */
             '.mc-row .mc-rank{font-size:var(--mc-rank-size);line-height:.72;font-weight:900;font-style:italic;',
@@ -198,7 +206,7 @@
             '.mc-row .mc-card:hover .mc-poster{box-shadow:var(--mc-shadow-hover);}',
 
             '.mc-row .mc-fallback{display:flex;align-items:center;justify-content:center;height:100%;',
-            'padding:.6em;text-align:center;font-size:.78em;line-height:1.25;opacity:.85;}',
+            'padding:.6em;text-align:center;font-size:var(--mc-label-size);line-height:1.25;opacity:.85;}',
 
             '.mc-row .mc-unavailable .mc-poster{opacity:.55;}',
             '.mc-row .mc-unavailable .mc-poster::after{content:attr(data-label);position:absolute;left:0;right:0;bottom:0;',
@@ -210,19 +218,30 @@
             'display:flex;align-items:center;justify-content:center;padding:.9em;text-align:center;',
             'background:var(--mc-surface);text-decoration:none;color:inherit;',
             'transition:transform .18s ease,background .18s ease;}',
-            '.mc-row .mc-tile:hover,.mc-row .mc-tile:focus-visible{transform:scale(1.05);',
-            'background:var(--mc-surface-hover);z-index:2;}',
-            '.mc-row .mc-tile:focus-visible{outline:3px solid var(--mc-accent);outline-offset:3px;}',
+            '.mc-row .mc-tile:hover{transform:scale(1.05);background:var(--mc-surface-hover);z-index:2;}',
             '.mc-row .mc-tile img{max-width:100%;max-height:100%;object-fit:contain;display:block;}',
-            '.mc-row .mc-tile-name{font-size:.86em;font-weight:600;line-height:1.2;}',
+            '.mc-row .mc-tile-name{font-size:var(--mc-label-size);font-weight:600;line-height:1.2;}',
 
             /* Carte simple, utilisée par les rangées de genre. */
             '.mc-row .mc-plain{flex:0 0 auto;width:var(--mc-poster-width);text-decoration:none;',
             'color:inherit;transition:transform .18s ease;}',
-            '.mc-row .mc-plain:hover,.mc-row .mc-plain:focus-visible{transform:scale(1.06);z-index:2;}',
-            '.mc-row .mc-plain:focus-visible{outline:3px solid var(--mc-accent);outline-offset:3px;border-radius:6px;}',
-            '.mc-row .mc-plain-name{margin-top:.4em;font-size:.78em;line-height:1.25;',
+            '.mc-row .mc-plain:hover{transform:scale(1.06);z-index:2;}',
+            '.mc-row .mc-plain-name{margin-top:.4em;font-size:var(--mc-label-size);line-height:1.25;',
             'display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}',
+
+            /* Focus : `:focus` d'abord, car `:focus-visible` n'arrive qu'avec Chromium 86 et
+               qu'aucun téléviseur Tizen ne l'a — jusqu'à la 6.5, qui est en Chromium 85.
+               Sans ce repli, la télécommande déplace un focus invisible. La règle suivante
+               retire le contour au clic souris ; les moteurs qui ignorent `:focus-visible`
+               la jugent invalide et l'écartent entièrement, ce qui est le comportement
+               recherché. */
+            '.mc-row .mc-card:focus,.mc-row .mc-tile:focus,.mc-row .mc-plain:focus{',
+            'outline:3px solid var(--mc-accent);outline-offset:3px;border-radius:6px;z-index:2;}',
+            '.mc-row .mc-card:focus,.mc-row .mc-plain:focus{transform:scale(1.06);}',
+            '.mc-row .mc-tile:focus{transform:scale(1.05);background:var(--mc-surface-hover);}',
+            '.mc-row .mc-card:focus:not(:focus-visible),',
+            '.mc-row .mc-tile:focus:not(:focus-visible),',
+            '.mc-row .mc-plain:focus:not(:focus-visible){outline:none;transform:none;}',
 
             '.mc-row .mc-empty{padding:0 var(--mc-side-padding) 1em;opacity:.6;font-size:.85em;}',
 
@@ -231,20 +250,75 @@
             '.mc-hidden-native{display:none!important;}',
 
             /* Flèches de défilement : confort souris, masquées au clavier et au tactile. */
-            '.mc-row .mc-arrow{position:absolute;top:0;bottom:0;width:3.2vw;min-width:34px;border:0;cursor:pointer;',
-            'background:var(--mc-scrim);color:#fff;font-size:1.5em;line-height:1;opacity:0;',
-            'transition:opacity .18s ease;z-index:3;}',
+            '.mc-row .mc-arrow{position:absolute;top:0;bottom:0;width:3.2vw;min-width:34px;max-width:72px;',
+            'border:0;cursor:pointer;background:var(--mc-scrim);color:#fff;font-size:1.5em;line-height:1;',
+            'opacity:0;transition:opacity .18s ease;z-index:3;}',
             '.mc-row .mc-arrow-prev{left:0;}',
             '.mc-row .mc-arrow-next{right:0;}',
             '.mc-row .mc-strip-wrap:hover .mc-arrow{opacity:1;}',
             '.mc-row .mc-arrow:disabled{opacity:0!important;pointer-events:none;}',
 
-            /* Les points de rupture ne redéfinissent que des jetons. */
-            '@media (max-width:800px){',
-            '.mc-row{--mc-rank-size:5.6rem;--mc-rank-stroke:2px;',
-            '--mc-poster-width:88px;--mc-poster-height:132px;',
-            '--mc-tile-width:132px;--mc-tile-height:80px;}',
-            '.mc-row .mc-strip{padding:1.1em var(--mc-side-padding) .9em;}',
+            /* ------------------------------------------------------------------
+               Dimensionnement adaptatif.
+
+               Uniquement des points de rupture sur les jetons : `clamp()` serait plus
+               concis mais demande Chromium 79, que les téléviseurs Tizen n'ont pas.
+               ------------------------------------------------------------------ */
+
+            /* Téléphone en portrait. */
+            '@media (max-width:479px){',
+            '.mc-row{--mc-poster-width:92px;--mc-poster-height:138px;',
+            '--mc-tile-width:128px;--mc-tile-height:78px;',
+            '--mc-rank-size:4.6rem;--mc-rank-stroke:2px;',
+            '--mc-label-size:.72em;--mc-strip-pad-y:1em;}',
+            '}',
+
+            /* Téléphone en paysage, petite tablette. */
+            '@media (min-width:480px) and (max-width:799px){',
+            '.mc-row{--mc-poster-width:104px;--mc-poster-height:156px;',
+            '--mc-tile-width:144px;--mc-tile-height:88px;',
+            '--mc-rank-size:5.6rem;--mc-rank-stroke:2px;',
+            '--mc-label-size:.75em;--mc-strip-pad-y:1.1em;}',
+            '}',
+
+            /* Grand écran de bureau. */
+            '@media (min-width:1280px){',
+            '.mc-row{--mc-poster-width:142px;--mc-poster-height:213px;',
+            '--mc-tile-width:196px;--mc-tile-height:118px;',
+            '--mc-rank-size:8.5rem;--mc-label-size:.8em;}',
+            '}',
+
+            '@media (min-width:1600px){',
+            '.mc-row{--mc-poster-width:158px;--mc-poster-height:237px;',
+            '--mc-tile-width:216px;--mc-tile-height:130px;',
+            '--mc-rank-size:9.5rem;--mc-rank-stroke:4px;',
+            '--mc-label-size:.84em;--mc-strip-pad-y:1.8em;}',
+            '}',
+
+            /* Téléviseur 1080p et grands moniteurs. Un téléviseur 4K sous Tizen déclare
+               lui aussi 1920 pixels CSS : c'est ce palier qui le sert. Les libellés
+               grossissent plus vite que les affiches — ils se lisent de loin. */
+            '@media (min-width:1920px){',
+            '.mc-row{--mc-poster-width:178px;--mc-poster-height:267px;',
+            '--mc-tile-width:244px;--mc-tile-height:146px;',
+            '--mc-rank-size:11rem;--mc-rank-stroke:5px;',
+            '--mc-label-size:.95em;--mc-strip-pad-y:2.1em;}',
+            '.verticalSection.mc-row{margin:0 0 3em;}',
+            '}',
+
+            '@media (min-width:2560px){',
+            '.mc-row{--mc-poster-width:208px;--mc-poster-height:312px;',
+            '--mc-tile-width:284px;--mc-tile-height:170px;',
+            '--mc-rank-size:13rem;--mc-rank-stroke:6px;',
+            '--mc-label-size:1.05em;--mc-strip-pad-y:2.4em;}',
+            '}',
+
+            /* Écran bas mais large : un téléviseur en 720p, ou une fenêtre aplatie.
+               Les affiches sont ramenées à ce que la hauteur permet. */
+            '@media (max-height:620px) and (min-width:800px){',
+            '.mc-row{--mc-poster-width:112px;--mc-poster-height:168px;',
+            '--mc-rank-size:6rem;--mc-strip-pad-y:1em;}',
+            '.verticalSection.mc-row{margin:0 0 1.6em;}',
             '}',
 
             '@media (hover:none){.mc-row .mc-arrow{display:none;}',

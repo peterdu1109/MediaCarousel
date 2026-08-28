@@ -514,6 +514,34 @@
                                 </div>
                             </div>
                         </fieldset>
+
+                        <fieldset class="mcCfg-group">
+                            <legend>Téléviseurs Samsung et LG</legend>
+                            <p class="mcCfg-group-hint">
+                                Les rangées s'affichent partout où le client charge l'interface web
+                                <em>du serveur</em> : navigateur, application de bureau, mobile, Android TV.
+                            </p>
+                            <div class="fieldDescription">
+                                <p>
+                                    Les applications <strong>Tizen</strong> (Samsung) et <strong>webOS</strong> (LG)
+                                    font exception : elles embarquent leur propre copie de l'interface web dans le
+                                    paquet installé sur le téléviseur, et ne chargent donc jamais le
+                                    <code>index.html</code> du serveur — celui que le plugin complète. Aucun réglage
+                                    ne peut changer cela côté serveur.
+                                </p>
+                                <p>
+                                    Pour les y faire apparaître, il faut reconstruire le paquet du téléviseur à
+                                    partir d'une interface web où cette balise a été ajoutée avant
+                                    <code>&lt;/body&gt;</code> :
+                                </p>
+                                <p><code id="mcCfg-scriptTag">&lt;script plugin="MediaCarousel" defer="defer"
+                                    src="/MediaCarousel/media-carousel.js"&gt;&lt;/script&gt;</code></p>
+                                <p>
+                                    Le rendu lui-même est prévu pour ces téléviseurs : espacements, contour de
+                                    focus à la télécommande et tailles d'affiche adaptées à un écran regardé de loin.
+                                </p>
+                            </div>
+                        </fieldset>
                     </div>
 
                     <div role="tabpanel" id="panelRefresh" aria-labelledby="tabRefresh" hidden>
