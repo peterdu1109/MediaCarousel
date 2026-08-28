@@ -61,7 +61,7 @@ jobs:
 
           # Prépendre une nouvelle entrée — ne jamais écraser l'historique
           jq --arg v "$NEW_FULL" --arg chg "$CHANGELOG" --arg ts "$TODAY" \
-            '.[0].versions = [{"version":$v,"changelog":$chg,"targetAbi":"10.11.9.0","sourceUrl":"","checksum":"","timestamp":$ts}] + .[0].versions' \
+            '.[0].versions = [{"version":$v,"changelog":$chg,"targetAbi":"10.11.11.0","sourceUrl":"","checksum":"","timestamp":$ts}] + .[0].versions' \
             manifest.json > manifest.tmp && mv manifest.tmp manifest.json
 
           sed -i "s|<AssemblyVersion>.*</AssemblyVersion>|<AssemblyVersion>${NEW_FULL}</AssemblyVersion>|" JellyfinCarouselPlugin.csproj
