@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/icon.png",
     "versions": [
       {
+        "version": "3.9.3.0",
+        "changelog": "Corrections :\n- Sections natives completes et rangees plus lisibles",
+        "targetAbi": "10.11.11.0",
+        "sourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/3.9.3/JellyfinCarouselPlugin.zip",
+        "checksum": "d89f3955aa2e91d35552670714fb5fd7",
+        "timestamp": "2026-08-28T15:27:50Z"
+      },
+      {
         "version": "3.9.2.0",
         "changelog": "Corrections :\n- Ne reinserer que les noeuds qui ne sont pas deja en place",
         "targetAbi": "10.11.11.0",
