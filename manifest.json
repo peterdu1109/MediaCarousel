@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/icon.png",
     "versions": [
       {
+        "version": "3.9.2.0",
+        "changelog": "Corrections :\n- Ne reinserer que les noeuds qui ne sont pas deja en place",
+        "targetAbi": "10.11.11.0",
+        "sourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/3.9.2/JellyfinCarouselPlugin.zip",
+        "checksum": "b4a0863af87cc49d32ec6b5a769bda94",
+        "timestamp": "2026-08-28T15:15:10Z"
+      },
+      {
         "version": "3.9.1.0",
         "changelog": "Corrections :\n- Ne plus remuer le DOM quand l ordre est deja le bon",
         "targetAbi": "10.11.11.0",
