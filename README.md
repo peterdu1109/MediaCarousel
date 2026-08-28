@@ -4,7 +4,7 @@
   <h1>Media Carousel</h1>
   <p><strong>Le Top 10 de ton serveur Jellyfin, calculé automatiquement.</strong></p>
 
-  [![Jellyfin](https://img.shields.io/badge/Jellyfin-10.11.9%2B-00a4dc?style=flat-square)](https://jellyfin.org/)
+  [![Jellyfin](https://img.shields.io/badge/Jellyfin-10.11.11%2B-00a4dc?style=flat-square)](https://jellyfin.org/)
   [![.NET](https://img.shields.io/badge/.NET-9.0-512BD4?style=flat-square)](https://dotnet.microsoft.com/)
   [![Version](https://img.shields.io/badge/dynamic/json?url=https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/manifest.json&query=%24%5B0%5D.versions%5B0%5D.version&label=Version&color=brightgreen&style=flat-square)](https://github.com/peterdu1109/MediaCarousel/releases)
   [![Licence](https://img.shields.io/badge/Licence-MIT-green?style=flat-square)](LICENSE)
@@ -56,7 +56,7 @@ Les mises à jour suivantes se font toutes seules.
 Télécharge le ZIP depuis la [page des versions](https://github.com/peterdu1109/MediaCarousel/releases),
 décompresse-le dans `plugins/MediaCarousel/`, puis redémarre Jellyfin.
 
-> **Prérequis : Jellyfin 10.11.9 ou plus récent.**
+> **Prérequis : Jellyfin 10.11.11 ou plus récent.**
 
 ---
 
@@ -94,7 +94,7 @@ Ensuite, plus rien à faire : le recalcul se relance au démarrage du serveur et
 | Lectures comptées par utilisateur | `3` | Empêche qu'un seul spectateur qui revoit un film en boucle fausse le classement |
 | Titres candidats par utilisateur | `100` | Plus haut = plus précis, mais plus long à calculer |
 | Utilisateurs exclus | — | Comptes de service, invités |
-| Bibliothèques exclues | — | Vidéos perso, etc. |
+| Bibliothèques exclues des classements | — | Vidéos perso, etc. Porte sur le Top du serveur, « jamais vu » et « de retour » ; studios, genres et Top mondial couvrent toute la bibliothèque |
 
 Les **épisodes comptent pour leur série** : c'est la série qui apparaît au classement, pas
 l'épisode isolé.
@@ -168,7 +168,7 @@ l'ouverture de la page d'accueil.
 | Afficher les rangées | ✅ | Interrupteur principal du rendu sur l'accueil |
 | Titre — Top du serveur | `Top 10 sur ce serveur` | Titre de la rangée |
 | Titre — Top mondial | `Top 10 mondial` | Titre de la rangée |
-| Couleur d'accentuation | `#e50914` | Contour du chiffre au survol et anneau de focus |
+| Couleur d'accentuation | `#775BF4` | Contour du chiffre au survol et anneau de focus. Seule une valeur `#rrggbb` est retenue, sinon le violet par défaut s'applique |
 | Masquer les sections natives | ❌ | Ne laisse que tes bibliothèques et les rangées du plugin |
 
 Le plugin **n'écrase pas** ta page d'accueil : il ajoute ses rangées sous les bibliothèques et

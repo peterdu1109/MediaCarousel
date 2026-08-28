@@ -12,11 +12,15 @@ consomme l'API du plugin et insère deux rangées façon Netflix sous les biblio
 d'accueil. Il ne calcule rien, ne remplace pas la page d'accueil et ne masque aucune section native.
 
 - **Plugin GUID :** `191bd290-1054-4b55-a137-46c72181266b` — dans `Plugin.cs`, `manifest.json`, `build.yaml`, `configPage.html`
-- **Cible :** Jellyfin **10.11.9+** (ABI `10.11.9.0`), .NET 9.0, paquets NuGet Jellyfin 10.11.11
+- **Cible :** Jellyfin **10.11.11+** (ABI `10.11.11.0`), .NET 9.0, paquets NuGet Jellyfin 10.11.11
 - **Stack :** C# uniquement. Pas de Node, pas de npm, pas de TypeScript, pas de build frontend.
 
-> **ABI 10.11.9 minimum :** `IUserManager.Users` (propriété) est devenu `IUserManager.GetUsers()` (méthode)
-> en 10.11.9. Le plugin ne se charge pas sur une version antérieure.
+> **Plancher technique et `targetAbi` ne coïncident pas.** La seule API utilisée qui soit plus
+> récente que 10.11.8 est `IUserManager.GetUsers()` — `IUserManager.Users` (propriété) est devenu
+> une méthode en 10.11.9 — donc le code se chargerait sur 10.11.9 et 10.11.10. Le `targetAbi`
+> publié est malgré tout `10.11.11.0` : c'est la version contre laquelle le plugin est compilé et
+> testée. Conséquence assumée : **le plugin disparaît du catalogue des serveurs en 10.11.9 et
+> 10.11.10.** Abaisser la valeur dans `manifest.json` suffit à les rouvrir.
 
 > **Pourquoi un script frontend est inévitable :** les sections de la page d'accueil de Jellyfin
 > sont l'énumération fermée `HomeSectionType` (`None`, `SmallLibraryTiles`, `LibraryButtons`,
@@ -120,6 +124,12 @@ Détails d'implémentation :
   Chaque épisode est reporté sur `Episode.SeriesId`, mémorisé dans un cache local pour éviter un N+1.
 - `DtoOptions(false) { Fields = [ProviderIds], EnableImages = false }` — seules les colonnes utiles
   sont jointes (voir `BaseItemRepository.PrepareFilterQuery`).
+- **Le tri suit la fenêtre d'observation.** `InternalItemsQuery` n'offre aucun filtre sur la date
+  de lecture — `MinDateLastSavedForUser` porte, malgré son nom, sur le `DateLastSaved` de
+  l'élément — donc la fenêtre ne peut être appliquée qu'en mémoire, après la requête. Trier par
+  `PlayCount` remplirait alors la `Limit` des favoris de toujours, et les lectures récentes
+  seraient écartées par SQL avant même d'être datées. Quand une fenêtre est configurée, la requête
+  trie donc par `DatePlayed` décroissant ; sans fenêtre, par `PlayCount` décroissant.
 - Fenêtre d'observation appliquée sur `UserItemData.LastPlayedDate`.
 - Plafond `MaxPlaysCountedPerUser` appliqué au score, `TotalPlays` conservant la valeur brute.
 - Tri final : score, puis nombre de spectateurs distincts, puis dernière lecture.
@@ -174,7 +184,14 @@ d'elles. Il sert au classement et au seuil `MinItemsPerStudio`, pas au rendu.
 
 Un nom composé uniquement de mots génériques — « Studio », « Films » — conserve sa forme sans
 ponctuation comme clé, sinon des sociétés sans rapport se retrouveraient fusionnées sous une
-clé vide. Ces agrégations groupent sur toute la bibliothèque : elles
+clé vide.
+
+**Les genres sont regroupés de la même façon, à la casse près.** Jellyfin distingue
+« Science-Fiction » de « science-fiction » : ce sont deux entrées, avec deux décomptes. Studios
+et genres partagent donc `NameGroup`, qui **additionne** les décomptes des variantes au lieu de
+ne garder que la plus grosse — sans quoi un genre éclaté en deux graphies affichait la moitié de
+ses titres et pouvait passer sous `MinItemsPerGenre`. Les genres se regroupent sur le nom
+insensible à la casse, les studios sur la clé normalisée. Ces agrégations groupent sur toute la bibliothèque : elles
 sont calculées une fois par la tâche planifiée, jamais par requête. Elles ne portent aucune donnée
 de titre — seulement des noms et des décomptes — et la visibilité réelle reste appliquée par
 Jellyfin quand l'utilisateur ouvre la page d'un studio ou d'un genre.
@@ -254,6 +271,13 @@ La charge utile envoyée à FileTransformation est construite par réflexion à 
 paramètre déclaré par sa propre méthode (`JObject.Parse`), pour ne pas dépendre d'une version de
 Newtonsoft.Json qui pourrait diverger à l'exécution.
 
+**L'écriture sur disque passe par un fichier temporaire puis un `File.Move`.** `index.html` est le
+point d'entrée de toute l'interface web : une coupure de courant au milieu d'un
+`File.WriteAllText` le laisserait tronqué et Jellyfin ne servirait plus aucune page. Le fichier
+temporaire est créé dans le même répertoire, condition du remplacement atomique. Une `IOException`
+est rattrapée au même titre qu'une `UnauthorizedAccessException` : le disque plein ou le fichier
+verrouillé sont journalisés, ils ne font pas échouer la tâche planifiée.
+
 ---
 
 ## Conventions de code
@@ -332,7 +356,7 @@ Reste à valider à la main sur une instance Jellyfin : l'injection du script et
 ### CI/CD (`.github/workflows/build.yml`)
 
 Sur push `main` : bump de version d'après les commits conventionnels → `dotnet build -c Release` →
-ZIP → mise à jour de `manifest.json` (`sourceUrl`, checksum, `targetAbi` `10.11.9.0`) → commit
+ZIP → mise à jour de `manifest.json` (`sourceUrl`, checksum, `targetAbi` `10.11.11.0`) → commit
 `[skip ci]` → release GitHub.
 
 ---
@@ -440,6 +464,22 @@ sur des attributs dupliqués.
 
 **Filtrage de visibilité au service, pas au calcul :** le classement est global ; c'est à la lecture
 que `BaseItem.IsVisible(user)` retire ce que l'appelant n'a pas le droit de voir.
+
+**`ExcludedLibraryIds` ne couvre pas tout :** le réglage porte sur les classements construits à
+partir de la bibliothèque — Top du serveur, jamais vu, de retour — parce que ce sont les seuls
+calculs à itérer sur des éléments. Studios et genres passent par `GetStudios`/`GetGenres`, qui
+agrègent tout le serveur, et le rapprochement du Top mondial indexe lui aussi l'ensemble. Le nom
+de la propriété reste `ExcludedLibraryIds` : le renommer perdrait silencieusement les valeurs
+déjà écrites dans `MediaCarousel.xml` et casserait le tableau `lists` de la page de
+configuration. C'est le libellé de la page — « Bibliothèques exclues des classements » — et sa
+description qui énoncent la portée réelle.
+
+**La couleur d'accent est validée avant d'entrer dans le CSS :** `HighlightColor` est concaténée
+dans la feuille de styles construite par `buildCss`. `safeAccent` n'accepte que
+`/^#[0-9a-fA-F]{3,8}$/` et retombe sinon sur `#775BF4` — sans quoi une valeur comme
+`red;} body{display:none} .x{color:red` fermerait la règle et injecterait des déclarations
+arbitraires. La constante `DEFAULT_ACCENT` du script doit rester synchronisée avec la valeur par
+défaut de `PluginConfiguration.HighlightColor`.
 
 **Clé d'API externe :** `GlobalTopApiKey` n'est jamais renvoyée par l'API du plugin. Elle reste dans
 la configuration, lisible uniquement par un administrateur via l'API de configuration de Jellyfin.
