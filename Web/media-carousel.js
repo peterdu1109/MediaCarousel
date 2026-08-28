@@ -185,6 +185,13 @@
             /* Jetons repris du thème hôte quand il en expose. */
             '--mc-side-padding:var(--sidePadding,3.3%);',
             '--mc-gap:var(--itemColumnGap,.7em);',
+            /* Les rangées classées écartent leurs affiches d'elles-mêmes : le chiffre
+               géant tient la place. Celles qui n'en ont pas — genres, studios — se
+               retrouvaient collées, et deux libellés sur deux lignes semblaient se
+               toucher. Elles prennent donc une gouttière plus large. */
+            /* Exprimée à partir de la gouttière du thème plutôt qu'en dur : un thème
+               qui resserre ses rangées voit les nôtres se resserrer avec lui. */
+            '--mc-gap-wide:calc(var(--mc-gap) + .5em);',
             '--mc-radius:var(--smallRadius,5px);',
             /* Dimensions par défaut : ordinateur de bureau. Les points de rupture plus bas
                ne redéfinissent que ces jetons, jamais une règle. */
@@ -194,8 +201,10 @@
             '--mc-label-size:.78em;--mc-strip-pad-y:1.6em;',
             /* Courbe et durée communes : une seule décélération pour tout le rendu. */
             '--mc-ease:cubic-bezier(.22,.61,.36,1);--mc-dur:.28s;',
-            '--mc-rank-fill:rgba(255,255,255,.25);',
-            '--mc-rank-outline:rgba(255,255,255,.85);',
+            /* Chiffres pleins, cernés de sombre : le remplissage translucide les
+               laissait deviner plutôt que lire dès que l'affiche était claire. */
+            '--mc-rank-fill:rgba(255,255,255,.96);',
+            '--mc-rank-outline:rgba(0,0,0,.55);',
             '--mc-surface:rgba(255,255,255,.07);',
             '--mc-surface-hover:rgba(255,255,255,.13);',
             '--mc-scrim:rgba(0,0,0,.45);',
@@ -212,7 +221,7 @@
                par rangée est posé en JS, à l'insertion. */
             '@keyframes mc-rise{from{opacity:0;transform:translate3d(0,16px,0);}',
             'to{opacity:1;transform:translate3d(0,0,0);}}',
-            '.verticalSection.mc-row{margin:0 0 2.4em;',
+            '.verticalSection.mc-row{margin:0 0 2.9em;',
             'animation:mc-rise .45s var(--mc-ease) both;}',
             /* L'espacement passe par des marges, jamais par `gap` : la propriété n'arrive
                qu'avec Chromium 84 en flexbox, et les téléviseurs Tizen jusqu'à la 6.0
@@ -233,6 +242,10 @@
             '.mc-row .mc-strip>*{scroll-snap-align:start;}',
             '.mc-row .mc-strip::-webkit-scrollbar{display:none;}',
             '.mc-row .mc-strip>*{margin-right:var(--mc-gap);}',
+            '.mc-row .mc-strip>.mc-plain,.mc-row .mc-strip>.mc-tile{',
+            'margin-right:var(--mc-gap-wide);}',
+            /* À spécificité égale, c'est la dernière règle qui gagne : celle-ci doit
+               rester après la gouttière large. */
             '.mc-row .mc-strip>*:last-child{margin-right:0;}',
 
             /* Carte classée : le chiffre géant est en retrait derrière l'affiche. */
@@ -253,9 +266,11 @@
                sinon le recouvrement, constant, en mange une bien plus grande part. */
             'font-variant-numeric:tabular-nums;font-feature-settings:"tnum";',
             'margin:0 -.24em 0 0;user-select:none;pointer-events:none;flex:0 0 auto;',
-            'transition:-webkit-text-stroke-color var(--mc-dur) var(--mc-ease);}',
+            'transition:color var(--mc-dur) var(--mc-ease);}',
+            /* C'est le remplissage qui prend l'accent : sur un chiffre plein, teinter
+               le seul contour ne se voit pas. */
             '.mc-row .mc-card:hover .mc-rank,.mc-row .mc-card:focus .mc-rank{',
-            '-webkit-text-stroke-color:var(--mc-accent);}',
+            'color:var(--mc-accent);}',
             '.mc-row .mc-rank-10{letter-spacing:-.06em;}',
 
             /* display:block est indispensable : hors conteneur flex, un span reste inline
@@ -289,8 +304,11 @@
             'width:var(--mc-tile-width);height:var(--mc-tile-height);border-radius:var(--mc-radius);',
             'display:flex;align-items:center;justify-content:center;padding:.9em;text-align:center;',
             'background:var(--mc-surface);text-decoration:none;color:inherit;',
-            'transition:transform var(--mc-dur) var(--mc-ease),background var(--mc-dur) var(--mc-ease);}',
-            '.mc-row .mc-tile:hover{transform:scale(1.05);background:var(--mc-surface-hover);z-index:2;}',
+            'box-shadow:var(--mc-shadow);',
+            'transition:transform var(--mc-dur) var(--mc-ease),background var(--mc-dur) var(--mc-ease),',
+            'box-shadow var(--mc-dur) var(--mc-ease);}',
+            '.mc-row .mc-tile:hover{transform:scale(1.05);background:var(--mc-surface-hover);',
+            'box-shadow:var(--mc-shadow-hover);z-index:2;}',
             '.mc-row .mc-tile img{max-width:100%;max-height:100%;object-fit:contain;display:block;',
             'opacity:0;transition:opacity .35s var(--mc-ease);}',
             '.mc-row .mc-tile img.mc-ready{opacity:1;}',
@@ -300,7 +318,13 @@
             '.mc-row .mc-plain{flex:0 0 auto;width:var(--mc-poster-width);text-decoration:none;',
             'color:inherit;transition:transform var(--mc-dur) var(--mc-ease);}',
             '.mc-row .mc-plain:hover{transform:scale(1.045);z-index:2;}',
-            '.mc-row .mc-plain-name{margin-top:.4em;font-size:var(--mc-label-size);line-height:1.25;',
+            '.mc-row .mc-plain:hover .mc-poster,.mc-row .mc-plain:focus .mc-poster{',
+            'box-shadow:var(--mc-shadow-hover);}',
+            /* `min-height` vaut deux lignes : sans elle, un titre court et un titre
+               long ne finissent pas à la même hauteur et la rangée paraît de travers.
+               La marge de droite empêche deux libellés voisins de se rejoindre. */
+            '.mc-row .mc-plain-name{margin-top:.55em;padding-right:.4em;font-weight:500;',
+            'font-size:var(--mc-label-size);line-height:1.3;min-height:2.6em;opacity:.92;',
             'display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}',
 
             /* Focus : `:focus` d'abord, car `:focus-visible` n'arrive qu'avec Chromium 86 et
@@ -404,8 +428,8 @@
             /* Fond clair, detecte en JS sur la couleur reelle de la page : les blancs
                translucides des chiffres y sont invisibles, tout passe en sombre. */
             '.mc-row.mc-on-light{',
-            '--mc-rank-fill:rgba(0,0,0,.14);',
-            '--mc-rank-outline:rgba(0,0,0,.65);',
+            '--mc-rank-fill:rgba(18,18,24,.92);',
+            '--mc-rank-outline:rgba(255,255,255,.75);',
             '--mc-surface:rgba(0,0,0,.06);',
             '--mc-surface-hover:rgba(0,0,0,.11);',
             '--mc-scrim:rgba(0,0,0,.55);',
@@ -430,7 +454,8 @@
             '}',
 
             '@media (prefers-contrast:more){',
-            '.mc-row{--mc-rank-fill:rgba(255,255,255,.5);--mc-surface:rgba(255,255,255,.2);}',
+            '.mc-row{--mc-rank-fill:#fff;--mc-rank-outline:#000;',
+            '--mc-surface:rgba(255,255,255,.2);}',
             '}'
         ].join('');
     }
@@ -722,6 +747,27 @@
     }
 
     /**
+     * Décalage entre l'index d'une section dans les préférences du compte et l'index
+     * de l'élément qui la porte dans le DOM.
+     *
+     * `getAllSectionsToShow` de jellyfin-web ajoute une section de bibliothèques EN TÊTE
+     * sur les interfaces téléviseur quand l'ordre du compte n'en contient aucune : tout
+     * glisse alors d'un cran, et `native:nextup` désignait la section voisine. Le
+     * conteneur porte onze `.section{N}` sur ces interfaces contre dix ailleurs, ce qui
+     * suffit à les reconnaître.
+     */
+    function nativeOffset(container, nativeLayout) {
+        if (!container.querySelector('.section10')) {
+            return 0;
+        }
+
+        var libraries = Object.prototype.hasOwnProperty.call(nativeLayout, 'smalllibrarytiles')
+            || Object.prototype.hasOwnProperty.call(nativeLayout, 'librarybuttons');
+
+        return libraries ? 0 : 1;
+    }
+
+    /**
      * Place nos rangées et les sections natives dans l'ordre configuré.
      *
      * Les nœuds concernés sont regroupés en un bloc contigu, à l'emplacement du premier
@@ -741,6 +787,7 @@
         });
 
         var managed = [];
+        var offset = nativeOffset(container, nativeLayout);
 
         order.forEach(function (id) {
             if (byId[id]) {
@@ -758,7 +805,7 @@
             }
 
             // Absente de la page de cet utilisateur : simplement ignorée.
-            var section = container.querySelector('.section' + nativeLayout[type]);
+            var section = container.querySelector('.section' + (nativeLayout[type] + offset));
             if (section && section.parentNode === container) {
                 managed.push(section);
             }
@@ -1124,10 +1171,18 @@
 
     /* Ce que Jellyfin place dans homesection{i} quand l'utilisateur n'a rien choisi.
        Doit rester aligné sur DEFAULT_SECTIONS de jellyfin-web. */
+    /* Ordre par défaut du compte, repris de DEFAULT_SECTIONS
+       (jellyfin-web/src/types/homeSectionType.ts). */
     var NATIVE_DEFAULT_LAYOUT = [
         'smalllibrarytiles', 'resume', 'resumeaudio', 'resumebook',
         'livetv', 'nextup', 'latestmedia', 'none'
     ];
+
+    /* jellyfin-web rend DIX sections (`userSectionCount = 10` dans homesections.js),
+       alors que l'ordre par défaut n'en nomme que huit : un compte qui a descendu
+       « À suivre » en neuvième ou dixième position l'a bien dans ses préférences, et
+       s'arrêter à huit revenait à ne pas la voir du tout. */
+    var NATIVE_SECTION_COUNT = 10;
 
     /**
      * Normalise l'ordre configuré : les identifiants inconnus sont ignorés, et les entrées
@@ -1178,8 +1233,8 @@
                 var custom = (prefs && prefs.CustomPrefs) || {};
                 var map = {};
 
-                for (var i = 0; i < NATIVE_DEFAULT_LAYOUT.length; i++) {
-                    var type = custom['homesection' + i] || NATIVE_DEFAULT_LAYOUT[i];
+                for (var i = 0; i < NATIVE_SECTION_COUNT; i++) {
+                    var type = custom['homesection' + i] || NATIVE_DEFAULT_LAYOUT[i] || '';
 
                     // Un type répété ne peut désigner qu'une section : la première gagne.
                     if (type && type !== 'none' && !Object.prototype.hasOwnProperty.call(map, type)) {

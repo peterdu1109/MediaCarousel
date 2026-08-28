@@ -206,6 +206,7 @@ const withNatives = await page.evaluate(() => {
   return {
     count: names.length,
     names: names,
+    natives: names.filter(n => n.indexOf('Jellyfin — ') === 0).sort(),
     plugins: names.filter(n => n.indexOf('Jellyfin — ') !== 0)
   };
 });
@@ -340,8 +341,18 @@ check('ORDRE: l ordre modifie est enregistre',
 
 check('NATIF: la case etend la liste aux sections de Jellyfin',
   withNatives.count === 17, withNatives.count);
-check('NATIF: les sections natives sont nommees lisiblement',
-  withNatives.names.indexOf('Jellyfin — Continuer à regarder') !== -1, withNatives.names);
+check('NATIF: les sections portent les noms de Jellyfin (fr.json)',
+  withNatives.natives.join('|') === [
+    'Jellyfin — Continuer de regarder',
+    'Jellyfin — Enregistrements actifs',
+    'Jellyfin — Mes médias',
+    'Jellyfin — Mes médias (petit)',
+    'Jellyfin — Médias récemment ajoutés',
+    'Jellyfin — Reprendre l’écoute',
+    'Jellyfin — Reprendre la lecture',
+    'Jellyfin — TV en direct',
+    'Jellyfin — À suivre'
+  ].sort().join('|'), withNatives.natives);
 check('NATIF: les bibliotheques arrivent en tete par defaut',
   withNatives.names[0] === 'Jellyfin — Mes médias', withNatives.names[0]);
 check('NATIF: nos rangees gardent leur ordre relatif',

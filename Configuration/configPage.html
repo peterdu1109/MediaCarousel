@@ -518,7 +518,7 @@
                                     <span>Ordonner aussi les sections de Jellyfin</span>
                                 </label>
                                 <div class="fieldDescription" id="hintManageNative">
-                                    Ajoute « Continuer à regarder », « Derniers ajouts », etc. à la liste
+                                    Ajoute « Continuer de regarder », « À suivre », etc. à la liste
                                     ci-dessous, pour tout disposer librement. À savoir : l'ordre des
                                     sections natives est normalement un réglage <strong>de chaque
                                     utilisateur</strong> ; l'activer ici impose votre ordre à tout le monde.
@@ -865,15 +865,20 @@
                     because: 'Parce que tu as regardé…',
                     studios: 'Par studio',
                     genres: 'Par genre',
+                    /* Ces libellés sont ceux de Jellyfin lui-même — les mêmes que dans
+                       « Écran d'accueil » des préférences du compte (fr.json de
+                       jellyfin-web : NextUp, HeaderLatestMedia…). En inventer d'autres
+                       revenait à faire chercher « À suivre » dans une liste qui affichait
+                       « Prochainement ». */
                     'native:smalllibrarytiles': 'Jellyfin — Mes médias',
-                    'native:librarybuttons': 'Jellyfin — Boutons de bibliothèque',
-                    'native:activerecordings': 'Jellyfin — Enregistrements en cours',
-                    'native:resume': 'Jellyfin — Continuer à regarder',
-                    'native:resumeaudio': 'Jellyfin — Continuer à écouter',
-                    'native:resumebook': 'Jellyfin — Continuer la lecture',
+                    'native:librarybuttons': 'Jellyfin — Mes médias (petit)',
+                    'native:activerecordings': 'Jellyfin — Enregistrements actifs',
+                    'native:resume': 'Jellyfin — Continuer de regarder',
+                    'native:resumeaudio': 'Jellyfin — Reprendre l’écoute',
+                    'native:resumebook': 'Jellyfin — Reprendre la lecture',
                     'native:livetv': 'Jellyfin — TV en direct',
-                    'native:nextup': 'Jellyfin — Prochainement',
-                    'native:latestmedia': 'Jellyfin — Derniers ajouts'
+                    'native:nextup': 'Jellyfin — À suivre',
+                    'native:latestmedia': 'Jellyfin — Médias récemment ajoutés'
                 };
 
                 function activeRowIds() {

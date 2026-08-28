@@ -33,7 +33,7 @@ const stub = () => {
     getDisplayPreferences: () => {
       window.__prefsCalls = (window.__prefsCalls || 0) + 1;
       return Promise.resolve({
-      CustomPrefs: {
+      CustomPrefs: window.__customPrefs || {
         homesection0: 'smalllibrarytiles',
         homesection1: 'resume',
         homesection2: 'latestmedia',
@@ -409,6 +409,64 @@ const nativeOrder = await nativePage.evaluate(() => ({
 nativeOrder.movesOnSecondRender = movesOnSecondRender;
 await nativePage.close();
 
+// jellyfin-web rend DIX sections, pas huit : une section descendue en neuvieme
+// position existe bel et bien dans les preferences du compte.
+const deepPage = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+deepPage.on('pageerror', e => errors.push('pageerror(deep): ' + e.message));
+await deepPage.addInitScript(() => {
+  window.__manageNatives = true;
+  window.__customPrefs = {
+    homesection0: 'smalllibrarytiles', homesection1: 'resume', homesection2: 'resumeaudio',
+    homesection3: 'resumebook', homesection4: 'livetv', homesection5: 'latestmedia',
+    homesection6: 'none', homesection7: 'none', homesection8: 'nextup', homesection9: 'none'
+  };
+  window.__rowOrder = 'native:nextup,native:smalllibrarytiles,local,alltime,global,'
+    + 'returning,neverplayed,because,studios,genres';
+});
+await deepPage.goto('file://' + path.join(here, 'home.html'));
+await deepPage.evaluate(() => {
+  const c = document.querySelector('#homeTab .homeSectionsContainer');
+  for (let i = 4; i < 10; i++) {
+    const d = document.createElement('div');
+    d.className = 'verticalSection section' + i;
+    c.appendChild(d);
+  }
+});
+await deepPage.evaluate(stub);
+await deepPage.evaluate(script);
+await deepPage.waitForFunction(() => document.querySelectorAll('.mc-row').length === 10, { timeout: 8000 });
+const deepFirst = await deepPage.evaluate(() =>
+  document.querySelector('#homeTab .homeSectionsContainer').firstElementChild.className);
+await deepPage.close();
+
+// Interface televiseur : getAllSectionsToShow prepend une section de bibliotheques
+// quand l'ordre du compte n'en contient aucune, et tout glisse d'un cran. Onze
+// `.section{N}` au lieu de dix : c'est ce qui permet de le reconnaitre.
+const tvPage = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+tvPage.on('pageerror', e => errors.push('pageerror(tv): ' + e.message));
+await tvPage.addInitScript(() => {
+  window.__manageNatives = true;
+  window.__customPrefs = { homesection0: 'resume', homesection1: 'nextup' };
+  window.__rowOrder = 'native:nextup,local,alltime,global,returning,neverplayed,'
+    + 'because,studios,genres,native:resume';
+});
+await tvPage.goto('file://' + path.join(here, 'home.html'));
+await tvPage.evaluate(() => {
+  const c = document.querySelector('#homeTab .homeSectionsContainer');
+  for (let i = 4; i < 11; i++) {
+    const d = document.createElement('div');
+    d.className = 'verticalSection section' + i;
+    c.appendChild(d);
+  }
+});
+await tvPage.evaluate(stub);
+await tvPage.evaluate(script);
+await tvPage.waitForFunction(() => document.querySelectorAll('.mc-row').length === 10, { timeout: 8000 });
+const tvLayout = await tvPage.evaluate(() =>
+  Array.from(document.querySelector('#homeTab .homeSectionsContainer').children)
+    .map(k => k.classList.contains('mc-row') ? 'mc-row' : (k.className.match(/section\d+/) || ['autre'])[0]));
+await tvPage.close();
+
 // Un theme clair : la couleur est lue sur la page, pas sur un media query que les
 // themes Jellyfin ne declenchent jamais.
 const light = await browser.newPage({ viewport: { width: 1280, height: 900 } });
@@ -420,10 +478,10 @@ await light.evaluate(script);
 await light.waitForFunction(() => document.querySelectorAll('.mc-row').length === 10, { timeout: 8000 });
 const lightMode = await light.evaluate(() => {
   const row = document.querySelector('.mc-row');
-  const outline = getComputedStyle(row).getPropertyValue('--mc-rank-outline').trim();
+  const fill = getComputedStyle(row).getPropertyValue('--mc-rank-fill').trim();
   return {
     flagged: document.querySelectorAll('.mc-row.mc-on-light').length,
-    outlineIsDark: outline.indexOf('rgba(0,') === 0 || outline.indexOf('rgba(0 ') === 0
+    fillIsDark: /^rgba\((\d{1,2})[, ]/.test(fill)
   };
 });
 await light.close();
@@ -525,6 +583,17 @@ const styling = await sizing.evaluate(() => {
     firstCardMargin: cards.length > 1
       ? parseFloat(getComputedStyle(cards[0]).marginRight) : 0,
     lastCardMargin: parseFloat(getComputedStyle(cards[cards.length - 1]).marginRight),
+
+    // Les rangees sans rang n'ont pas le chiffre geant pour ecarter leurs affiches :
+    // elles prennent une gouttiere plus large, sinon les libelles se rejoignent.
+    plainMargin: parseFloat(getComputedStyle(document.querySelector('.mc-row .mc-plain')).marginRight),
+    tileMargin: parseFloat(getComputedStyle(document.querySelector('.mc-row .mc-tile')).marginRight),
+    plainNameMinHeight: parseFloat(getComputedStyle(document.querySelector('.mc-row .mc-plain-name')).minHeight),
+    lastPlainMargin: (() => {
+      const plains = document.querySelectorAll('.mc-row .mc-strip > .mc-plain');
+      const last = plains[plains.length - 1];
+      return last.nextElementSibling ? -1 : parseFloat(getComputedStyle(last).marginRight);
+    })(),
 
     // Tizen n'a pas `:focus-visible` : le contour doit tenir sur `:focus` seul.
     hasPlainFocusRule: /\.mc-card:focus,[^{]*\{[^}]*outline:/.test(css),
@@ -662,8 +731,8 @@ check('THEME: le rayon du theme est repris', theme.posterRadius === '16px', them
 check('THEME: la gouttiere du theme est reprise', theme.cardGutter === '8px', theme.cardGutter);
 check('THEME: les affiches gardent leur hauteur', theme.posterHeight === 213, theme.posterHeight);
 
-check('C1: chiffres lisibles au repos (contour .85, remplissage .25)',
-  result.rankFill === 'rgba(255,255,255,.25)' && result.rankOutline === 'rgba(255,255,255,.85)', result);
+check('C1: chiffres pleins, cernes de sombre',
+  result.rankFill === 'rgba(255,255,255,.96)' && result.rankOutline === 'rgba(0,0,0,.55)', result);
 check('C2: accent violet par defaut', result.accentDefault === '#775BF4', result.accentDefault);
 check('D1: une couleur invalide retombe sur le defaut',
   accent.applied === '#775BF4', accent.applied);
@@ -712,6 +781,13 @@ check('NATIF: un second rendu ne deplace plus rien',
 check('VOISIN: la section des bibliotheques n est jamais re-ajoutee',
   nativeOrder.section0Readds === 0, nativeOrder.section0Readds);
 
+check('NATIF: une section en neuvieme position est trouvee',
+  deepFirst.indexOf('section8') !== -1, deepFirst);
+check('NATIF: le decalage des interfaces televiseur est rattrape',
+  tvLayout.indexOf('section2') < tvLayout.indexOf('mc-row')
+    && tvLayout.indexOf('section1') > tvLayout.lastIndexOf('mc-row'),
+  tvLayout);
+
 check('VISUEL: silhouettes en place avant le chargement differe',
   beforeScroll.skeletons === 6 && beforeScroll.skeletonHidden === 'true', beforeScroll);
 check('VISUEL: plus aucune silhouette une fois tout charge', result.skeletonsLeft === 0, result.skeletonsLeft);
@@ -722,7 +798,7 @@ check('VISUEL: accroche de defilement posee (proximity est la valeur normalisee 
   /^x( proximity)?$/.test(styling.snapType), styling.snapType);
 check('CLAIR: fond sombre, aucun mode clair', styling.lightRows === 0, styling.lightRows);
 check('CLAIR: fond clair detecte sur les 10 rangees', lightMode.flagged === 10, lightMode.flagged);
-check('CLAIR: le contour des chiffres devient sombre', lightMode.outlineIsDark === true, lightMode);
+check('CLAIR: le remplissage des chiffres devient sombre', lightMode.fillIsDark === true, lightMode);
 
 check('CSS: la feuille produit bien des regles', styling.ruleCount > 30, styling.ruleCount);
 check('CSS: accolades equilibrees', styling.bracesBalanced === true, styling.bracesBalanced);
@@ -748,6 +824,15 @@ check('TIZEN: la bande n utilise pas `gap` (absent avant Chromium 84)',
   styling.stripUsesGapProperty === false, styling.stripUsesGapProperty);
 check('TIZEN: l espacement passe par des marges',
   styling.firstCardMargin > 0, styling.firstCardMargin);
+check('VISUEL: les cartes sans rang respirent davantage',
+  styling.plainMargin > styling.firstCardMargin
+    && styling.tileMargin > styling.firstCardMargin,
+  [styling.firstCardMargin, styling.plainMargin, styling.tileMargin]);
+check('VISUEL: les libelles de genre tiennent deux lignes partout',
+  styling.plainNameMinHeight > 0, styling.plainNameMinHeight);
+check('VISUEL: la derniere carte d une rangee de genre n a pas de marge',
+  styling.lastPlainMargin === 0, styling.lastPlainMargin);
+
 check('TIZEN: pas de marge sur la derniere carte',
   styling.lastCardMargin === 0, styling.lastCardMargin);
 check('TIZEN: le contour de focus tient sur :focus seul',
