@@ -360,8 +360,8 @@ si l'administrateur supprime la collection, elle est recréée au recalcul suiva
   « Médias récemment ajoutés »). En inventer d'autres faisait chercher « À suivre » dans
   une liste qui affichait « Prochainement », et paraître incomplète une liste qui ne
   l'était pas.
-- **Thème clair** : les chiffres du rang sont sombres au lieu d'être clairs, invisibles
-  sinon sur fond clair. Aucun media query ne peut le dire — les thèmes Jellyfin ne suivent pas
+- **Thème clair** : les chiffres du rang sont des blancs translucides, invisibles sur fond
+  clair. Aucun media query ne peut le dire — les thèmes Jellyfin ne suivent pas
   `prefers-color-scheme` — donc `isLightBackground()` lit la couleur **réelle** de la page, en
   remontant jusqu'au premier fond opaque, et pose `mc-on-light` sur les rangées : tous les jetons
   de couleur basculent en sombre. Recalculé à chaque rendu, donc un changement de thème est
@@ -377,14 +377,18 @@ si l'administrateur supprime la collection, elle est recréée au recalcul suiva
   (plafond 400 ms, posé en JS à l'insertion). Au survol et au focus, la carte s'agrandit
   légèrement et l'affiche respire dans son cadre — deux échelles superposées donnent de la
   profondeur là où une seule paraît plate.
-- **Chiffres pleins, gouttière large** : le rang est peint plein et cerné de sombre — un
-  remplissage translucide se devinait plus qu'il ne se lisait dès que l'affiche était
-  claire — et c'est le remplissage, non le contour, qui prend la couleur d'accent au
-  survol. Les rangées **sans rang** (genres, studios, « jamais vu »…) n'ont pas ce chiffre
-  géant pour écarter leurs affiches : elles prennent `--mc-gap-wide`, dérivé de la
-  gouttière du thème plutôt que fixé en dur, sans quoi deux libellés voisins sur deux
-  lignes semblent se rejoindre. Le libellé réserve toujours ses deux lignes
-  (`min-height`), sinon un titre court et un titre long ne finissent pas à la même hauteur.
+- **Un chiffre évidé a besoin d'un halo** : le rang est un contour clair sur un
+  remplissage translucide, et ce contour **disparaît** sur la moitié du glyphe qui
+  chevauche une affiche claire — le « 1 » y perdait sa hampe et ne se lisait plus comme un
+  chiffre entier. Une ombre sombre portée tout autour (`text-shadow`, deux rayons) le
+  détache de n'importe quel fond sans le remplir. Sur fond clair, contour et halo
+  s'inversent. Le survol teinte le **contour**, pas le remplissage.
+- **Gouttière large hors des rangées classées** : genres, studios, « jamais vu » n'ont pas
+  ce chiffre géant pour écarter leurs affiches et se retrouvaient collés. Ils prennent
+  `--mc-gap-wide`, dérivé de la gouttière du thème (`+ 1.1em`) plutôt que fixé en dur,
+  pour qu'un thème qui resserre ses rangées resserre les nôtres avec lui. Le libellé
+  réserve toujours ses deux lignes (`min-height`), sinon un titre court et un titre long
+  ne finissent pas à la même hauteur.
 - **Contraintes Tizen** (voir la section dédiée) : pas de `gap` en flexbox, contour de focus porté
   par `:focus` et non `:focus-visible`, pas de `clamp()`.
 - **Cohabitation avec les thèmes** : tous les réglages passent par des variables portées par
@@ -493,7 +497,7 @@ dotnet run --project tests/ScriptTag.Tests -c Release
 cd tests/browser && npm install && node home-rows.test.mjs && node config-page.test.mjs
 ```
 
-Trois suites sans framework — 238 assertions — exécutées en CI avant la publication ; voir
+Trois suites sans framework — 239 assertions — exécutées en CI avant la publication ; voir
 `tests/README.md`. L'une charge un extrait des règles d'ElegantFin **après** les nôtres pour
 vérifier que la cohabitation tient.
 Les deux suites navigateur chargent le vrai `media-carousel.js` et le vrai `configPage.html`

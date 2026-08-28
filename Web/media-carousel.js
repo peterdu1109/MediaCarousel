@@ -191,7 +191,7 @@
                toucher. Elles prennent donc une gouttière plus large. */
             /* Exprimée à partir de la gouttière du thème plutôt qu'en dur : un thème
                qui resserre ses rangées voit les nôtres se resserrer avec lui. */
-            '--mc-gap-wide:calc(var(--mc-gap) + .5em);',
+            '--mc-gap-wide:calc(var(--mc-gap) + 1.1em);',
             '--mc-radius:var(--smallRadius,5px);',
             /* Dimensions par défaut : ordinateur de bureau. Les points de rupture plus bas
                ne redéfinissent que ces jetons, jamais une règle. */
@@ -201,10 +201,13 @@
             '--mc-label-size:.78em;--mc-strip-pad-y:1.6em;',
             /* Courbe et durée communes : une seule décélération pour tout le rendu. */
             '--mc-ease:cubic-bezier(.22,.61,.36,1);--mc-dur:.28s;',
-            /* Chiffres pleins, cernés de sombre : le remplissage translucide les
-               laissait deviner plutôt que lire dès que l'affiche était claire. */
-            '--mc-rank-fill:rgba(255,255,255,.96);',
-            '--mc-rank-outline:rgba(0,0,0,.55);',
+            '--mc-rank-fill:rgba(255,255,255,.25);',
+            '--mc-rank-outline:rgba(255,255,255,.9);',
+            /* Le halo est ce qui fait un chiffre COMPLET : le contour blanc disparaît
+               sur la moitié du glyphe qui chevauche une affiche claire, et le « 1 » y
+               perdait sa hampe. Une ombre sombre portée tout autour le détache de
+               n'importe quel fond, sans remplir le chiffre. */
+            '--mc-rank-halo:rgba(0,0,0,.8);',
             '--mc-surface:rgba(255,255,255,.07);',
             '--mc-surface-hover:rgba(255,255,255,.13);',
             '--mc-scrim:rgba(0,0,0,.45);',
@@ -265,12 +268,11 @@
             /* Chiffres à chasse fixe : le « 1 » occupe la même largeur que le « 8 »,
                sinon le recouvrement, constant, en mange une bien plus grande part. */
             'font-variant-numeric:tabular-nums;font-feature-settings:"tnum";',
+            'text-shadow:0 0 .05em var(--mc-rank-halo),0 0 .13em var(--mc-rank-halo);',
             'margin:0 -.24em 0 0;user-select:none;pointer-events:none;flex:0 0 auto;',
-            'transition:color var(--mc-dur) var(--mc-ease);}',
-            /* C'est le remplissage qui prend l'accent : sur un chiffre plein, teinter
-               le seul contour ne se voit pas. */
+            'transition:-webkit-text-stroke-color var(--mc-dur) var(--mc-ease);}',
             '.mc-row .mc-card:hover .mc-rank,.mc-row .mc-card:focus .mc-rank{',
-            'color:var(--mc-accent);}',
+            '-webkit-text-stroke-color:var(--mc-accent);}',
             '.mc-row .mc-rank-10{letter-spacing:-.06em;}',
 
             /* display:block est indispensable : hors conteneur flex, un span reste inline
@@ -428,8 +430,9 @@
             /* Fond clair, detecte en JS sur la couleur reelle de la page : les blancs
                translucides des chiffres y sont invisibles, tout passe en sombre. */
             '.mc-row.mc-on-light{',
-            '--mc-rank-fill:rgba(18,18,24,.92);',
-            '--mc-rank-outline:rgba(255,255,255,.75);',
+            '--mc-rank-fill:rgba(0,0,0,.14);',
+            '--mc-rank-outline:rgba(0,0,0,.7);',
+            '--mc-rank-halo:rgba(255,255,255,.85);',
             '--mc-surface:rgba(0,0,0,.06);',
             '--mc-surface-hover:rgba(0,0,0,.11);',
             '--mc-scrim:rgba(0,0,0,.55);',
@@ -454,8 +457,7 @@
             '}',
 
             '@media (prefers-contrast:more){',
-            '.mc-row{--mc-rank-fill:#fff;--mc-rank-outline:#000;',
-            '--mc-surface:rgba(255,255,255,.2);}',
+            '.mc-row{--mc-rank-fill:rgba(255,255,255,.5);--mc-surface:rgba(255,255,255,.2);}',
             '}'
         ].join('');
     }

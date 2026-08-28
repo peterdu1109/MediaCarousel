@@ -478,10 +478,12 @@ await light.evaluate(script);
 await light.waitForFunction(() => document.querySelectorAll('.mc-row').length === 10, { timeout: 8000 });
 const lightMode = await light.evaluate(() => {
   const row = document.querySelector('.mc-row');
-  const fill = getComputedStyle(row).getPropertyValue('--mc-rank-fill').trim();
+  const outline = getComputedStyle(row).getPropertyValue('--mc-rank-outline').trim();
+  const halo = getComputedStyle(row).getPropertyValue('--mc-rank-halo').trim();
   return {
     flagged: document.querySelectorAll('.mc-row.mc-on-light').length,
-    fillIsDark: /^rgba\((\d{1,2})[, ]/.test(fill)
+    outlineIsDark: /^rgba\((\d{1,2})[, ]/.test(outline),
+    haloIsLight: halo.indexOf('rgba(255,255,255') === 0
   };
 });
 await light.close();
@@ -731,8 +733,8 @@ check('THEME: le rayon du theme est repris', theme.posterRadius === '16px', them
 check('THEME: la gouttiere du theme est reprise', theme.cardGutter === '8px', theme.cardGutter);
 check('THEME: les affiches gardent leur hauteur', theme.posterHeight === 213, theme.posterHeight);
 
-check('C1: chiffres pleins, cernes de sombre',
-  result.rankFill === 'rgba(255,255,255,.96)' && result.rankOutline === 'rgba(0,0,0,.55)', result);
+check('C1: chiffres evides, contour clair',
+  result.rankFill === 'rgba(255,255,255,.25)' && result.rankOutline === 'rgba(255,255,255,.9)', result);
 check('C2: accent violet par defaut', result.accentDefault === '#775BF4', result.accentDefault);
 check('D1: une couleur invalide retombe sur le defaut',
   accent.applied === '#775BF4', accent.applied);
@@ -798,7 +800,8 @@ check('VISUEL: accroche de defilement posee (proximity est la valeur normalisee 
   /^x( proximity)?$/.test(styling.snapType), styling.snapType);
 check('CLAIR: fond sombre, aucun mode clair', styling.lightRows === 0, styling.lightRows);
 check('CLAIR: fond clair detecte sur les 10 rangees', lightMode.flagged === 10, lightMode.flagged);
-check('CLAIR: le remplissage des chiffres devient sombre', lightMode.fillIsDark === true, lightMode);
+check('CLAIR: le contour des chiffres devient sombre', lightMode.outlineIsDark === true, lightMode);
+check('CLAIR: et le halo qui le detache devient clair', lightMode.haloIsLight === true, lightMode);
 
 check('CSS: la feuille produit bien des regles', styling.ruleCount > 30, styling.ruleCount);
 check('CSS: accolades equilibrees', styling.bracesBalanced === true, styling.bracesBalanced);
