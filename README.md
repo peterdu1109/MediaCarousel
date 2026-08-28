@@ -104,7 +104,7 @@ Ensuite, plus rien à faire : le recalcul se relance au démarrage du serveur et
 | Lectures comptées par utilisateur | `3` | Empêche qu'un seul spectateur qui revoit un film en boucle fausse le classement |
 | Titres candidats par utilisateur | `100` | Plus haut = plus précis, mais plus long à calculer |
 | Utilisateurs exclus | — | Comptes de service, invités |
-| Bibliothèques exclues des classements | — | Vidéos perso, etc. Porte sur le Top du serveur, « jamais vu », « de retour », studios et genres. Seul le Top mondial couvre encore toute la bibliothèque |
+| Bibliothèques exclues | — | Vidéos perso, etc. S'applique à toutes les rangées, Top mondial compris |
 
 Les **épisodes comptent pour leur série** : c'est la série qui apparaît au classement, pas
 l'épisode isolé.

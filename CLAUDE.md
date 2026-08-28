@@ -86,6 +86,7 @@ MediaCarousel/
 │   ├── LibraryTitleIndex.cs                 # Index ProviderIds construit en une requête
 │   ├── CollectionSynchronizer.cs            # Matérialisation en BoxSet
 │   ├── TopListRefreshService.cs             # Orchestration, verrou, tolérance aux pannes
+│   ├── RefreshHealth.cs                     # Bilan du dernier recalcul : durée, échecs
 │   ├── ScriptTag.cs                         # Balise script : insertion, retrait, migration
 │   └── IndexHtmlTransformer.cs              # Callback FileTransformation (réflexion)
 └── Web/
@@ -259,6 +260,18 @@ fichier illisible est simplement ignoré au démarrage.
 précédent** en cas d'échec. Une coupure réseau ne vide jamais la liste côté client. Un
 `SemaphoreSlim` empêche deux recalculs simultanés (tâche planifiée + bouton manuel).
 
+**Cette tolérance rend les échecs invisibles**, c'est son revers : une clé TMDB expirée laisse
+une rangée d'apparence normale dont la date vieillit en silence. `RefreshHealth` consigne donc
+chaque échec rattrapé — section et message — plus la durée du passage, `Status` l'expose, et la
+tuile « Dernier calcul » de la page de configuration passe en alerte en nommant la section. Le
+bilan vit en mémoire : un redémarrage le remet à zéro, comme tout ce qu'il décrit. La durée sert
+aussi de mesure : c'est elle qu'on regarde avant de parler d'optimiser le balayage.
+
+**Le cache d'affiches se purge tout seul.** À la fin de chaque recalcul, les fichiers de
+`posters/` non demandés depuis 30 jours sont supprimés. `PosterController` pose la date d'accès à
+chaque service — les montages `noatime` ne la maintiennent pas — et une affiche supprimée à tort
+se retélécharge simplement à la prochaine requête.
+
 ### Publication en collections
 
 `CollectionSynchronizer` maintient un `BoxSet` par classement. `BoxSet.IsPreSorted` vaut `true` :
@@ -305,6 +318,19 @@ si l'administrateur supprime la collection, elle est recréée au recalcul suiva
   jamais une règle. `clamp()` serait plus concis mais demande Chromium 79, que les téléviseurs
   Tizen n'ont pas. Les affiches gardent partout la proportion 2:3, et les libellés grossissent plus
   vite que les affiches sur les grands écrans — ils se lisent de loin.
+- **Thème clair** : les chiffres du rang sont des blancs translucides, invisibles sur fond
+  clair. Aucun media query ne peut le dire — les thèmes Jellyfin ne suivent pas
+  `prefers-color-scheme` — donc `isLightBackground()` lit la couleur **réelle** de la page, en
+  remontant jusqu'au premier fond opaque, et pose `mc-on-light` sur les rangées : tous les jetons
+  de couleur basculent en sombre. Recalculé à chaque rendu, donc un changement de thème est
+  rattrapé à la visite suivante de l'accueil.
+- **Chargement** : les rangées de genre différées affichent six silhouettes pulsantes plutôt
+  qu'une bande vide qui ressemble à une panne ; la pulsation ne touche que l'opacité. Chaque
+  affiche naît transparente et se fond une fois chargée — l'événement `load` ne remonte pas en
+  bulle mais se capture ; une image déjà en cache ou en erreur est marquée immédiatement, sinon
+  elle resterait invisible à jamais.
+- **Défilement** : `scroll-snap-type:x proximity` aligne les cartes en fin de geste sans
+  confisquer le défilement libre (Chromium 69, donc Tizen l'a).
 - **Animation** : les rangées entrent en fondu montant, décalées de 55 ms l'une après l'autre
   (plafond 400 ms, posé en JS à l'insertion). Au survol et au focus, la carte s'agrandit
   légèrement et l'affiche respire dans son cadre — deux échelles superposées donnent de la
@@ -417,7 +443,7 @@ dotnet run --project tests/ScriptTag.Tests -c Release
 cd tests/browser && npm install && node home-rows.test.mjs && node config-page.test.mjs
 ```
 
-Trois suites sans framework — 197 assertions — exécutées en CI avant la publication ; voir
+Trois suites sans framework — 209 assertions — exécutées en CI avant la publication ; voir
 `tests/README.md`. L'une charge un extrait des règles d'ElegantFin **après** les nôtres pour
 vérifier que la cohabitation tient.
 Les deux suites navigateur chargent le vrai `media-carousel.js` et le vrai `configPage.html`
@@ -573,12 +599,13 @@ fichier, le valide, et reconstruit l'adresse distante à partir d'une constante.
 (`image.tmdb.org.attaquant.test`). La route est anonyme parce qu'une balise `<img src>` ne
 transmet aucun en-tête d'authentification, comme pour le script.
 
-**`ExcludedLibraryIds` ne couvre pas encore le Top mondial :** le réglage porte désormais sur le
-Top du serveur, « jamais vu », « de retour » **et** les catalogues studios / genres, qui le
-respectent depuis que leur comptage balaie bibliothèque par bibliothèque. Reste le rapprochement du
-Top mondial, qui indexe toute la bibliothèque via `LibraryTitleIndex`. Le nom de la propriété reste
-`ExcludedLibraryIds` : le renommer perdrait silencieusement les valeurs déjà écrites dans
-`MediaCarousel.xml` et casserait le tableau `lists` de la page de configuration.
+**`ExcludedLibraryIds` couvre désormais tout :** Top du serveur, « jamais vu », « de retour »,
+catalogues studios / genres, et le rapprochement du Top mondial — `LibraryTitleIndex` reçoit les
+exclusions et, quand il y en a, indexe bibliothèque par bibliothèque (`InternalItemsQuery` sait
+restreindre à des ancêtres mais pas en exclure ; sans exclusion, la requête unique demeure). Un
+titre externe d'une bibliothèque exclue apparaît « absent » au lieu d'y mener. Le nom de la
+propriété reste `ExcludedLibraryIds` : le renommer perdrait silencieusement les valeurs déjà
+écrites dans `MediaCarousel.xml` et casserait le tableau `lists` de la page de configuration.
 
 **La couleur d'accent est validée avant d'entrer dans le CSS :** `HighlightColor` est concaténée
 dans la feuille de styles construite par `buildCss`. `safeAccent` n'accepte que
