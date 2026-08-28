@@ -43,7 +43,7 @@ const stub = () => {
           HideNativeSections: window.__hideNative === true,
           LocalRowTitle: 'Top 10 sur ce serveur', GlobalRowTitle: 'Top 10 mondial',
           StudioRowTitle: 'Par studio',
-          HighlightColor: '#e50914',
+          HighlightColor: window.__accent === undefined ? '#775BF4' : window.__accent,
           LocalRowSize: 10, GlobalRowSize: 10, StudioRowSize: 20,
           GenreRowCount: 3, GenreRowItemCount: 12
         });
@@ -152,6 +152,9 @@ const result = await page.evaluate(() => {
       && card.getAttribute('role') === 'listitem',
     unavailableIsLink: rows[1].querySelector('.mc-unavailable').tagName === 'A',
     posterHeight: rows[0].querySelector('.mc-poster').getBoundingClientRect().height,
+    rankFill: getComputedStyle(rows[0]).getPropertyValue('--mc-rank-fill').trim(),
+    rankOutline: getComputedStyle(rows[0]).getPropertyValue('--mc-rank-outline').trim(),
+    accentDefault: getComputedStyle(rows[0]).getPropertyValue('--mc-accent').trim(),
     genrePosterHeight: rows[5].querySelector('.mc-plain .mc-poster').getBoundingClientRect().height,
     tileHeight: rows[4].querySelector('.mc-tile').getBoundingClientRect().height
   };
@@ -180,6 +183,27 @@ await page.evaluate(() => {
   document.body.style.color = '#fff';
   document.body.style.fontFamily = 'Noto Sans, sans-serif';
 });
+
+// D1 : une couleur invalide ne doit pas atterrir telle quelle dans la feuille de style.
+const injection = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+injection.on('pageerror', e => errors.push('pageerror(injection): ' + e.message));
+await injection.addInitScript(() => {
+  window.__accent = 'red;} body{display:none} .x{color:red';
+});
+await injection.goto('file://' + path.join(here, 'home.html'));
+await injection.evaluate(stub);
+await injection.evaluate(script);
+await injection.waitForFunction(() => document.querySelectorAll('.mc-row').length === 8, { timeout: 8000 });
+
+const accent = await injection.evaluate(() => {
+  const row = document.querySelector('.mc-row');
+  return {
+    css: document.getElementById('mc-styles').textContent,
+    applied: getComputedStyle(row).getPropertyValue('--mc-accent').trim(),
+    bodyVisible: getComputedStyle(document.body).display !== 'none'
+  };
+});
+await injection.close();
 
 // Troisieme passage : un theme charge APRES nos styles, comme le Custom CSS de Jellyfin.
 const themed = await browser.newPage({ viewport: { width: 1280, height: 900 } });
@@ -300,6 +324,14 @@ check('THEME: notre marge de rangee resiste a .verticalSection',
 check('THEME: le rayon du theme est repris', theme.posterRadius === '16px', theme.posterRadius);
 check('THEME: la gouttiere du theme est reprise', theme.gap === '8px', theme.gap);
 check('THEME: les affiches gardent leur hauteur', theme.posterHeight === 180, theme.posterHeight);
+
+check('C1: chiffres lisibles au repos (contour .85, remplissage .25)',
+  result.rankFill === 'rgba(255,255,255,.25)' && result.rankOutline === 'rgba(255,255,255,.85)', result);
+check('C2: accent violet par defaut', result.accentDefault === '#775BF4', result.accentDefault);
+check('D1: une couleur invalide retombe sur le defaut',
+  accent.applied === '#775BF4', accent.applied);
+check('D1: aucune declaration injectee dans la feuille',
+  !accent.css.includes('body{display:none}') && accent.bodyVisible, accent.css.slice(0, 120));
 
 check('aucune erreur js', errors.length === 0, errors);
 

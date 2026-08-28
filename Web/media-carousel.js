@@ -18,6 +18,8 @@
     var ROW_CLASS = 'mc-row';
     var STYLE_ID = 'mc-styles';
     var RETRY_DELAYS = [0, 400, 1200, 3000];
+    // Doit rester synchronisé avec PluginConfiguration.HighlightColor.
+    var DEFAULT_ACCENT = '#775BF4';
     // Les sections que Jellyfin construit lui-même : `<div class="verticalSection section0">`.
     var NATIVE_SECTION = /(^|\s)section\d+(\s|$)/;
 
@@ -115,6 +117,13 @@
         document.head.appendChild(style);
     }
 
+    /* La couleur est interpolée dans une feuille de style : une valeur inattendue y
+       injecterait du CSS. Le champ de configuration est un sélecteur de couleur, mais
+       l'API de configuration de Jellyfin accepte n'importe quelle chaîne. */
+    function safeAccent(value) {
+        return /^#[0-9a-fA-F]{3,8}$/.test(String(value || '')) ? value : DEFAULT_ACCENT;
+    }
+
     /**
      * Feuille de style de nos rangées.
      *
@@ -135,7 +144,7 @@
     function buildCss(accent) {
         return [
             '.mc-row{',
-            '--mc-accent:' + accent + ';',
+            '--mc-accent:' + safeAccent(accent) + ';',
             /* Jetons repris du thème hôte quand il en expose. */
             '--mc-side-padding:var(--sidePadding,3.3%);',
             '--mc-gap:var(--itemColumnGap,.7em);',
@@ -144,8 +153,8 @@
             '--mc-poster-width:120px;--mc-poster-height:180px;',
             '--mc-tile-width:172px;--mc-tile-height:104px;',
             '--mc-rank-size:8.5rem;--mc-rank-stroke:3px;',
-            '--mc-rank-fill:rgba(255,255,255,.16);',
-            '--mc-rank-outline:rgba(255,255,255,.62);',
+            '--mc-rank-fill:rgba(255,255,255,.25);',
+            '--mc-rank-outline:rgba(255,255,255,.85);',
             '--mc-surface:rgba(255,255,255,.07);',
             '--mc-surface-hover:rgba(255,255,255,.13);',
             '--mc-scrim:rgba(0,0,0,.45);',
@@ -660,7 +669,7 @@
                 return null;
             }
 
-            injectStyles(opts.HighlightColor || '#e50914');
+            injectStyles(opts.HighlightColor);
 
             return collectRows(opts).then(function (rows) {
                 var target = findSectionsContainer();
