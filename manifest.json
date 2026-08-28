@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/icon.png",
     "versions": [
       {
+        "version": "3.5.1.0",
+        "changelog": "Corrections :\n- Chiffre du rang masque par l affiche, et animations plus fluides",
+        "targetAbi": "10.11.11.0",
+        "sourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/3.5.1/JellyfinCarouselPlugin.zip",
+        "checksum": "31269376de696a07db97063d7b459b00",
+        "timestamp": "2026-08-28T06:36:35Z"
+      },
+      {
         "version": "3.5.0.0",
         "changelog": "Nouveautes :\n- Dimensionnement adaptatif et rendu compatible Tizen",
         "targetAbi": "10.11.11.0",
