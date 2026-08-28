@@ -70,6 +70,15 @@ public sealed class ClientOptionsDto
     /// <summary>Obtient ou définit le nombre d'entrées de la rangée « de retour ».</summary>
     public int ReturningRowSize { get; set; }
 
+    /// <summary>Obtient ou définit une valeur indiquant si la rangée « parce que tu as regardé » est active.</summary>
+    public bool ShowBecauseRow { get; set; }
+
+    /// <summary>Obtient ou définit le gabarit du titre de la rangée « parce que tu as regardé ».</summary>
+    public string BecauseRowTitle { get; set; } = string.Empty;
+
+    /// <summary>Obtient ou définit le nombre d'entrées de la rangée « parce que tu as regardé ».</summary>
+    public int BecauseRowSize { get; set; }
+
     /// <summary>
     /// Obtient ou définit une valeur indiquant si les sections natives de Jellyfin
     /// doivent être masquées sur la page d'accueil.

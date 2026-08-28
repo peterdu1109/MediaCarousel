@@ -563,6 +563,62 @@
     }
 
     /**
+     * Repère le dernier film terminé par l'utilisateur courant.
+     *
+     * Volontairement limité aux films : Jellyfin ne considère une série lue que si tous ses
+     * épisodes le sont, si bien qu'une série entamée puis abandonnée passerait pour le
+     * dernier titre regardé. Le tri par DatePlayed exige un utilisateur, qui est bien fourni.
+     */
+    function loadLastWatched() {
+        return loadCached('Items', {
+            UserId: window.ApiClient.getCurrentUserId(),
+            IncludeItemTypes: 'Movie',
+            IsPlayed: true,
+            Recursive: true,
+            Limit: 1,
+            SortBy: 'DatePlayed',
+            SortOrder: 'Descending',
+            Fields: 'Genres',
+            EnableImages: false,
+            EnableUserData: false,
+            EnableTotalRecordCount: false
+        }).then(function (items) {
+            var item = items[0];
+            return item && item.Genres && item.Genres.length ? item : null;
+        });
+    }
+
+    /**
+     * Charge d'autres titres partageant les genres du film indiqué.
+     *
+     * Deux genres au plus : au-delà, le filtre devient si large qu'il ne recommande plus
+     * rien de particulier. Le film de départ est exclu de sa propre rangée.
+     */
+    function loadBecauseItems(seed, limit) {
+        return loadCached('Items', {
+            UserId: window.ApiClient.getCurrentUserId(),
+            Genres: seed.Genres.slice(0, 2).join('|'),
+            ExcludeItemIds: seed.Id,
+            IncludeItemTypes: 'Movie,Series',
+            Recursive: true,
+            Limit: limit,
+            SortBy: 'Random',
+            ImageTypeLimit: 1,
+            EnableImageTypes: 'Primary',
+            EnableTotalRecordCount: false
+        });
+    }
+
+    /**
+     * Compose le titre de la rangée à partir du gabarit configuré.
+     * Un gabarit sans {0} est laissé tel quel.
+     */
+    function becauseTitle(template, name) {
+        var pattern = template || 'Parce que tu as regardé {0}';
+        return pattern.indexOf('{0}') === -1 ? pattern : pattern.replace('{0}', name);
+    }
+
+    /**
      * Les rangées de genre sont remplies quand elles approchent du champ de vision,
      * pour ne pas déclencher toutes les requêtes au chargement de la page.
      */
@@ -602,6 +658,24 @@
     // Rendu
     // ------------------------------------------------------------------
 
+    /**
+     * Enchaîne les deux requêtes de la rangée personnalisée. Renvoie null dès que l'une
+     * des deux ne donne rien : la rangée est alors simplement absente.
+     */
+    function loadBecause(opts) {
+        return loadLastWatched().then(function (seed) {
+            if (!seed) {
+                return null;
+            }
+
+            return loadBecauseItems(seed, opts.BecauseRowSize || 20).then(function (items) {
+                return items.length ? { seed: seed, items: items } : null;
+            });
+        }).then(null, function () {
+            return null;
+        });
+    }
+
     function collectRows(opts) {
         var requests = [
             opts.ShowLocalRow ? loadCached('MediaCarousel/Top/Local', { limit: opts.LocalRowSize || 10 }) : [],
@@ -609,7 +683,8 @@
             opts.ShowReturningRow ? loadCached('MediaCarousel/Rows/Returning', { limit: opts.ReturningRowSize || 20 }) : [],
             opts.ShowNeverPlayedRow ? loadCached('MediaCarousel/Rows/NeverPlayed', { limit: opts.NeverPlayedRowSize || 20 }) : [],
             opts.ShowStudioRow ? loadCached('MediaCarousel/Studios', { limit: opts.StudioRowSize || 20 }) : [],
-            opts.ShowGenreRows ? loadCached('MediaCarousel/Genres', { limit: opts.GenreRowCount || 6 }) : []
+            opts.ShowGenreRows ? loadCached('MediaCarousel/Genres', { limit: opts.GenreRowCount || 6 }) : [],
+            opts.ShowBecauseRow ? loadBecause(opts) : null
         ];
 
         return Promise.all(requests).then(function (results) {
@@ -635,6 +710,14 @@
             addRanked(results[1], opts.GlobalRowTitle || 'Top 10 mondial');
             addPlain(results[2], opts.ReturningRowTitle || 'De retour cette semaine');
             addPlain(results[3], opts.NeverPlayedRowTitle || 'Jamais vu');
+
+            // Rangée personnalisée : absente tant que l'utilisateur n'a terminé aucun film,
+            // ou si aucun autre titre ne partage ses genres.
+            if (results[6] && results[6].items.length) {
+                rows.push(buildRow(
+                    becauseTitle(opts.BecauseRowTitle, results[6].seed.Name),
+                    results[6].items.map(buildPlainCard).join('')));
+            }
 
             if (results[4].length) {
                 rows.push(buildRow(

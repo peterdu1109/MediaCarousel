@@ -38,6 +38,7 @@ const stub = () => {
           EnableHomeRows: true, ShowLocalRow: true, ShowGlobalRow: true,
           ShowStudioRow: true, ShowGenreRows: true,
           ShowReturningRow: true, ShowNeverPlayedRow: true,
+          ShowBecauseRow: true, BecauseRowTitle: 'Parce que tu as regardé {0}', BecauseRowSize: 12,
           ReturningRowTitle: 'De retour cette semaine', ReturningRowSize: 20,
           NeverPlayedRowTitle: 'Jamais vu', NeverPlayedRowSize: 20,
           HideNativeSections: window.__hideNative === true,
@@ -81,7 +82,28 @@ const stub = () => {
         ]
       });
       if (url.startsWith('Items?')) {
-        const genre = new URLSearchParams(url.split('?')[1]).get('GenreIds');
+        const q = new URLSearchParams(url.split('?')[1]);
+
+        // Dernier film termine par l'utilisateur, point de depart de la recommandation.
+        if (q.get('SortBy') === 'DatePlayed') {
+          return Promise.resolve({
+            Items: window.__noHistory
+              ? []
+              : [{ Id: 'seed1', Name: 'Blade <Runner>', Genres: ['Science-fiction', 'Thriller', 'Drame'] }]
+          });
+        }
+
+        // Titres partageant les genres du film de depart.
+        if (q.get('Genres')) {
+          return Promise.resolve({
+            Items: Array.from({ length: 5 }, (_, i) => ({
+              Id: 'b' + i, Name: 'Voisin ' + i, ServerId: 'server-1',
+              IsFolder: false, ImageTags: { Primary: 'p' }
+            }))
+          });
+        }
+
+        const genre = q.get('GenreIds');
         if (genre === 'g3') return Promise.resolve({ Items: [] });
         return Promise.resolve({
           Items: Array.from({ length: 6 }, (_, i) => ({
@@ -97,7 +119,7 @@ const stub = () => {
 
 await page.evaluate(stub);
 await page.evaluate(script);
-await page.waitForFunction(() => document.querySelectorAll('.mc-row').length === 8, { timeout: 8000 });
+await page.waitForFunction(() => document.querySelectorAll('.mc-row').length === 9, { timeout: 8000 });
 
 // Les rangees de genre se remplissent au defilement : on parcourt la page.
 await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
@@ -134,11 +156,18 @@ const result = await page.evaluate(() => {
     noTileCounts: document.querySelectorAll('.mc-tile-count').length,
     returningCards: rows[2].querySelectorAll('.mc-plain').length,
     neverPlayedCards: rows[3].querySelectorAll('.mc-plain').length,
-    studioLogo: !!rows[4].querySelector('.mc-tile img'),
-    studioFallbackName: rows[4].querySelectorAll('.mc-tile-name').length,
-    studioEscaped: rows[4].querySelector('.mc-tile-name')?.textContent,
-    genreCards: rows[5].querySelectorAll('.mc-plain').length,
-    genreEmptyMessage: rows[7].querySelector('.mc-empty')?.textContent,
+    becauseTitle: rows[4].querySelector('.mc-row-title').textContent,
+    becauseCards: rows[4].querySelectorAll('.mc-plain').length,
+    becauseExcludesSeed: window.__calls.some(c => c.startsWith('Items?') && c.includes('ExcludeItemIds=seed1')),
+    becauseGenreCount: (() => {
+      const call = window.__calls.find(c => c.startsWith('Items?') && c.includes('Genres='));
+      return call ? new URLSearchParams(call.split('?')[1]).get('Genres').split('|').length : 0;
+    })(),
+    studioLogo: !!rows[5].querySelector('.mc-tile img'),
+    studioFallbackName: rows[5].querySelectorAll('.mc-tile-name').length,
+    studioEscaped: rows[5].querySelector('.mc-tile-name')?.textContent,
+    genreCards: rows[6].querySelectorAll('.mc-plain').length,
+    genreEmptyMessage: rows[8].querySelector('.mc-empty')?.textContent,
     nativeVisible: Array.from(container.children)
       .filter(c => !c.classList.contains('mc-row') && !c.classList.contains('mc-hidden-native')).length,
     labelledBy: rows.every(r => {
@@ -155,12 +184,18 @@ const result = await page.evaluate(() => {
     rankFill: getComputedStyle(rows[0]).getPropertyValue('--mc-rank-fill').trim(),
     rankOutline: getComputedStyle(rows[0]).getPropertyValue('--mc-rank-outline').trim(),
     accentDefault: getComputedStyle(rows[0]).getPropertyValue('--mc-accent').trim(),
-    genrePosterHeight: rows[5].querySelector('.mc-plain .mc-poster').getBoundingClientRect().height,
-    tileHeight: rows[4].querySelector('.mc-tile').getBoundingClientRect().height
+    genrePosterHeight: rows[6].querySelector('.mc-plain .mc-poster').getBoundingClientRect().height,
+    tileHeight: rows[5].querySelector('.mc-tile').getBoundingClientRect().height
   };
 });
 
-const genreCallsAtRest = await page.evaluate(() => window.__calls.filter(c => c.startsWith('Items?')).length);
+// Compte les seules requetes des rangees de genre : la rangee personnalisee passe
+// aussi par Items?, et la confondre avec elles laisserait passer une regression du
+// chargement differe.
+const genreCallsAtRest = await page.evaluate(
+  () => window.__calls.filter(c => c.startsWith('Items?') && c.includes('GenreIds=')).length);
+const becauseCallsAtRest = await page.evaluate(
+  () => window.__calls.filter(c => c.startsWith('Items?') && !c.includes('GenreIds=')).length);
 const callsBeforeRebuild = await page.evaluate(() => window.__calls.slice());
 
 await page.evaluate(() => { document.body.appendChild(document.createElement('div')); });
@@ -172,7 +207,7 @@ await page.evaluate(() => {
   c.innerHTML = '<div class="verticalSection section0"><div class="card" data-type="CollectionFolder">Films</div></div>'
               + '<div class="verticalSection section1"></div>';
 });
-await page.waitForFunction(() => document.querySelectorAll('.mc-row').length === 8, { timeout: 8000 });
+await page.waitForFunction(() => document.querySelectorAll('.mc-row').length === 9, { timeout: 8000 });
 const afterRebuild = await page.evaluate(() => document.querySelectorAll('.mc-row').length);
 await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
 await page.waitForTimeout(900);
@@ -193,7 +228,7 @@ await injection.addInitScript(() => {
 await injection.goto('file://' + path.join(here, 'home.html'));
 await injection.evaluate(stub);
 await injection.evaluate(script);
-await injection.waitForFunction(() => document.querySelectorAll('.mc-row').length === 8, { timeout: 8000 });
+await injection.waitForFunction(() => document.querySelectorAll('.mc-row').length === 9, { timeout: 8000 });
 
 const accent = await injection.evaluate(() => {
   const row = document.querySelector('.mc-row');
@@ -211,7 +246,7 @@ themed.on('pageerror', e => errors.push('pageerror(theme): ' + e.message));
 await themed.goto('file://' + path.join(here, 'home.html'));
 await themed.evaluate(stub);
 await themed.evaluate(script);
-await themed.waitForFunction(() => document.querySelectorAll('.mc-row').length === 8, { timeout: 8000 });
+await themed.waitForFunction(() => document.querySelectorAll('.mc-row').length === 9, { timeout: 8000 });
 await themed.addStyleTag({ path: path.join(here, 'theme-excerpt.css') });
 await themed.waitForTimeout(300);
 
@@ -236,6 +271,25 @@ const theme = await themed.evaluate(() => {
 });
 await themed.close();
 
+// Un compte sans historique : la rangee personnalisee doit simplement ne pas exister,
+// plutot que d'afficher un titre vide ou une bande sans carte.
+const fresh = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+fresh.on('pageerror', e => errors.push('pageerror(fresh): ' + e.message));
+await fresh.addInitScript(() => { window.__noHistory = true; });
+await fresh.goto('file://' + path.join(here, 'home.html'));
+await fresh.evaluate(stub);
+await fresh.evaluate(script);
+await fresh.waitForFunction(() => document.querySelectorAll('.mc-row').length === 8, { timeout: 8000 });
+
+const freshRows = await fresh.evaluate(() => ({
+  titles: Array.from(document.querySelectorAll('.mc-row-title')).map(t => t.textContent),
+  // Les rangees de genre sont volontairement vides tant qu'elles n'ont pas defile ;
+  // ce qui compte ici est qu'aucune rangee ne porte un titre vide ou tronque.
+  blankTitles: Array.from(document.querySelectorAll('.mc-row-title'))
+    .filter(t => !t.textContent.trim()).length
+}));
+await fresh.close();
+
 // Second passage, sections natives masquees.
 const hidePage = await browser.newPage({ viewport: { width: 1280, height: 900 } });
 hidePage.on('pageerror', e => errors.push('pageerror(hide): ' + e.message));
@@ -243,7 +297,7 @@ await hidePage.addInitScript(() => { window.__hideNative = true; });
 await hidePage.goto('file://' + path.join(here, 'home.html'));
 await hidePage.evaluate(stub);
 await hidePage.evaluate(script);
-await hidePage.waitForFunction(() => document.querySelectorAll('.mc-row').length === 8, { timeout: 8000 });
+await hidePage.waitForFunction(() => document.querySelectorAll('.mc-row').length === 9, { timeout: 8000 });
 
 // Un autre plugin insere son propre element dans le conteneur de l'accueil.
 await hidePage.evaluate(() => {
@@ -278,16 +332,22 @@ await browser.close();
 let failed = 0;
 const check = (name, ok, got) => { console.log((ok ? 'OK    ' : 'ECHEC ') + name + (ok ? '' : '  -> ' + JSON.stringify(got))); if (!ok) failed++; };
 
-check('8 rangees sous les bibliotheques',
+check('9 rangees sous les bibliotheques',
   JSON.stringify(result.order) === JSON.stringify(
-    ['section0','mc-row','mc-row','mc-row','mc-row','mc-row','mc-row','mc-row','mc-row','section1','section2','section3']), result.order);
+    ['section0','mc-row','mc-row','mc-row','mc-row','mc-row','mc-row','mc-row','mc-row','mc-row','section1','section2','section3']), result.order);
 check('titres et ordre corrects', JSON.stringify(result.titles) ===
   JSON.stringify(['Top 10 sur ce serveur','Top 10 mondial','De retour cette semaine','Jamais vu',
+                  'Parce que tu as regardé Blade <Runner>',
                   'Par studio','Science-fiction','Comédie','Vide']), result.titles);
 check('plus aucune pastille dans les en-tetes', result.noBadges === 0, result.noBadges);
 check('plus de decompte sur les vignettes de studio', result.noTileCounts === 0, result.noTileCounts);
 check('rangee de retour remplie', result.returningCards === 2, result.returningCards);
 check('rangee jamais vu remplie', result.neverPlayedCards === 3, result.neverPlayedCards);
+check('BECAUSE: le titre du film est repris dans le titre de la rangee',
+  result.becauseTitle === 'Parce que tu as regardé Blade <Runner>', result.becauseTitle);
+check('BECAUSE: la rangee est remplie', result.becauseCards === 5, result.becauseCards);
+check('BECAUSE: le film de depart est exclu de sa propre rangee', result.becauseExcludesSeed === true, result);
+check('BECAUSE: deux genres au plus dans le filtre', result.becauseGenreCount === 2, result.becauseGenreCount);
 check('sections natives conservees par defaut', result.nativeVisible === 4, result.nativeVisible);
 check('SWIPE: allowSwipe() de Jellyfin bloque le changement d onglet', result.swipeBlocked, result.stripClasses);
 check('classes natives sur la bande', result.stripClasses.includes('scrollX') && result.stripClasses.includes('hiddenScrollX'), result.stripClasses);
@@ -296,6 +356,11 @@ check('studio sans logo : repli sur le nom', result.studioFallbackName === 1 && 
 check('rangee de genre remplie', result.genreCards === 6, result.genreCards);
 check('genre vide : message explicite', result.genreEmptyMessage === 'Aucun titre dans ce genre.', result.genreEmptyMessage);
 check('chargement differe des genres (3 requetes, pas plus)', genreCallsAtRest === 3, genreCallsAtRest);
+check('BECAUSE: deux requetes, pas plus', becauseCallsAtRest === 2, becauseCallsAtRest);
+check('BECAUSE: aucune rangee pour un compte sans historique',
+  !freshRows.titles.some(t => t.indexOf('Parce que') === 0), freshRows.titles);
+check('BECAUSE: les 8 autres rangees restent intactes', freshRows.titles.length === 8, freshRows.titles.length);
+check('BECAUSE: aucun titre de rangee vide', freshRows.blankTitles === 0, freshRows.blankTitles);
 check('a11y: chaque rangee pointe son titre', result.labelledBy === true, result.labelledBy);
 check('a11y: libelle de carte explicite', result.cardAria === 'Numéro 1 : Film <1> (2020)', result.cardAria);
 check('a11y: fleches hors du parcours clavier', result.arrowsHidden === true, result.arrowsHidden);
@@ -304,8 +369,8 @@ check('titre absent non cliquable', result.unavailableIsLink === false, result.u
 check('affiche dimensionnee', result.posterHeight === 180, result.posterHeight);
 check('affiche de genre dimensionnee', result.genrePosterHeight === 180, result.genrePosterHeight);
 check('vignette de studio dimensionnee', result.tileHeight === 104, result.tileHeight);
-check('pas de duplication sur mutation', afterMutation === 8, afterMutation);
-check('reinjection apres reconstruction', afterRebuild === 8, afterRebuild);
+check('pas de duplication sur mutation', afterMutation === 9, afterMutation);
+check('reinjection apres reconstruction', afterRebuild === 9, afterRebuild);
 const extraCalls = callsAfterRebuild.slice(callsBeforeRebuild.length);
 check('CACHE: aucun endpoint du plugin refait apres reconstruction de l accueil',
   extraCalls.every(c => !c.startsWith('MediaCarousel/')), extraCalls);
@@ -313,7 +378,7 @@ check('CACHE: seul le genre vide est re-interroge (resultat vide non memorise)',
   extraCalls.length === 1 && extraCalls[0].includes('GenreIds=g3'), extraCalls);
 check('MASQUAGE: bibliotheques conservees', hidden.libraryVisible && hidden.libraryDisplayed, hidden);
 check('MASQUAGE: 3 sections natives masquees', hidden.nativeHidden === 3, hidden.nativeHidden);
-check('MASQUAGE: nos 8 rangees restent visibles', hidden.ourRowsVisible === 8, hidden.ourRowsVisible);
+check('MASQUAGE: nos 9 rangees restent visibles', hidden.ourRowsVisible === 9, hidden.ourRowsVisible);
 check('MASQUAGE: la rangee d un autre plugin est epargnee', hidden.foreignVisible === true, hidden);
 
 check('THEME: la feuille du theme est bien chargee apres la notre', theme.themeLoadedAfter === true, theme);

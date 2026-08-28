@@ -118,7 +118,7 @@
                         </button>
                         <button is="emby-button" type="button" class="mcCfg-tab" role="tab" id="tabNews"
                                 aria-controls="panelNews" aria-selected="false">
-                            <span>Actualité</span><span class="mcCfg-tab-count">8</span>
+                            <span>Actualité</span><span class="mcCfg-tab-count">11</span>
                         </button>
                         <button is="emby-button" type="button" class="mcCfg-tab" role="tab" id="tabHome"
                                 aria-controls="panelHome" aria-selected="false">
@@ -420,6 +420,44 @@
                                 </div>
                             </div>
                         </fieldset>
+
+                        <fieldset class="mcCfg-group">
+                            <legend>Recommandation personnelle</legend>
+                            <p class="mcCfg-group-hint">
+                                La seule rangée propre à chaque compte. Elle n'est pas précalculée :
+                                le client repère le dernier film terminé par l'utilisateur, puis demande
+                                à Jellyfin d'autres titres du même genre.
+                            </p>
+
+                            <div class="checkboxContainer">
+                                <label class="emby-checkbox-label">
+                                    <input is="emby-checkbox" type="checkbox" id="EnableBecauseRow"
+                                           aria-describedby="hintBecause" data-toggles="groupBecause" />
+                                    <span>Afficher « parce que tu as regardé… »</span>
+                                </label>
+                                <div class="fieldDescription" id="hintBecause">
+                                    Absente tant que l'utilisateur n'a terminé aucun film. Chacun voit
+                                    la sienne, calculée par son propre client.
+                                </div>
+                            </div>
+
+                            <div id="groupBecause">
+                                <div class="mcCfg-grid">
+                                    <div class="inputContainer">
+                                        <input is="emby-input" type="text" id="BecauseRowTitle"
+                                               label="Titre de la rangée" aria-describedby="hintBecauseTitle" />
+                                        <div class="fieldDescription" id="hintBecauseTitle">
+                                            {0} est remplacé par le titre du film. Sans {0}, le titre
+                                            s'affiche tel quel.
+                                        </div>
+                                    </div>
+                                    <div class="inputContainer">
+                                        <input is="emby-input" type="number" id="BecauseRowSize" min="1" max="100" step="1"
+                                               label="Nombre de titres" required />
+                                    </div>
+                                </div>
+                            </div>
+                        </fieldset>
                     </div>
 
                     <div role="tabpanel" id="panelHome" aria-labelledby="tabHome" hidden>
@@ -540,28 +578,32 @@
                 var checkboxes = [
                     'EnableLocalTop', 'EnableGlobalTop', 'GlobalTopLibraryOnly',
                     'EnableStudioRow', 'EnableGenreRows', 'EnableReturningRow', 'EnableNeverPlayedRow',
+                    'EnableBecauseRow',
                     'EnableHomeRows', 'HideNativeHomeSections', 'SyncCollections'
                 ];
                 var numbers = [
                     'LocalTopSize', 'LocalTopWindowDays', 'MaxPlaysCountedPerUser', 'CandidatesPerUser',
                     'GlobalTopSize', 'StudioRowSize', 'MinItemsPerStudio',
                     'GenreRowCount', 'GenreRowItemCount', 'MinItemsPerGenre',
-                    'ReturningRowDays', 'ReturningRowSize', 'NeverPlayedRowSize', 'RefreshIntervalHours'
+                    'ReturningRowDays', 'ReturningRowSize', 'NeverPlayedRowSize', 'BecauseRowSize',
+                    'RefreshIntervalHours'
                 ];
                 // Seul reglage a virgule : parseInt le tronquerait a 7.
                 var decimals = ['NeverPlayedMinRating'];
                 var texts = [
                     'LocalTopMediaKind', 'GlobalTopProvider', 'GlobalTopApiKey', 'GlobalTopMediaKind',
                     'MetadataLanguage', 'StudioRowTitle', 'ReturningRowTitle', 'NeverPlayedRowTitle',
+                    'BecauseRowTitle',
                     'LocalRowTitle', 'GlobalRowTitle',
                     'HighlightColor', 'LocalCollectionName', 'GlobalCollectionName'
                 ];
                 var lists = ['ExcludedUserIds', 'ExcludedLibraryIds'];
 
-                /* Les six bascules qui décident du nombre de rangées réellement affichées. */
+                /* Les bascules qui décident du nombre de rangées réellement affichées. */
                 var rowToggles = [
                     'EnableLocalTop', 'EnableGlobalTop', 'EnableReturningRow',
-                    'EnableNeverPlayedRow', 'EnableStudioRow', 'EnableGenreRows'
+                    'EnableNeverPlayedRow', 'EnableStudioRow', 'EnableGenreRows',
+                    'EnableBecauseRow'
                 ];
 
                 var sectionLabels = {

@@ -205,7 +205,7 @@ check('tuile dernier calcul en temps relatif', loaded.tiles[0].state === 'ok'
 check('tuile Top serveur chiffree', loaded.tiles[1].value === '10', loaded.tiles[1]);
 check('tuile Top mondial : desactive lisible sans couleur',
   loaded.globalTileState === 'off' && loaded.globalTileValue === '—', loaded);
-check('tuile rangees actives', loaded.activeRows === '4 / 6', loaded.activeRows);
+check('tuile rangees actives', loaded.activeRows === '4 / 7', loaded.activeRows);
 check('valeurs chargees', loaded.localSize === '10', loaded.localSize);
 check('listes rendues ligne par ligne', loaded.excluded === 'aaa\nbbb', loaded.excluded);
 check('cle d API masquee a l ecran', loaded.apiKeyType === 'password', loaded.apiKeyType);
@@ -213,7 +213,7 @@ check('groupe inactif masque', loaded.globalHidden === true && loaded.genreHidde
 check('groupe inactif hors parcours clavier', loaded.globalDisabled === true && loaded.genreDisabled === true, loaded);
 check('groupe actif utilisable', loaded.localVisible === true, loaded.localVisible);
 check('bascule revele le groupe', afterToggle.hidden === false && afterToggle.disabled === false, afterToggle);
-check('6 groupes avec legende conserves', loaded.legends.length === 6, loaded.legends);
+check('7 groupes avec legende conserves', loaded.legends.length === 7, loaded.legends);
 check('6 onglets', loaded.tabCount === 6, loaded.tabCount);
 check('un seul panneau visible', loaded.visiblePanels === 1 && loaded.firstTabSelected, loaded);
 check('roving tabindex : un seul onglet focalisable', loaded.tabbable === 1, loaded.tabbable);

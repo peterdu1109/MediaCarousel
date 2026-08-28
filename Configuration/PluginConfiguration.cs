@@ -223,6 +223,31 @@ public class PluginConfiguration : BasePluginConfiguration
     /// </summary>
     public int ReturningRowSize { get; set; } = 20;
 
+    /// <summary>
+    /// Obtient ou définit une valeur indiquant si la rangée « parce que tu as regardé »
+    /// est affichée.
+    /// </summary>
+    /// <remarks>
+    /// Contrairement aux autres rangées, celle-ci est propre à chaque compte et n'est pas
+    /// précalculée : le client repère le dernier film terminé par l'utilisateur, puis
+    /// demande à l'API native de Jellyfin d'autres titres du même genre.
+    /// </remarks>
+    public bool EnableBecauseRow { get; set; } = true;
+
+    /// <summary>
+    /// Obtient ou définit le gabarit du titre de la rangée « parce que tu as regardé ».
+    /// </summary>
+    /// <remarks>
+    /// La séquence <c>{0}</c> est remplacée par le titre du film servant de point de départ.
+    /// Un gabarit sans <c>{0}</c> reste affiché tel quel.
+    /// </remarks>
+    public string BecauseRowTitle { get; set; } = "Parce que tu as regardé {0}";
+
+    /// <summary>
+    /// Obtient ou définit le nombre de titres affichés dans la rangée « parce que tu as regardé ».
+    /// </summary>
+    public int BecauseRowSize { get; set; } = 20;
+
     // ------------------------------------------------------------------
     // Rafraîchissement et exposition
     // ------------------------------------------------------------------
