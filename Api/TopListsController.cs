@@ -153,6 +153,9 @@ public class TopListsController : ControllerBase
             ShowReturningRow = config.EnableReturningRow,
             ReturningRowTitle = config.ReturningRowTitle,
             ReturningRowSize = config.ReturningRowSize,
+            ShowBecauseRow = config.EnableBecauseRow,
+            BecauseRowTitle = config.BecauseRowTitle,
+            BecauseRowSize = config.BecauseRowSize,
             HideNativeSections = config.HideNativeHomeSections
         });
     }
@@ -224,7 +227,9 @@ public class TopListsController : ControllerBase
                 ProductionYear = entry.ProductionYear,
                 TmdbId = entry.TmdbId,
                 ImdbId = entry.ImdbId,
-                PosterUrl = entry.PosterUrl,
+                // Relayée par le plugin : sans cela, chaque navigateur irait chercher
+                // l'affiche chez TMDB et lui livrerait son adresse IP.
+                PosterUrl = PosterProxy.ToLocalUrl(entry.PosterUrl),
                 TotalPlays = entry.TotalPlays,
                 DistinctViewers = entry.DistinctViewers,
                 LastPlayedUtc = entry.LastPlayedUtc
