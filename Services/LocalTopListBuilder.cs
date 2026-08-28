@@ -149,7 +149,14 @@ public sealed class LocalTopListBuilder
             Recursive = true,
             Limit = candidates,
             EnableTotalRecordCount = false,
-            OrderBy = new[] { (ItemSortBy.PlayCount, SortOrder.Descending) },
+            // InternalItemsQuery n'offre aucun filtre sur la date de lecture — MinDateLastSavedForUser
+            // porte, malgré son nom, sur DateLastSaved de l'élément. La fenêtre ne peut donc être
+            // appliquée qu'après coup, en mémoire. Trier par nombre de lectures laisserait alors la
+            // limite se remplir des favoris de toujours, et les lectures récentes seraient écartées
+            // avant même d'être datées : le tri suit la fenêtre.
+            OrderBy = cutoffUtc.HasValue
+                ? new[] { (ItemSortBy.DatePlayed, SortOrder.Descending) }
+                : new[] { (ItemSortBy.PlayCount, SortOrder.Descending) },
             DtoOptions = new DtoOptions(false)
             {
                 Fields = new[] { ItemFields.ProviderIds },
