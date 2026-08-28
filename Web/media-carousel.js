@@ -768,12 +768,17 @@
             return null;
         }
 
-        // Le bloc prend la place du premier nœud déjà présent, à défaut celle des
-        // bibliothèques, à défaut le début du conteneur.
+        // Le bloc prend la place du nœud géré qui vient en PREMIER DANS LE DOM — pas du
+        // premier de l'ordre demandé. Le bloc occupe alors l'espace qu'il occupe déjà, et
+        // ce nœud-là n'a pas à bouger : ancrer sur le premier de l'ordre le ferait au
+        // contraire glisser derrière tous ceux qui le précèdent. Comme la section des
+        // bibliothèques est presque toujours la première de la page, c'est elle que cela
+        // laisse tranquille — et c'est celle que les autres plugins surveillent.
         var anchor = null;
-        for (var i = 0; i < managed.length && !anchor; i++) {
-            if (managed[i].parentNode === container) {
-                anchor = managed[i];
+        var kids = container.children;
+        for (var i = 0; i < kids.length && !anchor; i++) {
+            if (managed.indexOf(kids[i]) !== -1) {
+                anchor = kids[i];
             }
         }
 
@@ -792,14 +797,23 @@
             return findLibrarySection(container);
         }
 
-        var marker = document.createComment('mc-order');
-        container.insertBefore(marker, anchor);
+        // Placement à déplacement minimal : un nœud déjà à sa place n'est pas touché.
+        //
+        // Ce n'est pas une optimisation, c'est une correction. Un MutationObserver rapporte
+        // un nœud DÉPLACÉ dans addedNodes, comme s'il venait d'apparaître. Le plugin
+        // Editor's Choice relance son injection dès qu'un nœud portant « section0 » est
+        // ajouté ; réinsérer la section des bibliothèques alors qu'elle était déjà bien
+        // placée lui faisait donc afficher une deuxième bannière.
+        var before = anchor;
 
         managed.forEach(function (node) {
-            container.insertBefore(node, marker);
-        });
+            if (node === before) {
+                before = before.nextSibling;
+                return;
+            }
 
-        container.removeChild(marker);
+            container.insertBefore(node, before);
+        });
 
         // Décalage d'entrée : nos rangées arrivent l'une après l'autre plutôt que toutes
         // d'un bloc. Plafonné, sinon la dernière attendrait trop longtemps.

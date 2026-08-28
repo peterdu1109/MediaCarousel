@@ -348,9 +348,26 @@ const orderedNative = await ordered.evaluate(() => {
 await ordered.close();
 
 // Gestion des natives : l'ordre configure vaut pour tout le monde.
+//
+// On installe AVANT le rendu le meme observateur qu'Editor's Choice : il relance son
+// injection des qu'un noeud portant « section0 » est ajoute, et un MutationObserver
+// rapporte un noeud DEPLACE comme ajoute. Reinserer une section deja bien placee lui
+// faisait donc afficher une deuxieme banniere.
 const nativePage = await browser.newPage({ viewport: { width: 1280, height: 900 } });
 nativePage.on('pageerror', e => errors.push('pageerror(native): ' + e.message));
 await nativePage.addInitScript(() => {
+  window.__section0Readds = 0;
+  document.addEventListener('DOMContentLoaded', () => {
+    new MutationObserver(records => {
+      records.forEach(r => {
+        Array.prototype.forEach.call(r.addedNodes, n => {
+          if (n.classList && n.classList.contains('section0')) {
+            window.__section0Readds++;
+          }
+        });
+      });
+    }).observe(document.body, { childList: true, subtree: true });
+  });
   window.__manageNatives = true;
   // Reprise en tete, puis les bibliotheques, nos rangees, prochainement, derniers ajouts.
   window.__rowOrder = 'native:resume,local,native:smalllibrarytiles,global,returning,'
@@ -386,7 +403,8 @@ const nativeOrder = await nativePage.evaluate(() => ({
       : (k.className.match(/section\d+/) || ['autre'])[0])
     .filter(t => t !== 'autre'),
   prefsRequested: window.__prefsCalls === 1,
-  foreignSurvives: !!document.querySelector('.otherPluginRow')
+  foreignSurvives: !!document.querySelector('.otherPluginRow'),
+  section0Readds: window.__section0Readds
 }));
 nativeOrder.movesOnSecondRender = movesOnSecondRender;
 await nativePage.close();
@@ -691,6 +709,8 @@ check('NATIF: la rangee d un autre plugin survit au reordonnancement',
   nativeOrder.foreignSurvives === true, nativeOrder);
 check('NATIF: un second rendu ne deplace plus rien',
   nativeOrder.movesOnSecondRender === 0, nativeOrder.movesOnSecondRender);
+check('VOISIN: la section des bibliotheques n est jamais re-ajoutee',
+  nativeOrder.section0Readds === 0, nativeOrder.section0Readds);
 
 check('VISUEL: silhouettes en place avant le chargement differe',
   beforeScroll.skeletons === 6 && beforeScroll.skeletonHidden === 'true', beforeScroll);

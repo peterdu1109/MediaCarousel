@@ -472,7 +472,7 @@ dotnet run --project tests/ScriptTag.Tests -c Release
 cd tests/browser && npm install && node home-rows.test.mjs && node config-page.test.mjs
 ```
 
-Trois suites sans framework — 232 assertions — exécutées en CI avant la publication ; voir
+Trois suites sans framework — 233 assertions — exécutées en CI avant la publication ; voir
 `tests/README.md`. L'une charge un extrait des règles d'ElegantFin **après** les nôtres pour
 vérifier que la cohabitation tient.
 Les deux suites navigateur chargent le vrai `media-carousel.js` et le vrai `configPage.html`
@@ -551,8 +551,22 @@ mieux que de le déplacer sans cesse.
 
 **Le placement regroupe les nœuds gérés en un bloc contigu :** au premier placement,
 `placeRows` rassemble nos rangées et les sections natives ordonnées à l'emplacement du
-premier d'entre eux. Quand aucune native n'est gérée, l'ancrage retombe **après** la section
-des bibliothèques ; insérer avant les ferait descendre sous nos rangées.
+premier d'entre eux **dans le DOM** — pas du premier de l'ordre demandé. Le bloc occupe
+alors l'espace qu'il occupe déjà et ce nœud-là n'a pas à bouger ; ancrer sur le premier de
+l'ordre le ferait au contraire glisser derrière tous ceux qui le précèdent. La section des
+bibliothèques étant presque toujours en tête de page, c'est elle que cela laisse tranquille
+— et c'est celle que les autres plugins surveillent. Quand aucune native n'est gérée,
+l'ancrage retombe **après** la section des bibliothèques ; insérer avant les ferait
+descendre sous nos rangées.
+
+**Un nœud déjà à sa place n'est jamais réinséré :** le bloc est construit en avançant un
+curseur (`before`) et un nœud qui s'y trouve déjà se contente de le faire avancer. Ce n'est
+pas une optimisation. **Un `MutationObserver` rapporte un nœud DÉPLACÉ dans `addedNodes`**,
+comme s'il venait d'apparaître : le plugin Editor's Choice relance son injection dès qu'un
+nœud portant `section0` est ajouté, si bien que réinsérer la section des bibliothèques
+alors qu'elle était déjà bien placée lui faisait afficher une **deuxième bannière**. Le
+test navigateur installe le même observateur et compte les ré-ajouts de `section0` : il
+retombe en échec dès qu'on revient à une réinsertion en bloc.
 
 **L'ordre des rangées est écrit dans un champ caché :** la liste de réorganisation de la page
 de configuration ne fait qu'écrire dans `#RowOrder`, seul champ que les tableaux de chargement
