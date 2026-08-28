@@ -16,6 +16,10 @@
          directement, ce qui evite de referencer le plugin et ses paquets. -->
     <Compile Include="../../Services/ScriptTag.cs" />
     <Compile Include="../../Services/StudioNameNormalizer.cs" />
+    <Compile Include="../../Services/CatalogCounter.cs" />
+    <Compile Include="../../Services/CatalogRepresentative.cs" />
+    <Compile Include="../../Services/TopListAccumulator.cs" />
+    <Compile Include="../../Services/PosterProxy.cs" />
   </ItemGroup>
 
 </Project>

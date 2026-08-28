@@ -81,7 +81,7 @@ public sealed class LocalTopListBuilder
         }
 
         // Agrégats par titre. Pour un épisode, le score est reporté sur sa série.
-        var aggregates = new Dictionary<Guid, Aggregate>();
+        var accumulator = new TopListAccumulator(playCap);
         var seriesCache = new Dictionary<Guid, BaseItem?>();
         var usersCounted = 0;
 
@@ -95,26 +95,22 @@ public sealed class LocalTopListBuilder
             }
 
             usersCounted++;
-            AccumulateForUser(user, itemTypes, candidates, cutoffUtc, playCap, excludedLibraries, aggregates, seriesCache);
+            AccumulateForUser(user, itemTypes, candidates, cutoffUtc, excludedLibraries, accumulator, seriesCache);
         }
 
-        var entries = aggregates.Values
-            .OrderByDescending(a => a.Score)
-            .ThenByDescending(a => a.Viewers.Count)
-            .ThenByDescending(a => a.LastPlayedUtc ?? DateTime.MinValue)
-            .Take(Math.Clamp(config.LocalTopSize, 1, 100))
-            .Select((a, index) => new TopListEntry
+        var entries = accumulator.Rank(config.LocalTopSize)
+            .Select(r => new TopListEntry
             {
-                Rank = index + 1,
-                ItemId = a.ItemId,
-                Name = a.Name,
-                ProductionYear = a.ProductionYear,
-                Score = a.Score,
-                TotalPlays = a.TotalPlays,
-                DistinctViewers = a.Viewers.Count,
-                LastPlayedUtc = a.LastPlayedUtc,
-                TmdbId = a.TmdbId,
-                ImdbId = a.ImdbId
+                Rank = r.Rank,
+                ItemId = r.ItemId,
+                Name = r.Name,
+                ProductionYear = r.ProductionYear,
+                Score = r.Score,
+                TotalPlays = r.TotalPlays,
+                DistinctViewers = r.DistinctViewers,
+                LastPlayedUtc = r.LastPlayedUtc,
+                TmdbId = r.TmdbId,
+                ImdbId = r.ImdbId
             })
             .ToArray();
 
@@ -122,7 +118,7 @@ public sealed class LocalTopListBuilder
             "Top local recalculé : {Count} entrées à partir de {Users} utilisateur(s) et {Candidates} titre(s) distincts.",
             entries.Length,
             usersCounted,
-            aggregates.Count);
+            accumulator.DistinctItems);
 
         return new TopListSnapshot(TopListKind.Local, "Jellyfin", entries);
     }
@@ -135,9 +131,8 @@ public sealed class LocalTopListBuilder
         BaseItemKind[] itemTypes,
         int candidates,
         DateTime? cutoffUtc,
-        int playCap,
         IReadOnlyCollection<Guid> excludedLibraries,
-        Dictionary<Guid, Aggregate> aggregates,
+        TopListAccumulator accumulator,
         Dictionary<Guid, BaseItem?> seriesCache)
     {
         // Le tri et la limite sont délégués à SQL ; seuls les meilleurs candidats remontent en mémoire.
@@ -204,30 +199,15 @@ public sealed class LocalTopListBuilder
                 }
             }
 
-            if (!aggregates.TryGetValue(target.Id, out var aggregate))
-            {
-                aggregate = new Aggregate
-                {
-                    ItemId = target.Id,
-                    Name = target.Name ?? string.Empty,
-                    ProductionYear = target.ProductionYear,
-                    TmdbId = target.GetProviderId(MetadataProvider.Tmdb),
-                    ImdbId = target.GetProviderId(MetadataProvider.Imdb)
-                };
-                aggregates[target.Id] = aggregate;
-            }
-
-            var counted = Math.Min(userData.PlayCount, playCap);
-            aggregate.Score += counted;
-            aggregate.TotalPlays += userData.PlayCount;
-
-            aggregate.Viewers.Add(user.Id);
-
-            var lastPlayed = userData.LastPlayedDate?.ToUniversalTime();
-            if (lastPlayed.HasValue && (!aggregate.LastPlayedUtc.HasValue || lastPlayed.Value > aggregate.LastPlayedUtc.Value))
-            {
-                aggregate.LastPlayedUtc = lastPlayed;
-            }
+            accumulator.Add(new TopListCandidate(
+                target.Id,
+                target.Name ?? string.Empty,
+                target.ProductionYear,
+                target.GetProviderId(MetadataProvider.Tmdb),
+                target.GetProviderId(MetadataProvider.Imdb),
+                user.Id,
+                userData.PlayCount,
+                userData.LastPlayedDate?.ToUniversalTime()));
         }
     }
 
@@ -272,29 +252,5 @@ public sealed class LocalTopListBuilder
         }
 
         return result;
-    }
-
-    /// <summary>
-    /// Accumulateur mutable interne, converti en <see cref="TopListEntry"/> immuable en fin de calcul.
-    /// </summary>
-    private sealed class Aggregate
-    {
-        public Guid ItemId { get; init; }
-
-        public string Name { get; init; } = string.Empty;
-
-        public int? ProductionYear { get; init; }
-
-        public string? TmdbId { get; init; }
-
-        public string? ImdbId { get; init; }
-
-        public double Score { get; set; }
-
-        public int TotalPlays { get; set; }
-
-        public DateTime? LastPlayedUtc { get; set; }
-
-        public HashSet<Guid> Viewers { get; } = new();
     }
 }
