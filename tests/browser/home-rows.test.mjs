@@ -366,6 +366,20 @@ await nativePage.evaluate(() => {
   foreign.className = 'verticalSection otherPluginRow';
   c.appendChild(foreign);
 });
+// Un second rendu ne doit produire aucun deplacement : les mutations du conteneur
+// font reagir d'autres plugins, qui reinjectent alors leur contenu pour rien.
+const movesOnSecondRender = await nativePage.evaluate(() => new Promise(resolve => {
+  const c = document.querySelector('#homeTab .homeSectionsContainer');
+  let moves = 0;
+  const observer = new MutationObserver(records => {
+    records.forEach(r => { moves += r.addedNodes.length + r.removedNodes.length; });
+  });
+  observer.observe(c, { childList: true });
+  // Force un nouveau passage du script sans reconstruire le conteneur.
+  window.dispatchEvent(new Event('hashchange'));
+  setTimeout(() => { observer.disconnect(); resolve(moves); }, 1200);
+}));
+
 const nativeOrder = await nativePage.evaluate(() => ({
   layout: Array.from(document.querySelector('#homeTab .homeSectionsContainer').children)
     .map(k => k.classList.contains('mc-row') ? 'mc-row'
@@ -374,6 +388,7 @@ const nativeOrder = await nativePage.evaluate(() => ({
   prefsRequested: window.__prefsCalls === 1,
   foreignSurvives: !!document.querySelector('.otherPluginRow')
 }));
+nativeOrder.movesOnSecondRender = movesOnSecondRender;
 await nativePage.close();
 
 // Un theme clair : la couleur est lue sur la page, pas sur un media query que les
@@ -674,6 +689,8 @@ check('NATIF: une section absente du compte est ignoree',
   nativeOrder.layout.indexOf('section4') === -1, nativeOrder.layout);
 check('NATIF: la rangee d un autre plugin survit au reordonnancement',
   nativeOrder.foreignSurvives === true, nativeOrder);
+check('NATIF: un second rendu ne deplace plus rien',
+  nativeOrder.movesOnSecondRender === 0, nativeOrder.movesOnSecondRender);
 
 check('VISUEL: silhouettes en place avant le chargement differe',
   beforeScroll.skeletons === 6 && beforeScroll.skeletonHidden === 'true', beforeScroll);
