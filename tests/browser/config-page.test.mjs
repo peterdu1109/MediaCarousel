@@ -16,6 +16,7 @@ await page.addInitScript(() => {
   window.__saved = null;
   window.__refreshCalls = 0;
   window.__config = {
+    RowOrder: 'genres, local , inconnue,because',
     EnableLocalTop: true, LocalTopSize: 10, LocalTopMediaKind: 'Both', LocalTopWindowDays: 30,
     MaxPlaysCountedPerUser: 3, CandidatesPerUser: 100,
     ExcludedUserIds: ['aaa', 'bbb'], ExcludedLibraryIds: [],
@@ -118,6 +119,12 @@ const loaded = await page.evaluate(() => {
       const declared = new Set(window.__declaredFields);
       return [...ids].filter(id => !declared.has(id));
     })(),
+    // L'ordre affiche doit etre normalise : inconnus ecartes, manquants ajoutes.
+    rowOrderValue: q('#RowOrder').value,
+    rowOrderNames: Array.from(document.querySelectorAll('#mcRowOrder .mcCfg-order-name')).map(e => e.textContent),
+    rowOrderRanks: Array.from(document.querySelectorAll('#mcRowOrder .mcCfg-order-rank')).map(e => e.textContent),
+    firstUpDisabled: q('#mcRowOrder .mcCfg-order-up').disabled,
+    lastDownDisabled: Array.from(document.querySelectorAll('#mcRowOrder .mcCfg-order-down')).pop().disabled,
     minRating: q('#NeverPlayedMinRating').value,
     describedBy: Array.from(document.querySelectorAll('[aria-describedby]'))
       .every(el => document.getElementById(el.getAttribute('aria-describedby')) !== null),
@@ -174,6 +181,18 @@ await page.evaluate(() => {
 const afterToggle = await page.evaluate(() => ({
   hidden: document.querySelector('#groupGlobal').hidden,
   disabled: document.querySelector('#GlobalTopApiKey').disabled
+}));
+
+// Descendre la premiere rangee. L'onglet doit etre ouvert : un panneau masque ne
+// peut pas recevoir le focus, et c'est de toute facon ce que fait l'utilisateur.
+await page.evaluate(() => document.querySelector('#tabHome').click());
+await page.evaluate(() => {
+  document.querySelector('#mcRowOrder li:first-child .mcCfg-order-down').click();
+});
+const reordered = await page.evaluate(() => ({
+  value: document.querySelector('#RowOrder').value,
+  names: Array.from(document.querySelectorAll('#mcRowOrder .mcCfg-order-name')).map(e => e.textContent),
+  focusStillOnArrow: document.activeElement.className.indexOf('mcCfg-order-down') !== -1
 }));
 
 // Enregistrement : les champs d'un groupe masque doivent tout de meme etre sauvegardes.
@@ -271,6 +290,24 @@ check('DOUBLON: avertissement leve sur les valeurs par defaut',
 check('DOUBLON: le message nomme le classement concerne',
   alertShown.text.indexOf('Top mondial') >= 0, alertShown.text);
 check('DOUBLON: renommer la collection leve l avertissement', alertCleared === true, alertCleared);
+check('ORDRE: la valeur est normalisee au chargement',
+  loaded.rowOrderValue === 'genres,local,because,global,returning,neverplayed,studios', loaded.rowOrderValue);
+check('ORDRE: les 7 rangees sont listees', loaded.rowOrderNames.length === 7, loaded.rowOrderNames);
+check('ORDRE: l ordre configure est respecte a l affichage',
+  loaded.rowOrderNames[0] === 'Par genre' && loaded.rowOrderNames[1] === 'Top du serveur', loaded.rowOrderNames);
+check('ORDRE: les rangs sont numerotes de 1 a 7',
+  loaded.rowOrderRanks.join(',') === '1,2,3,4,5,6,7', loaded.rowOrderRanks);
+check('ORDRE: on ne monte pas la premiere ni ne descend la derniere',
+  loaded.firstUpDisabled === true && loaded.lastDownDisabled === true, loaded);
+check('ORDRE: descendre echange bien les deux rangees',
+  reordered.names[0] === 'Top du serveur' && reordered.names[1] === 'Par genre', reordered.names);
+check('ORDRE: le champ suit le deplacement',
+  reordered.value.indexOf('local,genres') === 0, reordered.value);
+check('ORDRE: le focus reste sur la rangee deplacee',
+  reordered.focusStillOnArrow === true, reordered);
+check('ORDRE: l ordre modifie est enregistre',
+  saved.RowOrder.indexOf('local,genres') === 0, saved.RowOrder);
+
 check('a11y: chaque aria-describedby pointe une cible', loaded.describedBy === true, loaded.describedBy);
 check('aucun champ orphelin hors des tableaux de chargement',
   loaded.orphanFields.length === 0, loaded.orphanFields);

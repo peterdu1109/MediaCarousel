@@ -912,8 +912,6 @@
         return Promise.all(requests).then(function (results) {
             var rows = [];
 
-            // Les deux classements en premier, puis l'actualité de la bibliothèque,
-            // puis les entrées par studio et par genre.
             function addRanked(entries, title) {
                 if (entries.length) {
                     rows.push(buildRow(title, entries.map(buildRankedCard).join('')));
@@ -928,35 +926,84 @@
                 }
             }
 
-            addRanked(results[0], opts.LocalRowTitle || 'Top 10 sur ce serveur');
-            addRanked(results[1], opts.GlobalRowTitle || 'Top 10 mondial');
-            addPlain(results[2], opts.ReturningRowTitle || 'De retour cette semaine');
-            addPlain(results[3], opts.NeverPlayedRowTitle || 'Jamais vu');
+            // Un constructeur par identifiant de rangée : l'ordre d'affichage vient de la
+            // configuration, plus du code.
+            var builders = {
+                local: function () {
+                    addRanked(results[0], opts.LocalRowTitle || 'Top 10 sur ce serveur');
+                },
+                global: function () {
+                    addRanked(results[1], opts.GlobalRowTitle || 'Top 10 mondial');
+                },
+                returning: function () {
+                    addPlain(results[2], opts.ReturningRowTitle || 'De retour cette semaine');
+                },
+                neverplayed: function () {
+                    addPlain(results[3], opts.NeverPlayedRowTitle || 'Jamais vu');
+                },
+                // Rangée personnalisée : absente tant que l'utilisateur n'a terminé aucun
+                // film, ou si aucun autre titre ne partage ses genres.
+                because: function () {
+                    if (results[6] && results[6].items.length) {
+                        rows.push(buildRow(
+                            becauseTitle(opts.BecauseRowTitle, results[6].seed.Name),
+                            results[6].items.map(buildPlainCard).join('')));
+                    }
+                },
+                studios: function () {
+                    if (results[4].length) {
+                        rows.push(buildRow(
+                            opts.StudioRowTitle || 'Par studio',
+                            results[4].map(buildTileCard).join('')));
+                    }
+                },
+                genres: function () {
+                    results[5].forEach(function (genre) {
+                        // Des silhouettes occupent la bande en attendant le chargement
+                        // differe : une rangee titree mais vide ressemble a une panne.
+                        var row = buildRow(genre.Name, skeletonCards(6));
+                        rows.push(row);
+                        deferGenreRow(row, genre, opts.GenreRowItemCount || 20);
+                    });
+                }
+            };
 
-            // Rangée personnalisée : absente tant que l'utilisateur n'a terminé aucun film,
-            // ou si aucun autre titre ne partage ses genres.
-            if (results[6] && results[6].items.length) {
-                rows.push(buildRow(
-                    becauseTitle(opts.BecauseRowTitle, results[6].seed.Name),
-                    results[6].items.map(buildPlainCard).join('')));
-            }
-
-            if (results[4].length) {
-                rows.push(buildRow(
-                    opts.StudioRowTitle || 'Par studio',
-                    results[4].map(buildTileCard).join('')));
-            }
-
-            results[5].forEach(function (genre) {
-                // Des silhouettes occupent la bande en attendant le chargement differe :
-                // une rangee titree mais vide ressemble a une panne.
-                var row = buildRow(genre.Name, skeletonCards(6));
-                rows.push(row);
-                deferGenreRow(row, genre, opts.GenreRowItemCount || 20);
+            rowOrder(opts.RowOrder).forEach(function (id) {
+                builders[id]();
             });
 
             return rows;
         });
+    }
+
+    /* L'ordre par défaut sert aussi de liste de référence : ce qui n'y est pas n'existe pas. */
+    var DEFAULT_ROW_ORDER = ['local', 'global', 'returning', 'neverplayed', 'because', 'studios', 'genres'];
+
+    /**
+     * Normalise l'ordre configuré : les identifiants inconnus sont ignorés, les rangées
+     * absentes sont ajoutées à la fin dans l'ordre par défaut. Une valeur enregistrée par
+     * une version précédente reste ainsi valable quand une rangée nouvelle apparaît, au
+     * lieu de la faire silencieusement disparaître.
+     */
+    function rowOrder(configured) {
+        var order = [];
+        var parts = String(configured || '').toLowerCase().split(',');
+        var i;
+
+        for (i = 0; i < parts.length; i++) {
+            var id = parts[i].replace(/^\s+|\s+$/g, '');
+            if (DEFAULT_ROW_ORDER.indexOf(id) !== -1 && order.indexOf(id) === -1) {
+                order.push(id);
+            }
+        }
+
+        for (i = 0; i < DEFAULT_ROW_ORDER.length; i++) {
+            if (order.indexOf(DEFAULT_ROW_ORDER[i]) === -1) {
+                order.push(DEFAULT_ROW_ORDER[i]);
+            }
+        }
+
+        return order;
     }
 
     function render() {

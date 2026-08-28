@@ -41,6 +41,7 @@ const stub = () => {
           ShowBecauseRow: true, BecauseRowTitle: 'Parce que tu as regardé {0}', BecauseRowSize: 12,
           ReturningRowTitle: 'De retour cette semaine', ReturningRowSize: 20,
           NeverPlayedRowTitle: 'Jamais vu', NeverPlayedRowSize: 20,
+          RowOrder: window.__rowOrder,
           HideNativeSections: window.__hideNative === true,
           LocalRowTitle: 'Top 10 sur ce serveur', GlobalRowTitle: 'Top 10 mondial',
           StudioRowTitle: 'Par studio',
@@ -302,6 +303,19 @@ const freshRows = await fresh.evaluate(() => ({
     .filter(t => !t.textContent.trim()).length
 }));
 await fresh.close();
+
+// Ordre configure : le rendu doit le suivre, ignorer les identifiants inconnus et
+// ajouter en fin les rangees absentes de la liste.
+const ordered = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+ordered.on('pageerror', e => errors.push('pageerror(ordered): ' + e.message));
+await ordered.addInitScript(() => { window.__rowOrder = 'studios,because,inconnue,local'; });
+await ordered.goto('file://' + path.join(here, 'home.html'));
+await ordered.evaluate(stub);
+await ordered.evaluate(script);
+await ordered.waitForFunction(() => document.querySelectorAll('.mc-row').length === 9, { timeout: 8000 });
+const orderedTitles = await ordered.evaluate(
+  () => Array.from(document.querySelectorAll('.mc-row-title')).map(t => t.textContent));
+await ordered.close();
 
 // Un theme clair : la couleur est lue sur la page, pas sur un media query que les
 // themes Jellyfin ne declenchent jamais.
@@ -580,6 +594,13 @@ check('ANIM: prefers-reduced-motion coupe les transitions',
   reduced.cardTransition === 'none', reduced.cardTransition);
 check('ANIM: sans animation, la rangee reste visible',
   reduced.rowOpacity === '1' && reduced.rowVisible === true, reduced);
+
+check('ORDRE: les rangees suivent la configuration',
+  orderedTitles.slice(0, 3).join(' | ')
+    === 'Par studio | Parce que tu as regardé Blade <Runner> | Top 10 sur ce serveur', orderedTitles);
+check('ORDRE: les rangees absentes de la liste sont ajoutees en fin',
+  orderedTitles[3] === 'Top 10 mondial' && orderedTitles[orderedTitles.length - 1] === 'Vide', orderedTitles);
+check('ORDRE: un identifiant inconnu ne casse rien', orderedTitles.length === 9, orderedTitles.length);
 
 check('VISUEL: silhouettes en place avant le chargement differe',
   beforeScroll.skeletons === 6 && beforeScroll.skeletonHidden === 'true', beforeScroll);

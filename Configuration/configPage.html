@@ -33,6 +33,14 @@
                     .mcCfg-tile[data-state="warn"] .mcCfg-tile-dot { opacity: 1; color: #c98a1b; }
                     .mcCfg-tile-value { font-size: 1.45em; font-weight: 700; line-height: 1.2; margin-top: .1em; }
                     .mcCfg-tile-detail { font-size: .76em; opacity: .65; }
+                    .mcCfg-order { list-style: none; margin: .4em 0 0; padding: 0; }
+                    .mcCfg-order li { display: flex; align-items: center; gap: .5em;
+                        border: 1px solid rgba(128, 128, 128, .35); border-radius: 6px;
+                        padding: .45em .6em; margin-bottom: .35em; }
+                    .mcCfg-order-rank { font-size: .8em; opacity: .6; min-width: 1.4em; }
+                    .mcCfg-order-name { flex: 1; }
+                    .mcCfg-order button { min-width: 2.4em; }
+                    .mcCfg-order button[disabled] { opacity: .3; }
 
                     /* Avertissement de doublon : hors des onglets, car il compare deux champs
                        qui vivent dans deux onglets différents. */
@@ -467,6 +475,18 @@
                                 sections natives de Jellyfin.
                             </p>
 
+                            <div class="inputContainer">
+                                <label class="inputLabel" for="RowOrder">Ordre des rangées</label>
+                                <!-- La liste ci-dessous écrit dans ce champ ; c'est lui que les
+                                     tableaux de chargement et de sauvegarde connaissent. -->
+                                <input type="hidden" id="RowOrder" />
+                                <ol class="mcCfg-order" id="mcRowOrder" aria-describedby="hintRowOrder"></ol>
+                                <div class="fieldDescription" id="hintRowOrder">
+                                    De haut en bas, telles qu'elles apparaissent sur l'accueil. Une rangée
+                                    désactivée garde sa place ici mais ne s'affiche pas.
+                                </div>
+                            </div>
+
                             <div class="checkboxContainer">
                                 <label class="emby-checkbox-label">
                                     <input is="emby-checkbox" type="checkbox" id="EnableHomeRows"
@@ -620,7 +640,7 @@
                 var texts = [
                     'LocalTopMediaKind', 'GlobalTopProvider', 'GlobalTopApiKey', 'GlobalTopMediaKind',
                     'MetadataLanguage', 'StudioRowTitle', 'ReturningRowTitle', 'NeverPlayedRowTitle',
-                    'BecauseRowTitle',
+                    'BecauseRowTitle', 'RowOrder',
                     'LocalRowTitle', 'GlobalRowTitle',
                     'HighlightColor', 'LocalCollectionName', 'GlobalCollectionName'
                 ];
@@ -766,6 +786,101 @@
                         }
 
                         tab.classList.toggle('mcCfg-tab-off', off);
+                    });
+                }
+
+                // ----------------------------------------------------------
+                // Ordre des rangées
+                // ----------------------------------------------------------
+
+                /* Doit rester synchronisé avec DEFAULT_ROW_ORDER de media-carousel.js. */
+                var rowIds = ['local', 'global', 'returning', 'neverplayed', 'because', 'studios', 'genres'];
+                var rowNames = {
+                    local: 'Top du serveur',
+                    global: 'Top mondial',
+                    returning: 'De retour cette semaine',
+                    neverplayed: 'Jamais vu',
+                    because: 'Parce que tu as regardé…',
+                    studios: 'Par studio',
+                    genres: 'Par genre'
+                };
+
+                /* Même règle que le client : inconnus ignorés, manquants ajoutés à la fin.
+                   Une valeur enregistrée par une version précédente reste donc valable. */
+                function normalizeOrder(value) {
+                    var order = [];
+
+                    String(value || '').toLowerCase().split(',').forEach(function (raw) {
+                        var id = raw.replace(/^\s+|\s+$/g, '');
+                        if (rowIds.indexOf(id) !== -1 && order.indexOf(id) === -1) {
+                            order.push(id);
+                        }
+                    });
+
+                    rowIds.forEach(function (id) {
+                        if (order.indexOf(id) === -1) {
+                            order.push(id);
+                        }
+                    });
+
+                    return order;
+                }
+
+                function renderRowOrder() {
+                    var order = normalizeOrder(field('RowOrder').value);
+                    field('RowOrder').value = order.join(',');
+
+                    var list = field('mcRowOrder');
+                    list.innerHTML = '';
+
+                    order.forEach(function (id, index) {
+                        var li = document.createElement('li');
+                        li.setAttribute('data-row', id);
+                        li.innerHTML = '<span class="mcCfg-order-rank">' + (index + 1) + '</span>'
+                            + '<span class="mcCfg-order-name">' + escapeHtml(rowNames[id]) + '</span>'
+                            + '<button is="emby-button" type="button" class="raised mcCfg-order-up"'
+                            + ' aria-label="Monter : ' + escapeHtml(rowNames[id]) + '"'
+                            + (index === 0 ? ' disabled' : '') + '>&#9650;</button>'
+                            + '<button is="emby-button" type="button" class="raised mcCfg-order-down"'
+                            + ' aria-label="Descendre : ' + escapeHtml(rowNames[id]) + '"'
+                            + (index === order.length - 1 ? ' disabled' : '') + '>&#9660;</button>';
+                        list.appendChild(li);
+                    });
+                }
+
+                /* Un seul écouteur sur la liste : elle est reconstruite à chaque déplacement,
+                   des écouteurs par bouton disparaîtraient avec eux. */
+                function wireRowOrder() {
+                    field('mcRowOrder').addEventListener('click', function (event) {
+                        var button = event.target.closest('.mcCfg-order-up, .mcCfg-order-down');
+                        if (!button || button.disabled) {
+                            return;
+                        }
+
+                        var li = button.closest('li');
+                        var order = normalizeOrder(field('RowOrder').value);
+                        var from = order.indexOf(li.getAttribute('data-row'));
+                        var to = button.className.indexOf('mcCfg-order-up') !== -1 ? from - 1 : from + 1;
+
+                        if (from < 0 || to < 0 || to >= order.length) {
+                            return;
+                        }
+
+                        var moved = order[from];
+                        order[from] = order[to];
+                        order[to] = moved;
+
+                        field('RowOrder').value = order.join(',');
+                        renderRowOrder();
+
+                        // Le focus suit la rangée déplacée, sinon la navigation au clavier
+                        // repart du début de la page à chaque appui.
+                        var target = field('mcRowOrder').children[to];
+                        var same = target.querySelector(button.className.indexOf('mcCfg-order-up') !== -1
+                            ? '.mcCfg-order-up' : '.mcCfg-order-down');
+                        if (same && !same.disabled) {
+                            same.focus();
+                        }
                     });
                 }
 
@@ -1006,6 +1121,8 @@
 
                         wireTabs();
                         wireToggles();
+                        wireRowOrder();
+                        renderRowOrder();
                         refreshTabStates();
                         refreshDuplicateAlert();
 

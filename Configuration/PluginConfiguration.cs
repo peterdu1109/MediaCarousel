@@ -258,6 +258,18 @@ public class PluginConfiguration : BasePluginConfiguration
     public int RefreshIntervalHours { get; set; } = 6;
 
     /// <summary>
+    /// Obtient ou définit l'ordre des rangées sur la page d'accueil, identifiants séparés
+    /// par des virgules.
+    /// </summary>
+    /// <remarks>
+    /// Identifiants reconnus : <c>local</c>, <c>global</c>, <c>returning</c>,
+    /// <c>neverplayed</c>, <c>because</c>, <c>studios</c>, <c>genres</c>. Le client ignore
+    /// les identifiants inconnus et ajoute en fin les rangées absentes de la liste : une
+    /// valeur d'une version précédente reste valable quand une rangée nouvelle apparaît.
+    /// </remarks>
+    public string RowOrder { get; set; } = "local,global,returning,neverplayed,because,studios,genres";
+
+    /// <summary>
     /// Obtient ou définit une valeur indiquant si les classements sont affichés directement
     /// sur la page d'accueil, sous les bibliothèques, sous forme de rangées façon Netflix.
     /// </summary>

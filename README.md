@@ -181,6 +181,7 @@ l'ouverture de la page d'accueil.
 | Réglage | Défaut | À quoi ça sert |
 |---|---|---|
 | Afficher les rangées | ✅ | Interrupteur principal du rendu sur l'accueil |
+| Ordre des rangées | Top serveur, Top mondial, De retour, Jamais vu, Parce que…, Studios, Genres | Réorganisable avec les flèches ▲▼ |
 | Titre — Top du serveur | `Top 10 sur ce serveur` | Titre de la rangée |
 | Titre — Top mondial | `Top 10 mondial` | Titre de la rangée |
 | Couleur d'accentuation | `#775BF4` | Contour du chiffre au survol et anneau de focus. Seule une valeur `#rrggbb` est retenue, sinon le violet par défaut s'applique |

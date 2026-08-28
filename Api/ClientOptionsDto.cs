@@ -79,6 +79,9 @@ public sealed class ClientOptionsDto
     /// <summary>Obtient ou définit le nombre d'entrées de la rangée « parce que tu as regardé ».</summary>
     public int BecauseRowSize { get; set; }
 
+    /// <summary>Obtient ou définit l'ordre des rangées, identifiants séparés par des virgules.</summary>
+    public string RowOrder { get; set; } = string.Empty;
+
     /// <summary>
     /// Obtient ou définit une valeur indiquant si les sections natives de Jellyfin
     /// doivent être masquées sur la page d'accueil.

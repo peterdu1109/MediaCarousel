@@ -318,6 +318,14 @@ si l'administrateur supprime la collection, elle est recréée au recalcul suiva
   jamais une règle. `clamp()` serait plus concis mais demande Chromium 79, que les téléviseurs
   Tizen n'ont pas. Les affiches gardent partout la proportion 2:3, et les libellés grossissent plus
   vite que les affiches sur les grands écrans — ils se lisent de loin.
+- **Ordre des rangées** : `collectRows` n'impose plus d'ordre. Chaque rangée a un identifiant
+  (`local`, `global`, `returning`, `neverplayed`, `because`, `studios`, `genres`) et un
+  constructeur ; `RowOrder` décide de la séquence. La normalisation est **volontairement
+  tolérante** : identifiants inconnus ignorés, rangées absentes ajoutées à la fin dans l'ordre
+  par défaut. Une valeur enregistrée par une version antérieure reste donc valable quand une
+  rangée nouvelle apparaît, au lieu de la faire disparaître en silence. La même règle est
+  réimplémentée dans `configPage.html` (`normalizeOrder`) : les deux listes d'identifiants
+  doivent rester synchronisées.
 - **Thème clair** : les chiffres du rang sont des blancs translucides, invisibles sur fond
   clair. Aucun media query ne peut le dire — les thèmes Jellyfin ne suivent pas
   `prefers-color-scheme` — donc `isLightBackground()` lit la couleur **réelle** de la page, en
@@ -443,7 +451,7 @@ dotnet run --project tests/ScriptTag.Tests -c Release
 cd tests/browser && npm install && node home-rows.test.mjs && node config-page.test.mjs
 ```
 
-Trois suites sans framework — 209 assertions — exécutées en CI avant la publication ; voir
+Trois suites sans framework — 221 assertions — exécutées en CI avant la publication ; voir
 `tests/README.md`. L'une charge un extrait des règles d'ElegantFin **après** les nôtres pour
 vérifier que la cohabitation tient.
 Les deux suites navigateur chargent le vrai `media-carousel.js` et le vrai `configPage.html`
@@ -509,6 +517,14 @@ reviennent vides. De même pour `EnableUserData` et `EnableImages`. Ne demander 
 
 **Pas de calcul dans un contrôleur :** le contrôleur lit l'instantané publié. Ajouter un calcul
 synchrone dans une route bloquerait le serveur sur les grandes bibliothèques.
+
+**L'ordre des rangées est écrit dans un champ caché :** la liste de réorganisation de la page
+de configuration ne fait qu'écrire dans `#RowOrder`, seul champ que les tableaux de chargement
+et de sauvegarde connaissent. Un seul écouteur porte sur la liste entière, jamais sur les
+boutons : elle est reconstruite à chaque déplacement, des écouteurs par bouton disparaîtraient
+avec eux. Le focus est reposé sur la rangée déplacée, sinon la navigation au clavier repart du
+début de la page à chaque appui — et ce focus n'est possible que si l'onglet est ouvert, un
+panneau `hidden` ne pouvant rien focaliser.
 
 **Un champ absent des tableaux de la page de configuration est silencieusement perdu :**
 `checkboxes`, `numbers`, `decimals`, `texts` et `lists` pilotent à la fois le chargement et la
