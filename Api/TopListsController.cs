@@ -87,6 +87,18 @@ public class TopListsController : ControllerBase
         => Ok(BuildResponse(TopListKind.Global, limit, userId));
 
     /// <summary>
+    /// Renvoie le classement des titres les plus lus depuis toujours.
+    /// </summary>
+    /// <param name="limit">Nombre maximal d'entrées renvoyées.</param>
+    /// <param name="userId">Utilisateur pour lequel filtrer la visibilité. Par défaut, l'appelant.</param>
+    /// <response code="200">Le classement de toujours.</response>
+    /// <returns>Le classement de toujours.</returns>
+    [HttpGet("Top/AllTime")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public ActionResult<TopListResponseDto> GetAllTimeTop([FromQuery] int? limit, [FromQuery] Guid? userId)
+        => Ok(BuildResponse(TopListKind.LocalAllTime, limit, userId));
+
+    /// <summary>
     /// Renvoie les films bien notés que personne n'a encore lancés sur le serveur.
     /// </summary>
     /// <param name="limit">Nombre maximal d'entrées renvoyées.</param>
@@ -153,6 +165,9 @@ public class TopListsController : ControllerBase
             ShowReturningRow = config.EnableReturningRow,
             ReturningRowTitle = config.ReturningRowTitle,
             ReturningRowSize = config.ReturningRowSize,
+            ShowAllTimeRow = config.EnableAllTimeRow,
+            AllTimeRowTitle = config.AllTimeRowTitle,
+            AllTimeRowSize = config.AllTimeRowSize,
             ShowBecauseRow = config.EnableBecauseRow,
             BecauseRowTitle = config.BecauseRowTitle,
             BecauseRowSize = config.BecauseRowSize,

@@ -57,7 +57,7 @@ public sealed class LocalTopListBuilder
     }
 
     /// <summary>
-    /// Construit le classement local.
+    /// Construit le classement local sur la fenêtre configurée.
     /// </summary>
     /// <param name="config">Configuration courante du plugin.</param>
     /// <param name="cancellationToken">Jeton d'annulation.</param>
@@ -65,11 +65,36 @@ public sealed class LocalTopListBuilder
     public TopListSnapshot Build(PluginConfiguration config, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(config);
+        return Build(config, TopListKind.Local, config.LocalTopWindowDays, config.LocalTopSize, cancellationToken);
+    }
+
+    /// <summary>
+    /// Construit un classement de lecture sur une fenêtre donnée.
+    /// </summary>
+    /// <remarks>
+    /// La fenêtre est un paramètre plutôt qu'une lecture directe de la configuration : c'est
+    /// ce qui permet de produire le classement du moment et celui de toujours à partir du
+    /// même calcul, en changeant la seule chose qui les distingue.
+    /// </remarks>
+    /// <param name="config">Configuration courante du plugin.</param>
+    /// <param name="kind">Nature de l'instantané produit.</param>
+    /// <param name="windowDays">Fenêtre d'observation en jours ; zéro pour aucune.</param>
+    /// <param name="size">Nombre d'entrées conservées.</param>
+    /// <param name="cancellationToken">Jeton d'annulation.</param>
+    /// <returns>Un instantané classé par rang croissant.</returns>
+    public TopListSnapshot Build(
+        PluginConfiguration config,
+        TopListKind kind,
+        int windowDays,
+        int size,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(config);
 
         var excludedUsers = ParseGuids(config.ExcludedUserIds);
         var excludedLibraries = ParseGuids(config.ExcludedLibraryIds);
-        var cutoffUtc = config.LocalTopWindowDays > 0
-            ? DateTime.UtcNow.AddDays(-config.LocalTopWindowDays)
+        var cutoffUtc = windowDays > 0
+            ? DateTime.UtcNow.AddDays(-windowDays)
             : (DateTime?)null;
         var playCap = config.MaxPlaysCountedPerUser > 0 ? config.MaxPlaysCountedPerUser : int.MaxValue;
         var candidates = Math.Clamp(config.CandidatesPerUser, 10, 1000);
@@ -77,7 +102,7 @@ public sealed class LocalTopListBuilder
 
         if (itemTypes.Length == 0)
         {
-            return TopListSnapshot.Empty(TopListKind.Local);
+            return TopListSnapshot.Empty(kind);
         }
 
         // Agrégats par titre. Pour un épisode, le score est reporté sur sa série.
@@ -98,7 +123,7 @@ public sealed class LocalTopListBuilder
             AccumulateForUser(user, itemTypes, candidates, cutoffUtc, excludedLibraries, accumulator, seriesCache);
         }
 
-        var entries = accumulator.Rank(config.LocalTopSize)
+        var entries = accumulator.Rank(size)
             .Select(r => new TopListEntry
             {
                 Rank = r.Rank,
@@ -120,7 +145,7 @@ public sealed class LocalTopListBuilder
             usersCounted,
             accumulator.DistinctItems);
 
-        return new TopListSnapshot(TopListKind.Local, "Jellyfin", entries);
+        return new TopListSnapshot(kind, "Jellyfin", entries);
     }
 
     /// <summary>

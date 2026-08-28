@@ -19,6 +19,7 @@ Media Carousel génère **tout seul** plusieurs rangées et les tient à jour.
 | | Rangée | D'où viennent les données |
 |---|---|---|
 | 🏠 | **Top du serveur** | Les statistiques de lecture de **tous** les comptes de ton serveur |
+| ⏳ | **Les plus regardés de tous les temps** | Le même calcul que le Top du serveur, sans fenêtre d'observation |
 | 🌍 | **Top mondial** | TMDB ou Trakt, rapproché de ta bibliothèque |
 | 📺 | **De retour cette semaine** | Les séries dont des épisodes viennent d'arriver |
 | 💎 | **Jamais vu** | Les films bien notés que personne n'a encore lancés |

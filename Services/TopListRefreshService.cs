@@ -102,6 +102,15 @@ public sealed class TopListRefreshService
                 configurationChanged |= await RefreshLocalAsync(config, cancellationToken).ConfigureAwait(false);
             }
 
+            if (config.EnableAllTimeRow)
+            {
+                // Fenêtre à zéro : le même calcul, sur toute l'histoire des lectures.
+                TryPublish(
+                    () => _localBuilder.Build(config, TopListKind.LocalAllTime, 0, config.AllTimeRowSize, cancellationToken),
+                    "top de toujours",
+                    cancellationToken);
+            }
+
             progress?.Report(40);
 
             if (config.EnableGlobalTop)

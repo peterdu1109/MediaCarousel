@@ -81,6 +81,9 @@ public sealed class PluginStatusDto
     /// <summary>Obtient ou définit l'état du catalogue des studios.</summary>
     public SectionStatusDto Studios { get; set; } = new();
 
+    /// <summary>Obtient ou définit l'état du classement de toujours.</summary>
+    public SectionStatusDto AllTime { get; set; } = new();
+
     /// <summary>Obtient ou définit l'état du catalogue des genres.</summary>
     public SectionStatusDto Genres { get; set; } = new();
 

@@ -23,5 +23,14 @@ public enum TopListKind
     /// <summary>
     /// Séries dont des épisodes viennent d'être ajoutés à la bibliothèque.
     /// </summary>
-    ReturningSeries = 3
+    ReturningSeries = 3,
+
+    /// <summary>
+    /// Classement des lectures depuis toujours, sans fenêtre d'observation.
+    /// </summary>
+    /// <remarks>
+    /// Même calcul que <see cref="Local"/>, fenêtre en moins : les deux cohabitent pour
+    /// opposer la tendance du moment au palmarès de fond.
+    /// </remarks>
+    LocalAllTime = 4
 }

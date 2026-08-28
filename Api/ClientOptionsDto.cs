@@ -70,6 +70,15 @@ public sealed class ClientOptionsDto
     /// <summary>Obtient ou définit le nombre d'entrées de la rangée « de retour ».</summary>
     public int ReturningRowSize { get; set; }
 
+    /// <summary>Obtient ou définit une valeur indiquant si le classement de toujours est actif.</summary>
+    public bool ShowAllTimeRow { get; set; }
+
+    /// <summary>Obtient ou définit le titre du classement de toujours.</summary>
+    public string AllTimeRowTitle { get; set; } = string.Empty;
+
+    /// <summary>Obtient ou définit le nombre d'entrées du classement de toujours.</summary>
+    public int AllTimeRowSize { get; set; }
+
     /// <summary>Obtient ou définit une valeur indiquant si la rangée « parce que tu as regardé » est active.</summary>
     public bool ShowBecauseRow { get; set; }
 

@@ -114,7 +114,7 @@
                     <div class="mcCfg-tabs scrollX hiddenScrollX" role="tablist" aria-label="Sections des réglages">
                         <button is="emby-button" type="button" class="mcCfg-tab" role="tab" id="tabLocal"
                                 aria-controls="panelLocal" aria-selected="true">
-                            <span>Top du serveur</span><span class="mcCfg-tab-count">3</span>
+                            <span>Top du serveur</span><span class="mcCfg-tab-count">6</span>
                         </button>
                         <button is="emby-button" type="button" class="mcCfg-tab" role="tab" id="tabGlobal"
                                 aria-controls="panelGlobal" aria-selected="false">
@@ -145,7 +145,7 @@
                                 Classement établi à partir des statistiques de lecture de tous les comptes.
                                 Les épisodes sont comptabilisés au profit de leur série.
                             </p>
-                            <p class="mcCfg-section-state" data-state-for="LocalTop"></p>
+                            <p class="mcCfg-section-state" data-state-for="LocalTop,AllTime"></p>
 
                             <div class="checkboxContainer">
                                 <label class="emby-checkbox-label">
@@ -219,6 +219,30 @@
                                         </div>
                                     </div>
                                 </details>
+                            </div>
+
+                            <div class="checkboxContainer">
+                                <label class="emby-checkbox-label">
+                                    <input is="emby-checkbox" type="checkbox" id="EnableAllTimeRow"
+                                           aria-describedby="hintAllTime" data-toggles="groupAllTime" />
+                                    <span>Afficher aussi « de tous les temps »</span>
+                                </label>
+                                <div class="fieldDescription" id="hintAllTime">
+                                    Le même calcul, sans fenêtre d'observation : une rangée pour la tendance
+                                    du moment, une autre pour le fond de catalogue.
+                                </div>
+                            </div>
+
+                            <div id="groupAllTime">
+                                <div class="mcCfg-grid">
+                                    <div class="inputContainer">
+                                        <input is="emby-input" type="text" id="AllTimeRowTitle" label="Titre de la rangée" />
+                                    </div>
+                                    <div class="inputContainer">
+                                        <input is="emby-input" type="number" id="AllTimeRowSize" min="1" max="100" step="1"
+                                               label="Nombre de titres" required />
+                                    </div>
+                                </div>
                             </div>
                         </fieldset>
                     </div>
@@ -640,7 +664,7 @@
                 var checkboxes = [
                     'EnableLocalTop', 'EnableGlobalTop', 'GlobalTopLibraryOnly',
                     'EnableStudioRow', 'EnableGenreRows', 'EnableReturningRow', 'EnableNeverPlayedRow',
-                    'EnableBecauseRow',
+                    'EnableBecauseRow', 'EnableAllTimeRow',
                     'EnableHomeRows', 'HideNativeHomeSections', 'ManageNativeSections', 'SyncCollections'
                 ];
                 var numbers = [
@@ -648,6 +672,7 @@
                     'GlobalTopSize', 'StudioRowSize', 'MinItemsPerStudio',
                     'GenreRowCount', 'GenreRowItemCount', 'MinItemsPerGenre',
                     'ReturningRowDays', 'ReturningRowSize', 'NeverPlayedRowSize', 'BecauseRowSize',
+                    'AllTimeRowSize',
                     'RefreshIntervalHours'
                 ];
                 // Seul reglage a virgule : parseInt le tronquerait a 7.
@@ -655,7 +680,7 @@
                 var texts = [
                     'LocalTopMediaKind', 'GlobalTopProvider', 'GlobalTopApiKey', 'GlobalTopMediaKind',
                     'MetadataLanguage', 'StudioRowTitle', 'ReturningRowTitle', 'NeverPlayedRowTitle',
-                    'BecauseRowTitle', 'RowOrder',
+                    'BecauseRowTitle', 'AllTimeRowTitle', 'RowOrder',
                     'LocalRowTitle', 'GlobalRowTitle',
                     'HighlightColor', 'LocalCollectionName', 'GlobalCollectionName'
                 ];
@@ -665,11 +690,12 @@
                 var rowToggles = [
                     'EnableLocalTop', 'EnableGlobalTop', 'EnableReturningRow',
                     'EnableNeverPlayedRow', 'EnableStudioRow', 'EnableGenreRows',
-                    'EnableBecauseRow'
+                    'EnableBecauseRow', 'EnableAllTimeRow'
                 ];
 
                 var sectionLabels = {
                     LocalTop: 'Top du serveur',
+                    AllTime: 'De tous les temps',
                     GlobalTop: 'Top mondial',
                     ReturningSeries: 'De retour',
                     NeverPlayed: 'Jamais vu',
@@ -810,15 +836,16 @@
 
                 /* Doivent rester synchronisés avec PLUGIN_ROW_ORDER et FULL_ROW_ORDER
                    de media-carousel.js. */
-                var pluginRowIds = ['local', 'global', 'returning', 'neverplayed', 'because', 'studios', 'genres'];
+                var pluginRowIds = ['local', 'alltime', 'global', 'returning', 'neverplayed', 'because', 'studios', 'genres'];
                 var fullRowIds = [
                     'native:smalllibrarytiles', 'native:librarybuttons',
-                    'local', 'global', 'returning', 'neverplayed', 'because', 'studios', 'genres',
+                    'local', 'alltime', 'global', 'returning', 'neverplayed', 'because', 'studios', 'genres',
                     'native:activerecordings', 'native:resume', 'native:resumeaudio',
                     'native:resumebook', 'native:livetv', 'native:nextup', 'native:latestmedia'
                 ];
                 var rowNames = {
                     local: 'Top du serveur',
+                    alltime: 'Les plus regardés de tous les temps',
                     global: 'Top mondial',
                     returning: 'De retour cette semaine',
                     neverplayed: 'Jamais vu',

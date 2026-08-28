@@ -140,6 +140,14 @@ Détails d'implémentation :
 - Plafond `MaxPlaysCountedPerUser` appliqué au score, `TotalPlays` conservant la valeur brute.
 - Tri final : score, puis nombre de spectateurs distincts, puis dernière lecture.
 
+### Top du moment et de toujours
+
+`LocalTopListBuilder.Build` prend la fenêtre, la taille et la nature de l'instantané en
+**paramètres** plutôt que de les lire dans la configuration : c'est ce qui permet de produire
+`Local` (fenêtre configurée) et `LocalAllTime` (fenêtre nulle) à partir du même calcul, en ne
+changeant que ce qui les distingue. Les deux cohabitent sur l'accueil au lieu d'obliger à
+choisir entre tendance du moment et fond de catalogue.
+
 ### Top mondial
 
 `ITrendingProvider` abstrait la source ; `GlobalTopListBuilder` choisit l'implémentation d'après
@@ -451,7 +459,7 @@ dotnet run --project tests/ScriptTag.Tests -c Release
 cd tests/browser && npm install && node home-rows.test.mjs && node config-page.test.mjs
 ```
 
-Trois suites sans framework — 221 assertions — exécutées en CI avant la publication ; voir
+Trois suites sans framework — 231 assertions — exécutées en CI avant la publication ; voir
 `tests/README.md`. L'une charge un extrait des règles d'ElegantFin **après** les nôtres pour
 vérifier que la cohabitation tient.
 Les deux suites navigateur chargent le vrai `media-carousel.js` et le vrai `configPage.html`

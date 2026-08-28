@@ -224,6 +224,27 @@ public class PluginConfiguration : BasePluginConfiguration
     public int ReturningRowSize { get; set; } = 20;
 
     /// <summary>
+    /// Obtient ou définit une valeur indiquant si le classement de toujours est affiché,
+    /// en plus de celui de la fenêtre d'observation.
+    /// </summary>
+    /// <remarks>
+    /// Même calcul que le Top du serveur, sans fenêtre : le premier montre la tendance du
+    /// moment, celui-ci le fond de catalogue. Les deux ensemble ont plus de sens que le
+    /// réglage caché qui obligeait à choisir.
+    /// </remarks>
+    public bool EnableAllTimeRow { get; set; }
+
+    /// <summary>
+    /// Obtient ou définit le titre de la rangée du classement de toujours.
+    /// </summary>
+    public string AllTimeRowTitle { get; set; } = "Les plus regardés de tous les temps";
+
+    /// <summary>
+    /// Obtient ou définit le nombre d'entrées du classement de toujours.
+    /// </summary>
+    public int AllTimeRowSize { get; set; } = 10;
+
+    /// <summary>
     /// Obtient ou définit une valeur indiquant si la rangée « parce que tu as regardé »
     /// est affichée.
     /// </summary>

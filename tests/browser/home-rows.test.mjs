@@ -52,6 +52,7 @@ const stub = () => {
           ShowStudioRow: true, ShowGenreRows: true,
           ShowReturningRow: true, ShowNeverPlayedRow: true,
           ShowBecauseRow: true, BecauseRowTitle: 'Parce que tu as regardé {0}', BecauseRowSize: 12,
+          ShowAllTimeRow: true, AllTimeRowTitle: 'Les plus regardés de tous les temps', AllTimeRowSize: 10,
           ReturningRowTitle: 'De retour cette semaine', ReturningRowSize: 20,
           NeverPlayedRowTitle: 'Jamais vu', NeverPlayedRowSize: 20,
           RowOrder: window.__rowOrder,
@@ -64,6 +65,7 @@ const stub = () => {
           GenreRowCount: 3, GenreRowItemCount: 12
         });
       }
+      if (url.includes('Top/AllTime')) return Promise.resolve({ Items: ranked(3) });
       if (url.includes('Top/Local')) return Promise.resolve({ Items: ranked(4) });
       if (url.includes('Top/Global')) return Promise.resolve({
         Items: [
@@ -134,7 +136,7 @@ const stub = () => {
 
 await page.evaluate(stub);
 await page.evaluate(script);
-await page.waitForFunction(() => document.querySelectorAll('.mc-row').length === 9, { timeout: 8000 });
+await page.waitForFunction(() => document.querySelectorAll('.mc-row').length === 10, { timeout: 8000 });
 
 // Avant tout defilement, les rangees de genre differees montrent des silhouettes.
 const beforeScroll = await page.evaluate(() => {
@@ -179,20 +181,21 @@ const result = await page.evaluate(() => {
     stripClasses: rows[0].querySelector('.mc-strip').className,
     noBadges: document.querySelectorAll('.mc-row-badge').length,
     noTileCounts: document.querySelectorAll('.mc-tile-count').length,
-    returningCards: rows[2].querySelectorAll('.mc-plain').length,
-    neverPlayedCards: rows[3].querySelectorAll('.mc-plain').length,
-    becauseTitle: rows[4].querySelector('.mc-row-title').textContent,
-    becauseCards: rows[4].querySelectorAll('.mc-plain').length,
+    allTimeCards: rows[1].querySelectorAll('.mc-card').length,
+    returningCards: rows[3].querySelectorAll('.mc-plain').length,
+    neverPlayedCards: rows[4].querySelectorAll('.mc-plain').length,
+    becauseTitle: rows[5].querySelector('.mc-row-title').textContent,
+    becauseCards: rows[5].querySelectorAll('.mc-plain').length,
     becauseExcludesSeed: window.__calls.some(c => c.startsWith('Items?') && c.includes('ExcludeItemIds=seed1')),
     becauseGenreCount: (() => {
       const call = window.__calls.find(c => c.startsWith('Items?') && c.includes('Genres='));
       return call ? new URLSearchParams(call.split('?')[1]).get('Genres').split('|').length : 0;
     })(),
-    studioLogo: !!rows[5].querySelector('.mc-tile img'),
-    studioFallbackName: rows[5].querySelectorAll('.mc-tile-name').length,
-    studioEscaped: rows[5].querySelector('.mc-tile-name')?.textContent,
-    genreCards: rows[6].querySelectorAll('.mc-plain').length,
-    genreEmptyMessage: rows[8].querySelector('.mc-empty')?.textContent,
+    studioLogo: !!rows[6].querySelector('.mc-tile img'),
+    studioFallbackName: rows[6].querySelectorAll('.mc-tile-name').length,
+    studioEscaped: rows[6].querySelector('.mc-tile-name')?.textContent,
+    genreCards: rows[7].querySelectorAll('.mc-plain').length,
+    genreEmptyMessage: rows[9].querySelector('.mc-empty')?.textContent,
     nativeVisible: Array.from(container.children)
       .filter(c => !c.classList.contains('mc-row') && !c.classList.contains('mc-hidden-native')).length,
     labelledBy: rows.every(r => {
@@ -204,14 +207,14 @@ const result = await page.evaluate(() => {
       .every(a => a.getAttribute('tabindex') === '-1' && a.getAttribute('aria-hidden') === 'true'),
     listRoles: rows[0].querySelector('.mc-strip').getAttribute('role') === 'list'
       && card.getAttribute('role') === 'listitem',
-    unavailableIsLink: rows[1].querySelector('.mc-unavailable').tagName === 'A',
+    unavailableIsLink: rows[2].querySelector('.mc-unavailable').tagName === 'A',
     skeletonsLeft: document.querySelectorAll('.mc-row .mc-skeleton').length,
     posterHeight: Math.round(rows[0].querySelector('.mc-poster').getBoundingClientRect().height),
     rankFill: getComputedStyle(rows[0]).getPropertyValue('--mc-rank-fill').trim(),
     rankOutline: getComputedStyle(rows[0]).getPropertyValue('--mc-rank-outline').trim(),
     accentDefault: getComputedStyle(rows[0]).getPropertyValue('--mc-accent').trim(),
-    genrePosterHeight: Math.round(rows[6].querySelector('.mc-plain .mc-poster').getBoundingClientRect().height),
-    tileHeight: Math.round(rows[5].querySelector('.mc-tile').getBoundingClientRect().height)
+    genrePosterHeight: Math.round(rows[7].querySelector('.mc-plain .mc-poster').getBoundingClientRect().height),
+    tileHeight: Math.round(rows[6].querySelector('.mc-tile').getBoundingClientRect().height)
   };
 });
 
@@ -233,7 +236,7 @@ await page.evaluate(() => {
   c.innerHTML = '<div class="verticalSection section0"><div class="card" data-type="CollectionFolder">Films</div></div>'
               + '<div class="verticalSection section1"></div>';
 });
-await page.waitForFunction(() => document.querySelectorAll('.mc-row').length === 9, { timeout: 8000 });
+await page.waitForFunction(() => document.querySelectorAll('.mc-row').length === 10, { timeout: 8000 });
 const afterRebuild = await page.evaluate(() => document.querySelectorAll('.mc-row').length);
 await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
 await page.waitForTimeout(900);
@@ -254,7 +257,7 @@ await injection.addInitScript(() => {
 await injection.goto('file://' + path.join(here, 'home.html'));
 await injection.evaluate(stub);
 await injection.evaluate(script);
-await injection.waitForFunction(() => document.querySelectorAll('.mc-row').length === 9, { timeout: 8000 });
+await injection.waitForFunction(() => document.querySelectorAll('.mc-row').length === 10, { timeout: 8000 });
 
 const accent = await injection.evaluate(() => {
   const row = document.querySelector('.mc-row');
@@ -272,7 +275,7 @@ themed.on('pageerror', e => errors.push('pageerror(theme): ' + e.message));
 await themed.goto('file://' + path.join(here, 'home.html'));
 await themed.evaluate(stub);
 await themed.evaluate(script);
-await themed.waitForFunction(() => document.querySelectorAll('.mc-row').length === 9, { timeout: 8000 });
+await themed.waitForFunction(() => document.querySelectorAll('.mc-row').length === 10, { timeout: 8000 });
 await themed.addStyleTag({ path: path.join(here, 'theme-excerpt.css') });
 await themed.waitForTimeout(300);
 
@@ -307,7 +310,7 @@ await fresh.addInitScript(() => { window.__noHistory = true; });
 await fresh.goto('file://' + path.join(here, 'home.html'));
 await fresh.evaluate(stub);
 await fresh.evaluate(script);
-await fresh.waitForFunction(() => document.querySelectorAll('.mc-row').length === 8, { timeout: 8000 });
+await fresh.waitForFunction(() => document.querySelectorAll('.mc-row').length === 9, { timeout: 8000 });
 
 const freshRows = await fresh.evaluate(() => ({
   titles: Array.from(document.querySelectorAll('.mc-row-title')).map(t => t.textContent),
@@ -328,7 +331,7 @@ await ordered.addInitScript(() => {
 await ordered.goto('file://' + path.join(here, 'home.html'));
 await ordered.evaluate(stub);
 await ordered.evaluate(script);
-await ordered.waitForFunction(() => document.querySelectorAll('.mc-row').length === 9, { timeout: 8000 });
+await ordered.waitForFunction(() => document.querySelectorAll('.mc-row').length === 10, { timeout: 8000 });
 const orderedTitles = await ordered.evaluate(
   () => Array.from(document.querySelectorAll('.mc-row-title')).map(t => t.textContent));
 // Sans gestion des natives, celles-ci gardent leur place et nos rangees restent groupees.
@@ -356,7 +359,7 @@ await nativePage.addInitScript(() => {
 await nativePage.goto('file://' + path.join(here, 'home.html'));
 await nativePage.evaluate(stub);
 await nativePage.evaluate(script);
-await nativePage.waitForFunction(() => document.querySelectorAll('.mc-row').length === 9, { timeout: 8000 });
+await nativePage.waitForFunction(() => document.querySelectorAll('.mc-row').length === 10, { timeout: 8000 });
 await nativePage.evaluate(() => {
   const c = document.querySelector('#homeTab .homeSectionsContainer');
   const foreign = document.createElement('div');
@@ -381,7 +384,7 @@ await light.goto('file://' + path.join(here, 'home.html'));
 await light.evaluate(() => { document.body.style.background = '#f2f2f2'; });
 await light.evaluate(stub);
 await light.evaluate(script);
-await light.waitForFunction(() => document.querySelectorAll('.mc-row').length === 9, { timeout: 8000 });
+await light.waitForFunction(() => document.querySelectorAll('.mc-row').length === 10, { timeout: 8000 });
 const lightMode = await light.evaluate(() => {
   const row = document.querySelector('.mc-row');
   const outline = getComputedStyle(row).getPropertyValue('--mc-rank-outline').trim();
@@ -399,7 +402,7 @@ await hidePage.addInitScript(() => { window.__hideNative = true; });
 await hidePage.goto('file://' + path.join(here, 'home.html'));
 await hidePage.evaluate(stub);
 await hidePage.evaluate(script);
-await hidePage.waitForFunction(() => document.querySelectorAll('.mc-row').length === 9, { timeout: 8000 });
+await hidePage.waitForFunction(() => document.querySelectorAll('.mc-row').length === 10, { timeout: 8000 });
 
 // Un autre plugin insere son propre element dans le conteneur de l'accueil.
 await hidePage.evaluate(() => {
@@ -442,7 +445,7 @@ sizing.on('pageerror', e => errors.push('pageerror(sizing): ' + e.message));
 await sizing.goto('file://' + path.join(here, 'home.html'));
 await sizing.evaluate(stub);
 await sizing.evaluate(script);
-await sizing.waitForFunction(() => document.querySelectorAll('.mc-row').length === 9, { timeout: 8000 });
+await sizing.waitForFunction(() => document.querySelectorAll('.mc-row').length === 10, { timeout: 8000 });
 
 // Largeur d'affiche reellement rendue a chaque palier.
 const widths = {};
@@ -547,7 +550,7 @@ calm.on('pageerror', e => errors.push('pageerror(calm): ' + e.message));
 await calm.goto('file://' + path.join(here, 'home.html'));
 await calm.evaluate(stub);
 await calm.evaluate(script);
-await calm.waitForFunction(() => document.querySelectorAll('.mc-row').length === 9, { timeout: 8000 });
+await calm.waitForFunction(() => document.querySelectorAll('.mc-row').length === 10, { timeout: 8000 });
 const reduced = await calm.evaluate(() => {
   const row = document.querySelector('.mc-row');
   return {
@@ -565,13 +568,16 @@ await browser.close();
 let failed = 0;
 const check = (name, ok, got) => { console.log((ok ? 'OK    ' : 'ECHEC ') + name + (ok ? '' : '  -> ' + JSON.stringify(got))); if (!ok) failed++; };
 
-check('9 rangees sous les bibliotheques',
+check('10 rangees sous les bibliotheques',
   JSON.stringify(result.order) === JSON.stringify(
-    ['section0','mc-row','mc-row','mc-row','mc-row','mc-row','mc-row','mc-row','mc-row','mc-row','section1','section2','section3']), result.order);
+    ['section0','mc-row','mc-row','mc-row','mc-row','mc-row','mc-row','mc-row','mc-row','mc-row','mc-row','section1','section2','section3']), result.order);
 check('titres et ordre corrects', JSON.stringify(result.titles) ===
-  JSON.stringify(['Top 10 sur ce serveur','Top 10 mondial','De retour cette semaine','Jamais vu',
+  JSON.stringify(['Top 10 sur ce serveur','Les plus regardés de tous les temps','Top 10 mondial',
+                  'De retour cette semaine','Jamais vu',
                   'Parce que tu as regardé Blade <Runner>',
                   'Par studio','Science-fiction','Comédie','Vide']), result.titles);
+check('TOUJOURS: la rangee de tous les temps est remplie',
+  result.allTimeCards === 3, result.allTimeCards);
 check('plus aucune pastille dans les en-tetes', result.noBadges === 0, result.noBadges);
 check('plus de decompte sur les vignettes de studio', result.noTileCounts === 0, result.noTileCounts);
 check('rangee de retour remplie', result.returningCards === 2, result.returningCards);
@@ -592,7 +598,7 @@ check('chargement differe des genres (3 requetes, pas plus)', genreCallsAtRest =
 check('BECAUSE: deux requetes, pas plus', becauseCallsAtRest === 2, becauseCallsAtRest);
 check('BECAUSE: aucune rangee pour un compte sans historique',
   !freshRows.titles.some(t => t.indexOf('Parce que') === 0), freshRows.titles);
-check('BECAUSE: les 8 autres rangees restent intactes', freshRows.titles.length === 8, freshRows.titles.length);
+check('BECAUSE: les 9 autres rangees restent intactes', freshRows.titles.length === 9, freshRows.titles.length);
 check('BECAUSE: aucun titre de rangee vide', freshRows.blankTitles === 0, freshRows.blankTitles);
 check('a11y: chaque rangee pointe son titre', result.labelledBy === true, result.labelledBy);
 check('a11y: libelle de carte explicite', result.cardAria === 'Numéro 1 : Film <1> (2020)', result.cardAria);
@@ -602,8 +608,8 @@ check('titre absent non cliquable', result.unavailableIsLink === false, result.u
 check('affiche dimensionnee (1280 px : 142x213)', result.posterHeight === 213, result.posterHeight);
 check('affiche de genre dimensionnee (1280 px)', result.genrePosterHeight === 213, result.genrePosterHeight);
 check('vignette de studio dimensionnee (1280 px)', result.tileHeight === 118, result.tileHeight);
-check('pas de duplication sur mutation', afterMutation === 9, afterMutation);
-check('reinjection apres reconstruction', afterRebuild === 9, afterRebuild);
+check('pas de duplication sur mutation', afterMutation === 10, afterMutation);
+check('reinjection apres reconstruction', afterRebuild === 10, afterRebuild);
 const extraCalls = callsAfterRebuild.slice(callsBeforeRebuild.length);
 check('CACHE: aucun endpoint du plugin refait apres reconstruction de l accueil',
   extraCalls.every(c => !c.startsWith('MediaCarousel/')), extraCalls);
@@ -611,7 +617,7 @@ check('CACHE: seul le genre vide est re-interroge (resultat vide non memorise)',
   extraCalls.length === 1 && extraCalls[0].includes('GenreIds=g3'), extraCalls);
 check('MASQUAGE: bibliotheques conservees', hidden.libraryVisible && hidden.libraryDisplayed, hidden);
 check('MASQUAGE: 3 sections natives masquees', hidden.nativeHidden === 3, hidden.nativeHidden);
-check('MASQUAGE: nos 9 rangees restent visibles', hidden.ourRowsVisible === 9, hidden.ourRowsVisible);
+check('MASQUAGE: nos 10 rangees restent visibles', hidden.ourRowsVisible === 10, hidden.ourRowsVisible);
 check('MASQUAGE: la rangee d un autre plugin est epargnee', hidden.foreignVisible === true, hidden);
 
 check('THEME: la feuille du theme est bien chargee apres la notre', theme.themeLoadedAfter === true, theme);
@@ -653,14 +659,14 @@ check('ANIM: sans animation, la rangee reste visible',
 
 check('ORDRE: les rangees suivent la configuration',
   orderedTitles.slice(0, 4).join(' | ')
-    === 'Science-fiction | Comédie | Vide | Top 10 sur ce serveur', orderedTitles);
-check('ORDRE: un identifiant inconnu ne casse rien', orderedTitles.length === 9, orderedTitles.length);
+    === 'Science-fiction | Comédie | Vide | Les plus regardés de tous les temps', orderedTitles);
+check('ORDRE: un identifiant inconnu ne casse rien', orderedTitles.length === 10, orderedTitles.length);
 check('ORDRE: sans gestion des natives, elles ne bougent pas',
   orderedNative.join(',') === 'section0,mc-row,section1,section2,section3', orderedNative);
 
 check('NATIF: l ordre configure interleave nos rangees et les natives',
   nativeOrder.layout.join(',')
-    === 'section1,mc-row,section0,mc-row,mc-row,mc-row,mc-row,mc-row,mc-row,mc-row,mc-row,section3,section2',
+    === 'section1,mc-row,mc-row,section0,mc-row,mc-row,mc-row,mc-row,mc-row,mc-row,mc-row,mc-row,section3,section2',
   nativeOrder.layout);
 check('NATIF: la disposition du compte est bien lue',
   nativeOrder.prefsRequested === true, nativeOrder);
@@ -678,7 +684,7 @@ check('VISUEL: une image prete est opaque', styling.readyOpacity === '1', stylin
 check('VISUEL: accroche de defilement posee (proximity est la valeur normalisee de « x »)',
   /^x( proximity)?$/.test(styling.snapType), styling.snapType);
 check('CLAIR: fond sombre, aucun mode clair', styling.lightRows === 0, styling.lightRows);
-check('CLAIR: fond clair detecte sur les 9 rangees', lightMode.flagged === 9, lightMode.flagged);
+check('CLAIR: fond clair detecte sur les 10 rangees', lightMode.flagged === 10, lightMode.flagged);
 check('CLAIR: le contour des chiffres devient sombre', lightMode.outlineIsDark === true, lightMode);
 
 check('CSS: la feuille produit bien des regles', styling.ruleCount > 30, styling.ruleCount);

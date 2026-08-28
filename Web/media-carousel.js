@@ -960,6 +960,7 @@
     function collectRows(opts) {
         var requests = [
             opts.ShowLocalRow ? loadCached('MediaCarousel/Top/Local', { limit: opts.LocalRowSize || 10 }) : [],
+            opts.ShowAllTimeRow ? loadCached('MediaCarousel/Top/AllTime', { limit: opts.AllTimeRowSize || 10 }) : [],
             opts.ShowGlobalRow ? loadCached('MediaCarousel/Top/Global', { limit: opts.GlobalRowSize || 10 }) : [],
             opts.ShowReturningRow ? loadCached('MediaCarousel/Rows/Returning', { limit: opts.ReturningRowSize || 20 }) : [],
             opts.ShowNeverPlayedRow ? loadCached('MediaCarousel/Rows/NeverPlayed', { limit: opts.NeverPlayedRowSize || 20 }) : [],
@@ -991,33 +992,36 @@
                 local: function () {
                     addRanked(results[0], opts.LocalRowTitle || 'Top 10 sur ce serveur');
                 },
+                alltime: function () {
+                    addRanked(results[1], opts.AllTimeRowTitle || 'Les plus regardés de tous les temps');
+                },
                 global: function () {
-                    addRanked(results[1], opts.GlobalRowTitle || 'Top 10 mondial');
+                    addRanked(results[2], opts.GlobalRowTitle || 'Top 10 mondial');
                 },
                 returning: function () {
-                    addPlain(results[2], opts.ReturningRowTitle || 'De retour cette semaine');
+                    addPlain(results[3], opts.ReturningRowTitle || 'De retour cette semaine');
                 },
                 neverplayed: function () {
-                    addPlain(results[3], opts.NeverPlayedRowTitle || 'Jamais vu');
+                    addPlain(results[4], opts.NeverPlayedRowTitle || 'Jamais vu');
                 },
                 // Rangée personnalisée : absente tant que l'utilisateur n'a terminé aucun
                 // film, ou si aucun autre titre ne partage ses genres.
                 because: function () {
-                    if (results[6] && results[6].items.length) {
+                    if (results[7] && results[7].items.length) {
                         rows.push(buildRow(
-                            becauseTitle(opts.BecauseRowTitle, results[6].seed.Name),
-                            results[6].items.map(buildPlainCard).join('')));
+                            becauseTitle(opts.BecauseRowTitle, results[7].seed.Name),
+                            results[7].items.map(buildPlainCard).join('')));
                     }
                 },
                 studios: function () {
-                    if (results[4].length) {
+                    if (results[5].length) {
                         rows.push(buildRow(
                             opts.StudioRowTitle || 'Par studio',
-                            results[4].map(buildTileCard).join('')));
+                            results[5].map(buildTileCard).join('')));
                     }
                 },
                 genres: function () {
-                    results[5].forEach(function (genre) {
+                    results[6].forEach(function (genre) {
                         // Des silhouettes occupent la bande en attendant le chargement
                         // differe : une rangee titree mais vide ressemble a une panne.
                         var row = buildRow(genre.Name, skeletonCards(6));
@@ -1052,7 +1056,7 @@
     var NATIVE_PREFIX = 'native:';
 
     /* Nos rangées seules : l'ordre de référence quand les natives ne sont pas gérées. */
-    var PLUGIN_ROW_ORDER = ['local', 'global', 'returning', 'neverplayed', 'because', 'studios', 'genres'];
+    var PLUGIN_ROW_ORDER = ['local', 'alltime', 'global', 'returning', 'neverplayed', 'because', 'studios', 'genres'];
 
     /**
      * Ordre de référence quand les natives sont gérées : les bibliothèques, nos rangées,
@@ -1060,7 +1064,7 @@
      */
     var FULL_ROW_ORDER = [
         'native:smalllibrarytiles', 'native:librarybuttons',
-        'local', 'global', 'returning', 'neverplayed', 'because', 'studios', 'genres',
+        'local', 'alltime', 'global', 'returning', 'neverplayed', 'because', 'studios', 'genres',
         'native:activerecordings', 'native:resume', 'native:resumeaudio', 'native:resumebook',
         'native:livetv', 'native:nextup', 'native:latestmedia'
     ];
