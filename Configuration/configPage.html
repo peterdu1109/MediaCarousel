@@ -202,13 +202,12 @@
 
                                     <div class="inputContainer">
                                         <textarea is="emby-textarea" id="ExcludedLibraryIds" rows="2"
-                                                  label="Bibliothèques exclues des classements"
+                                                  label="Bibliothèques exclues"
                                                   aria-describedby="hintExcludedLib"></textarea>
                                         <div class="fieldDescription" id="hintExcludedLib">
-                                            Un identifiant par ligne. S'applique au Top du serveur,
-                                            à « jamais vu » et à « de retour cette semaine ». Les rangées
-                                            studios et genres, ainsi que le Top mondial, portent sur
-                                            l'ensemble de la bibliothèque.
+                                            Un identifiant par ligne. S'applique à toutes les rangées :
+                                            Top du serveur, « jamais vu », « de retour », studios, genres
+                                            et le rapprochement du Top mondial.
                                         </div>
                                     </div>
                                 </details>
@@ -810,11 +809,36 @@
                     var globalEnabled = field('EnableGlobalTop').checked;
                     var hasKey = field('GlobalTopApiKey').value.trim().length > 0;
 
-                    var html = tile(
-                        newest ? 'ok' : 'pending',
-                        'Dernier calcul',
-                        newest ? relativeDate(newest) : 'Jamais',
-                        newest ? formatDate(newest) : 'en attente du premier calcul');
+                    /* Le bilan d'exécution prime sur les dates : la tolérance aux pannes
+                       conserve les instantanés précédents, donc sans lui une clé expirée
+                       laisserait une tuile verte dont la date vieillit en silence. */
+                    var run = status.LastRun || {};
+                    var failures = run.Failures || [];
+
+                    var html;
+                    if (run.Running) {
+                        html = tile('pending', 'Dernier calcul', 'En cours…', 'recalcul en cours');
+                    } else if (failures.length) {
+                        var sections = failures.map(function (f) { return f.Section; }).join(', ');
+                        var firstMessage = failures[0].Message || '';
+                        if (firstMessage.length > 90) {
+                            firstMessage = firstMessage.substring(0, 90) + '…';
+                        }
+                        html = tile('warn', 'Dernier calcul',
+                            'Échec : ' + sections,
+                            firstMessage || 'voir le journal du serveur');
+                    } else {
+                        var duration = typeof run.DurationSeconds === 'number'
+                            ? ' · ' + (run.DurationSeconds < 1
+                                ? 'moins d\u2019une seconde'
+                                : Math.round(run.DurationSeconds) + ' s')
+                            : '';
+                        html = tile(
+                            newest ? 'ok' : 'pending',
+                            'Dernier calcul',
+                            newest ? relativeDate(newest) : 'Jamais',
+                            newest ? formatDate(newest) + duration : 'en attente du premier calcul');
+                    }
 
                     html += tile(
                         field('EnableLocalTop').checked ? (local.Count ? 'ok' : 'pending') : 'off',

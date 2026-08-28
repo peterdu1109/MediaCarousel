@@ -78,16 +78,16 @@ public class PluginConfiguration : BasePluginConfiguration
     public string[] ExcludedUserIds { get; set; } = Array.Empty<string>();
 
     /// <summary>
-    /// Obtient ou définit les identifiants des bibliothèques exclues des <b>classements</b> :
-    /// Top du serveur, « jamais vu » et « de retour cette semaine ».
+    /// Obtient ou définit les identifiants des bibliothèques exclues de toutes les rangées :
+    /// Top du serveur, « jamais vu », « de retour », studios, genres, et le rapprochement du
+    /// Top mondial.
     /// </summary>
     /// <remarks>
-    /// La portée s'arrête là. Les catalogues de studios et de genres agrègent toute la
-    /// bibliothèque — <c>GetStudios</c> et <c>GetGenres</c> ne remontent pas la bibliothèque
-    /// d'origine, filtrer après coup imposerait de résoudre les titres de chaque studio — et
-    /// le rapprochement du Top mondial indexe lui aussi l'ensemble. Le nom de la propriété est
-    /// conservé pour ne pas perdre silencieusement les valeurs déjà enregistrées ; c'est le
-    /// libellé de la page de configuration qui énonce cette portée.
+    /// Les classements les honorent directement ; les catalogues les sautent lors de leur
+    /// balayage par bibliothèque ; <see cref="Services.LibraryTitleIndex"/> ne les indexe pas,
+    /// si bien qu'un titre externe d'une bibliothèque exclue apparaît « absent » plutôt que d'y
+    /// mener. Le nom de la propriété est historique et conservé : le changer perdrait
+    /// silencieusement les valeurs déjà enregistrées dans <c>MediaCarousel.xml</c>.
     /// </remarks>
     public string[] ExcludedLibraryIds { get; set; } = Array.Empty<string>();
 

@@ -74,7 +74,18 @@ public sealed class GlobalTopListBuilder
             return new TopListSnapshot(TopListKind.Global, provider.Kind.ToString(), Array.Empty<TopListEntry>());
         }
 
-        var index = LibraryTitleIndex.Build(_libraryManager);
+        // Les bibliothèques exclues ne sont pas indexées : leurs titres apparaissent comme
+        // absents du serveur au lieu d'être rapprochés puis affichés.
+        var excludedLibraries = new HashSet<Guid>();
+        foreach (var value in config.ExcludedLibraryIds)
+        {
+            if (Guid.TryParse(value, out var parsed))
+            {
+                excludedLibraries.Add(parsed);
+            }
+        }
+
+        var index = LibraryTitleIndex.Build(_libraryManager, excludedLibraries);
         var entries = new List<TopListEntry>(size);
 
         foreach (var title in titles)

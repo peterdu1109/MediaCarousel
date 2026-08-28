@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Text;
 using Jellyfin.Data.Enums;
 using JellyfinCarouselPlugin.Providers;
@@ -35,20 +36,53 @@ public sealed class LibraryTitleIndex
     /// <summary>
     /// Construit l'index à partir des films et séries de la bibliothèque.
     /// </summary>
+    /// <remarks>
+    /// Sans exclusion, une seule requête suffit. Avec des bibliothèques exclues, l'index est
+    /// construit bibliothèque par bibliothèque — <c>InternalItemsQuery</c> sait restreindre à
+    /// des ancêtres (<c>AncestorIds</c>) mais pas en exclure — et un titre externe ne peut
+    /// alors plus être rapproché d'un élément d'une bibliothèque exclue : il apparaît comme
+    /// absent, au lieu de mener vers ce que l'administrateur voulait retirer des rangées.
+    /// </remarks>
     /// <param name="libraryManager">Gestionnaire de bibliothèque.</param>
+    /// <param name="excludedLibraries">Bibliothèques à ne pas indexer.</param>
     /// <returns>L'index construit.</returns>
-    public static LibraryTitleIndex Build(ILibraryManager libraryManager)
+    public static LibraryTitleIndex Build(
+        ILibraryManager libraryManager,
+        IReadOnlyCollection<Guid>? excludedLibraries = null)
     {
         ArgumentNullException.ThrowIfNull(libraryManager);
 
         var index = new LibraryTitleIndex();
 
-        // Une seule requête, sans images ni données utilisateur : seuls les ProviderIds sont chargés.
-        var items = libraryManager.GetItemList(new InternalItemsQuery
+        if (excludedLibraries is null || excludedLibraries.Count == 0)
+        {
+            index.AddRange(Query(libraryManager, null));
+            return index;
+        }
+
+        foreach (var library in libraryManager.GetUserRootFolder().Children)
+        {
+            if (!excludedLibraries.Contains(library.Id))
+            {
+                index.AddRange(Query(libraryManager, library.Id));
+            }
+        }
+
+        return index;
+    }
+
+    /// <summary>
+    /// Interroge les films et séries, de toute la bibliothèque ou d'une seule.
+    /// </summary>
+    private static IReadOnlyList<BaseItem> Query(ILibraryManager libraryManager, Guid? ancestorId)
+    {
+        // Sans images ni données utilisateur : seuls les ProviderIds sont chargés.
+        return libraryManager.GetItemList(new InternalItemsQuery
         {
             IncludeItemTypes = new[] { BaseItemKind.Movie, BaseItemKind.Series },
             Recursive = true,
             EnableTotalRecordCount = false,
+            AncestorIds = ancestorId.HasValue ? new[] { ancestorId.Value } : Array.Empty<Guid>(),
             DtoOptions = new DtoOptions(false)
             {
                 Fields = new[] { ItemFields.ProviderIds },
@@ -56,14 +90,16 @@ public sealed class LibraryTitleIndex
                 EnableUserData = false
             }
         });
+    }
 
+    private void AddRange(IReadOnlyList<BaseItem> items)
+    {
         foreach (var item in items)
         {
-            index.Add(item);
+            Add(item);
         }
 
-        index.Count = items.Count;
-        return index;
+        Count += items.Count;
     }
 
     /// <summary>
