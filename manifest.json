@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/icon.png",
     "versions": [
       {
+        "version": "3.7.0.0",
+        "changelog": "Nouveautes :\n- Ordre des rangees configurable",
+        "targetAbi": "10.11.11.0",
+        "sourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/3.7.0/JellyfinCarouselPlugin.zip",
+        "checksum": "63a124055db91b94209ebc4c5ac1920e",
+        "timestamp": "2026-08-28T09:34:04Z"
+      },
+      {
         "version": "3.6.0.0",
         "changelog": "Nouveautes :\n- Theme clair, silhouettes de chargement, fondu des affiches, accroche\n- Les bibliotheques exclues couvrent enfin le Top mondial\n- Purger le cache d'affiches apres chaque recalcul\n- Bilan du recalcul visible dans la page de configuration",
         "targetAbi": "10.11.11.0",
