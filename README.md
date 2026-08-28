@@ -183,7 +183,8 @@ l'ouverture de la page d'accueil.
 | Réglage | Défaut | À quoi ça sert |
 |---|---|---|
 | Afficher les rangées | ✅ | Interrupteur principal du rendu sur l'accueil |
-| Ordre des rangées | Top serveur, Top mondial, De retour, Jamais vu, Parce que…, Studios, Genres | Réorganisable avec les flèches ▲▼ |
+| Ordre des rangées | Top serveur, De tous les temps, Top mondial, De retour, Jamais vu, Parce que…, Studios, Genres | Réorganisable avec les flèches ▲▼ |
+| Ordonner aussi les sections de Jellyfin | ❌ | Ajoute « Continuer à regarder », « Derniers ajouts »… à la liste. Attention : cet ordre est global et remplace alors l'arrangement propre à chaque utilisateur |
 | Titre — Top du serveur | `Top 10 sur ce serveur` | Titre de la rangée |
 | Titre — Top mondial | `Top 10 mondial` | Titre de la rangée |
 | Couleur d'accentuation | `#775BF4` | Contour du chiffre au survol et anneau de focus. Seule une valeur `#rrggbb` est retenue, sinon le violet par défaut s'applique |

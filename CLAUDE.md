@@ -335,10 +335,18 @@ si l'administrateur supprime la collection, elle est recréée au recalcul suiva
   (`local`, `global`, `returning`, `neverplayed`, `because`, `studios`, `genres`) et un
   constructeur ; `RowOrder` décide de la séquence. La normalisation est **volontairement
   tolérante** : identifiants inconnus ignorés, rangées absentes ajoutées à la fin dans l'ordre
-  par défaut. Une valeur enregistrée par une version antérieure reste donc valable quand une
-  rangée nouvelle apparaît, au lieu de la faire disparaître en silence. La même règle est
+  par défaut, **pas à la fin** : sans cela, une configuration antérieure à l'apparition d'une
+  rangée verrait toute la disposition basculer le jour de la mise à jour. La même règle est
   réimplémentée dans `configPage.html` (`normalizeOrder`) : les deux listes d'identifiants
   doivent rester synchronisées.
+- **Sections natives déplaçables** (`ManageNativeSections`, désactivé par défaut) : l'ordre
+  accepte alors des entrées `native:resume`, `native:latestmedia`… `.section{N}` étant
+  purement positionnel — jellyfin-web n'écrit aucun type dans le DOM — le type se lit dans
+  les préférences du compte (`getDisplayPreferences('usersettings', …)`,
+  `CustomPrefs.homesection{i}`). **C'est un réglage par utilisateur ramené à un ordre
+  global :** l'activer impose l'ordre de l'administrateur à tout le monde, d'où l'opt-in
+  explicite. Déplacer une section native est sans risque, `loadSection` la retrouvant par
+  `querySelector('.section' + i)` où qu'elle soit dans le conteneur.
 - **Thème clair** : les chiffres du rang sont des blancs translucides, invisibles sur fond
   clair. Aucun media query ne peut le dire — les thèmes Jellyfin ne suivent pas
   `prefers-color-scheme` — donc `isLightBackground()` lit la couleur **réelle** de la page, en
@@ -530,6 +538,21 @@ reviennent vides. De même pour `EnableUserData` et `EnableImages`. Ne demander 
 
 **Pas de calcul dans un contrôleur :** le contrôleur lit l'instantané publié. Ajouter un calcul
 synchrone dans une route bloquerait le serveur sur les grandes bibliothèques.
+
+**Ne pas déplacer ce qui est déjà en place :** `placeRows` sort sans rien toucher quand
+l'ordre du DOM est déjà celui demandé. Chaque déplacement produit des mutations dans
+`.homeSectionsContainer`, et d'autres plugins l'observent pour réinjecter leur contenu — un
+plugin dont la garde d'idempotence est faible peut alors ajouter une deuxième fois sa
+bannière à chaque retour sur l'accueil. Nous ne dupliquons rien nous-mêmes (`insertBefore`
+déplace un nœud, il ne le copie pas), mais nous pouvions déclencher la duplication chez le
+voisin. La contiguïté n'est pas exigée pour ce raccourci : si un autre plugin s'est glissé
+entre deux de nos rangées, l'ordre demandé reste respecté, et le laisser tranquille vaut
+mieux que de le déplacer sans cesse.
+
+**Le placement regroupe les nœuds gérés en un bloc contigu :** au premier placement,
+`placeRows` rassemble nos rangées et les sections natives ordonnées à l'emplacement du
+premier d'entre eux. Quand aucune native n'est gérée, l'ancrage retombe **après** la section
+des bibliothèques ; insérer avant les ferait descendre sous nos rangées.
 
 **L'ordre des rangées est écrit dans un champ caché :** la liste de réorganisation de la page
 de configuration ne fait qu'écrire dans `#RowOrder`, seul champ que les tableaux de chargement
