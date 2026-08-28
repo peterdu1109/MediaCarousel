@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/icon.png",
     "versions": [
       {
+        "version": "3.9.5.0",
+        "changelog": "Corrections :\n- La gouttiere ne depend plus d un jeton du theme",
+        "targetAbi": "10.11.11.0",
+        "sourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/3.9.5/JellyfinCarouselPlugin.zip",
+        "checksum": "41aee83b3b26a45d5e1653f3bf3529c1",
+        "timestamp": "2026-08-28T18:50:03Z"
+      },
+      {
         "version": "3.9.4.0",
         "changelog": "Corrections :\n- Chiffres evides detaches par un halo, rangees plus aerees",
         "targetAbi": "10.11.11.0",
