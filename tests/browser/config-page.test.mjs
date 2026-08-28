@@ -195,6 +195,30 @@ const reordered = await page.evaluate(() => ({
   focusStillOnArrow: document.activeElement.className.indexOf('mcCfg-order-down') !== -1
 }));
 
+// Cocher la gestion des natives : la liste doit s'etendre sans bousculer nos rangees.
+await page.evaluate(() => {
+  const cb = document.querySelector('#ManageNativeSections');
+  cb.checked = true;
+  cb.dispatchEvent(new Event('change'));
+});
+const withNatives = await page.evaluate(() => {
+  const names = Array.from(document.querySelectorAll('#mcRowOrder .mcCfg-order-name')).map(e => e.textContent);
+  return {
+    count: names.length,
+    names: names,
+    plugins: names.filter(n => n.indexOf('Jellyfin — ') !== 0)
+  };
+});
+
+await page.evaluate(() => {
+  const cb = document.querySelector('#ManageNativeSections');
+  cb.checked = false;
+  cb.dispatchEvent(new Event('change'));
+});
+const withoutNatives = await page.evaluate(() => ({
+  count: document.querySelectorAll('#mcRowOrder .mcCfg-order-name').length
+}));
+
 // Enregistrement : les champs d'un groupe masque doivent tout de meme etre sauvegardes.
 await page.evaluate(() => {
   document.querySelector('#LocalTopSize').value = '15';
@@ -290,23 +314,37 @@ check('DOUBLON: avertissement leve sur les valeurs par defaut',
 check('DOUBLON: le message nomme le classement concerne',
   alertShown.text.indexOf('Top mondial') >= 0, alertShown.text);
 check('DOUBLON: renommer la collection leve l avertissement', alertCleared === true, alertCleared);
-check('ORDRE: la valeur est normalisee au chargement',
-  loaded.rowOrderValue === 'genres,local,because,global,returning,neverplayed,studios', loaded.rowOrderValue);
+// Les entrees absentes sont reinserees a leur place par defaut, pas ajoutees a la
+// fin : sans cela, activer la gestion des natives les ferait toutes basculer sous
+// nos rangees, et une rangee nouvelle deplacerait la disposition de l'utilisateur.
+check('ORDRE: les entrees absentes reviennent a leur place par defaut',
+  loaded.rowOrderValue === 'genres,global,returning,neverplayed,local,studios,because', loaded.rowOrderValue);
 check('ORDRE: les 7 rangees sont listees', loaded.rowOrderNames.length === 7, loaded.rowOrderNames);
 check('ORDRE: l ordre configure est respecte a l affichage',
-  loaded.rowOrderNames[0] === 'Par genre' && loaded.rowOrderNames[1] === 'Top du serveur', loaded.rowOrderNames);
+  loaded.rowOrderNames[0] === 'Par genre' && loaded.rowOrderNames[1] === 'Top mondial', loaded.rowOrderNames);
 check('ORDRE: les rangs sont numerotes de 1 a 7',
   loaded.rowOrderRanks.join(',') === '1,2,3,4,5,6,7', loaded.rowOrderRanks);
 check('ORDRE: on ne monte pas la premiere ni ne descend la derniere',
   loaded.firstUpDisabled === true && loaded.lastDownDisabled === true, loaded);
 check('ORDRE: descendre echange bien les deux rangees',
-  reordered.names[0] === 'Top du serveur' && reordered.names[1] === 'Par genre', reordered.names);
+  reordered.names[0] === 'Top mondial' && reordered.names[1] === 'Par genre', reordered.names);
 check('ORDRE: le champ suit le deplacement',
-  reordered.value.indexOf('local,genres') === 0, reordered.value);
+  reordered.value.indexOf('global,genres') === 0, reordered.value);
 check('ORDRE: le focus reste sur la rangee deplacee',
   reordered.focusStillOnArrow === true, reordered);
 check('ORDRE: l ordre modifie est enregistre',
-  saved.RowOrder.indexOf('local,genres') === 0, saved.RowOrder);
+  saved.RowOrder.indexOf('global,genres') === 0, saved.RowOrder);
+
+check('NATIF: la case etend la liste aux sections de Jellyfin',
+  withNatives.count === 16, withNatives.count);
+check('NATIF: les sections natives sont nommees lisiblement',
+  withNatives.names.indexOf('Jellyfin — Continuer à regarder') !== -1, withNatives.names);
+check('NATIF: les bibliotheques arrivent en tete par defaut',
+  withNatives.names[0] === 'Jellyfin — Mes médias', withNatives.names[0]);
+check('NATIF: nos rangees gardent leur ordre relatif',
+  withNatives.plugins.join(',') === reordered.names.join(','), withNatives.plugins);
+check('NATIF: decocher revient aux seules rangees du plugin',
+  withoutNatives.count === 7, withoutNatives.count);
 
 check('a11y: chaque aria-describedby pointe une cible', loaded.describedBy === true, loaded.describedBy);
 check('aucun champ orphelin hors des tableaux de chargement',

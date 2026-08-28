@@ -157,6 +157,7 @@ public class TopListsController : ControllerBase
             BecauseRowTitle = config.BecauseRowTitle,
             BecauseRowSize = config.BecauseRowSize,
             RowOrder = config.RowOrder,
+            ManageNativeSections = config.ManageNativeSections,
             HideNativeSections = config.HideNativeHomeSections
         });
     }

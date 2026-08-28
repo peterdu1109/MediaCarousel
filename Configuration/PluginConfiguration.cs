@@ -262,12 +262,33 @@ public class PluginConfiguration : BasePluginConfiguration
     /// par des virgules.
     /// </summary>
     /// <remarks>
-    /// Identifiants reconnus : <c>local</c>, <c>global</c>, <c>returning</c>,
-    /// <c>neverplayed</c>, <c>because</c>, <c>studios</c>, <c>genres</c>. Le client ignore
-    /// les identifiants inconnus et ajoute en fin les rangées absentes de la liste : une
-    /// valeur d'une version précédente reste valable quand une rangée nouvelle apparaît.
+    /// <para>
+    /// Rangées du plugin : <c>local</c>, <c>global</c>, <c>returning</c>, <c>neverplayed</c>,
+    /// <c>because</c>, <c>studios</c>, <c>genres</c>. Quand <see cref="ManageNativeSections"/>
+    /// est actif, les sections de Jellyfin s'y ajoutent sous la forme <c>native:resume</c>,
+    /// <c>native:latestmedia</c>… d'après <c>HomeSectionType</c>.
+    /// </para>
+    /// <para>
+    /// Le client ignore les identifiants inconnus et réinsère les entrées absentes **à leur
+    /// place par défaut**, pas à la fin : une configuration enregistrée avant qu'une rangée
+    /// existe ne fait pas basculer la disposition le jour où elle apparaît.
+    /// </para>
     /// </remarks>
     public string RowOrder { get; set; } = "local,global,returning,neverplayed,because,studios,genres";
+
+    /// <summary>
+    /// Obtient ou définit une valeur indiquant si l'ordre configuré porte aussi sur les
+    /// sections natives de Jellyfin.
+    /// </summary>
+    /// <remarks>
+    /// Désactivé par défaut, et volontairement : la disposition des sections natives est un
+    /// réglage <b>par utilisateur</b> (<c>homesection{i}</c> dans ses préférences
+    /// d'affichage), alors que cet ordre est global. L'activer signifie donc que l'ordre
+    /// choisi ici l'emporte sur l'arrangement que chaque utilisateur s'est fait. Tant qu'il
+    /// est inactif, le plugin insère ses rangées sous les bibliothèques et ne touche à rien
+    /// d'autre.
+    /// </remarks>
+    public bool ManageNativeSections { get; set; }
 
     /// <summary>
     /// Obtient ou définit une valeur indiquant si les classements sont affichés directement

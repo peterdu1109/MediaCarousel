@@ -82,6 +82,9 @@ public sealed class ClientOptionsDto
     /// <summary>Obtient ou définit l'ordre des rangées, identifiants séparés par des virgules.</summary>
     public string RowOrder { get; set; } = string.Empty;
 
+    /// <summary>Obtient ou définit une valeur indiquant si l'ordre porte aussi sur les sections natives.</summary>
+    public bool ManageNativeSections { get; set; }
+
     /// <summary>
     /// Obtient ou définit une valeur indiquant si les sections natives de Jellyfin
     /// doivent être masquées sur la page d'accueil.

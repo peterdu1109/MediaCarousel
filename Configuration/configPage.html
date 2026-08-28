@@ -130,7 +130,7 @@
                         </button>
                         <button is="emby-button" type="button" class="mcCfg-tab" role="tab" id="tabHome"
                                 aria-controls="panelHome" aria-selected="false">
-                            <span>Affichage</span><span class="mcCfg-tab-count">5</span>
+                            <span>Affichage</span><span class="mcCfg-tab-count">7</span>
                         </button>
                         <button is="emby-button" type="button" class="mcCfg-tab" role="tab" id="tabRefresh"
                                 aria-controls="panelRefresh" aria-selected="false">
@@ -475,6 +475,21 @@
                                 sections natives de Jellyfin.
                             </p>
 
+                            <div class="checkboxContainer">
+                                <label class="emby-checkbox-label">
+                                    <input is="emby-checkbox" type="checkbox" id="ManageNativeSections"
+                                           aria-describedby="hintManageNative" />
+                                    <span>Ordonner aussi les sections de Jellyfin</span>
+                                </label>
+                                <div class="fieldDescription" id="hintManageNative">
+                                    Ajoute « Continuer à regarder », « Derniers ajouts », etc. à la liste
+                                    ci-dessous, pour tout disposer librement. À savoir : l'ordre des
+                                    sections natives est normalement un réglage <strong>de chaque
+                                    utilisateur</strong> ; l'activer ici impose votre ordre à tout le monde.
+                                    Une section qu'un utilisateur n'affiche pas est simplement ignorée.
+                                </div>
+                            </div>
+
                             <div class="inputContainer">
                                 <label class="inputLabel" for="RowOrder">Ordre des rangées</label>
                                 <!-- La liste ci-dessous écrit dans ce champ ; c'est lui que les
@@ -626,7 +641,7 @@
                     'EnableLocalTop', 'EnableGlobalTop', 'GlobalTopLibraryOnly',
                     'EnableStudioRow', 'EnableGenreRows', 'EnableReturningRow', 'EnableNeverPlayedRow',
                     'EnableBecauseRow',
-                    'EnableHomeRows', 'HideNativeHomeSections', 'SyncCollections'
+                    'EnableHomeRows', 'HideNativeHomeSections', 'ManageNativeSections', 'SyncCollections'
                 ];
                 var numbers = [
                     'LocalTopSize', 'LocalTopWindowDays', 'MaxPlaysCountedPerUser', 'CandidatesPerUser',
@@ -793,8 +808,15 @@
                 // Ordre des rangées
                 // ----------------------------------------------------------
 
-                /* Doit rester synchronisé avec DEFAULT_ROW_ORDER de media-carousel.js. */
-                var rowIds = ['local', 'global', 'returning', 'neverplayed', 'because', 'studios', 'genres'];
+                /* Doivent rester synchronisés avec PLUGIN_ROW_ORDER et FULL_ROW_ORDER
+                   de media-carousel.js. */
+                var pluginRowIds = ['local', 'global', 'returning', 'neverplayed', 'because', 'studios', 'genres'];
+                var fullRowIds = [
+                    'native:smalllibrarytiles', 'native:librarybuttons',
+                    'local', 'global', 'returning', 'neverplayed', 'because', 'studios', 'genres',
+                    'native:activerecordings', 'native:resume', 'native:resumeaudio',
+                    'native:resumebook', 'native:livetv', 'native:nextup', 'native:latestmedia'
+                ];
                 var rowNames = {
                     local: 'Top du serveur',
                     global: 'Top mondial',
@@ -802,24 +824,39 @@
                     neverplayed: 'Jamais vu',
                     because: 'Parce que tu as regardé…',
                     studios: 'Par studio',
-                    genres: 'Par genre'
+                    genres: 'Par genre',
+                    'native:smalllibrarytiles': 'Jellyfin — Mes médias',
+                    'native:librarybuttons': 'Jellyfin — Boutons de bibliothèque',
+                    'native:activerecordings': 'Jellyfin — Enregistrements en cours',
+                    'native:resume': 'Jellyfin — Continuer à regarder',
+                    'native:resumeaudio': 'Jellyfin — Continuer à écouter',
+                    'native:resumebook': 'Jellyfin — Continuer la lecture',
+                    'native:livetv': 'Jellyfin — TV en direct',
+                    'native:nextup': 'Jellyfin — Prochainement',
+                    'native:latestmedia': 'Jellyfin — Derniers ajouts'
                 };
 
-                /* Même règle que le client : inconnus ignorés, manquants ajoutés à la fin.
-                   Une valeur enregistrée par une version précédente reste donc valable. */
+                function activeRowIds() {
+                    return field('ManageNativeSections').checked ? fullRowIds : pluginRowIds;
+                }
+
+                /* Même règle que le client : inconnus ignorés, manquants réinsérés à leur
+                   place par défaut — pas à la fin, sinon activer la gestion des natives les
+                   ferait toutes basculer sous nos rangées. */
                 function normalizeOrder(value) {
+                    var reference = activeRowIds();
                     var order = [];
 
                     String(value || '').toLowerCase().split(',').forEach(function (raw) {
                         var id = raw.replace(/^\s+|\s+$/g, '');
-                        if (rowIds.indexOf(id) !== -1 && order.indexOf(id) === -1) {
+                        if (reference.indexOf(id) !== -1 && order.indexOf(id) === -1) {
                             order.push(id);
                         }
                     });
 
-                    rowIds.forEach(function (id) {
+                    reference.forEach(function (id, index) {
                         if (order.indexOf(id) === -1) {
-                            order.push(id);
+                            order.splice(Math.min(index, order.length), 0, id);
                         }
                     });
 
@@ -1122,6 +1159,7 @@
                         wireTabs();
                         wireToggles();
                         wireRowOrder();
+                        field('ManageNativeSections').addEventListener('change', renderRowOrder);
                         renderRowOrder();
                         refreshTabStates();
                         refreshDuplicateAlert();

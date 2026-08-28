@@ -690,26 +690,85 @@
         }
     }
 
-    function insertRows(container, rows) {
-        var anchor = findLibrarySection(container);
+    /**
+     * Place nos rangées et les sections natives dans l'ordre configuré.
+     *
+     * Les nœuds concernés sont regroupés en un bloc contigu, à l'emplacement du premier
+     * d'entre eux. Ce qui n'est pas géré — la rangée d'un autre plugin, par exemple — n'est
+     * jamais déplacé ni supprimé, mais se retrouve après ce bloc s'il était intercalé :
+     * dès lors que l'administrateur fixe un ordre, il faut bien que cet ordre soit contigu.
+     *
+     * Déplacer une section native est sans risque : `loadSection` de jellyfin-web la
+     * retrouve par `querySelector('.section' + i)` sur le conteneur, où qu'elle s'y trouve.
+     */
+    function placeRows(container, rows, order, nativeLayout) {
+        var byId = {};
 
-        // Les rangées sont insérées à la suite, dans l'ordre, juste sous les bibliothèques.
-        var librarySection = anchor;
-
-        rows.forEach(function (row, index) {
-            // Décalage d'entrée : les rangées arrivent l'une après l'autre plutôt que
-            // toutes d'un bloc. Plafonné, sinon la dernière attendrait trop longtemps.
-            row.style.animationDelay = Math.min(index * 55, 400) + 'ms';
-
-            if (anchor) {
-                anchor.insertAdjacentElement('afterend', row);
-            } else {
-                container.insertBefore(row, container.firstChild);
-            }
-            anchor = row;
+        rows.forEach(function (row) {
+            byId[row.mcRowId] = byId[row.mcRowId] || [];
+            byId[row.mcRowId].push(row);
         });
 
-        return librarySection;
+        var managed = [];
+
+        order.forEach(function (id) {
+            if (byId[id]) {
+                managed = managed.concat(byId[id]);
+                return;
+            }
+
+            if (id.indexOf(NATIVE_PREFIX) !== 0) {
+                return;
+            }
+
+            var type = id.substring(NATIVE_PREFIX.length);
+            if (!Object.prototype.hasOwnProperty.call(nativeLayout, type)) {
+                return;
+            }
+
+            // Absente de la page de cet utilisateur : simplement ignorée.
+            var section = container.querySelector('.section' + nativeLayout[type]);
+            if (section && section.parentNode === container) {
+                managed.push(section);
+            }
+        });
+
+        if (!managed.length) {
+            return null;
+        }
+
+        // Le bloc prend la place du premier nœud déjà présent, à défaut celle des
+        // bibliothèques, à défaut le début du conteneur.
+        var anchor = null;
+        for (var i = 0; i < managed.length && !anchor; i++) {
+            if (managed[i].parentNode === container) {
+                anchor = managed[i];
+            }
+        }
+
+        if (!anchor) {
+            // Aucune native identifiée : on retombe sur la disposition historique, juste
+            // APRÈS les bibliothèques — les placer avant les ferait descendre.
+            var library = findLibrarySection(container);
+            anchor = library ? library.nextSibling : container.firstChild;
+        }
+
+        var marker = document.createComment('mc-order');
+        container.insertBefore(marker, anchor);
+
+        managed.forEach(function (node) {
+            container.insertBefore(node, marker);
+        });
+
+        container.removeChild(marker);
+
+        // Décalage d'entrée : nos rangées arrivent l'une après l'autre plutôt que toutes
+        // d'un bloc. Plafonné, sinon la dernière attendrait trop longtemps.
+        rows.forEach(function (row, index) {
+            row.style.animationDelay = Math.min(index * 55, 400) + 'ms';
+        });
+
+        return findLibrarySection(container);
     }
 
     // ------------------------------------------------------------------
@@ -968,42 +1027,114 @@
                 }
             };
 
-            rowOrder(opts.RowOrder).forEach(function (id) {
+            var order = rowOrder(opts.RowOrder, opts.ManageNativeSections === true);
+
+            order.forEach(function (id) {
+                if (!Object.prototype.hasOwnProperty.call(builders, id)) {
+                    // Une section native : elle existe déjà dans la page, rien à construire.
+                    return;
+                }
+
+                var before = rows.length;
                 builders[id]();
+
+                // Les rangées de genre sont plusieurs sous un même identifiant.
+                for (var i = before; i < rows.length; i++) {
+                    rows[i].mcRowId = id;
+                }
             });
 
-            return rows;
+            return { rows: rows, order: order };
         });
     }
 
-    /* L'ordre par défaut sert aussi de liste de référence : ce qui n'y est pas n'existe pas. */
-    var DEFAULT_ROW_ORDER = ['local', 'global', 'returning', 'neverplayed', 'because', 'studios', 'genres'];
+    /* Préfixe des sections construites par Jellyfin lui-même. */
+    var NATIVE_PREFIX = 'native:';
+
+    /* Nos rangées seules : l'ordre de référence quand les natives ne sont pas gérées. */
+    var PLUGIN_ROW_ORDER = ['local', 'global', 'returning', 'neverplayed', 'because', 'studios', 'genres'];
 
     /**
-     * Normalise l'ordre configuré : les identifiants inconnus sont ignorés, les rangées
-     * absentes sont ajoutées à la fin dans l'ordre par défaut. Une valeur enregistrée par
-     * une version précédente reste ainsi valable quand une rangée nouvelle apparaît, au
-     * lieu de la faire silencieusement disparaître.
+     * Ordre de référence quand les natives sont gérées : les bibliothèques, nos rangées,
+     * puis les autres sections. C'est la disposition par défaut de Jellyfin, complétée.
      */
-    function rowOrder(configured) {
+    var FULL_ROW_ORDER = [
+        'native:smalllibrarytiles', 'native:librarybuttons',
+        'local', 'global', 'returning', 'neverplayed', 'because', 'studios', 'genres',
+        'native:activerecordings', 'native:resume', 'native:resumeaudio', 'native:resumebook',
+        'native:livetv', 'native:nextup', 'native:latestmedia'
+    ];
+
+    /* Ce que Jellyfin place dans homesection{i} quand l'utilisateur n'a rien choisi.
+       Doit rester aligné sur DEFAULT_SECTIONS de jellyfin-web. */
+    var NATIVE_DEFAULT_LAYOUT = [
+        'smalllibrarytiles', 'resume', 'resumeaudio', 'resumebook',
+        'livetv', 'nextup', 'latestmedia', 'none'
+    ];
+
+    /**
+     * Normalise l'ordre configuré : les identifiants inconnus sont ignorés, et les entrées
+     * absentes sont réinsérées **à leur place par défaut**, pas à la fin.
+     *
+     * C'est ce qui rend les mises à jour indolores : une configuration enregistrée avant
+     * que les sections natives soient déplaçables ne cite aucune d'elles, et les remettre
+     * à la fin les ferait toutes basculer sous nos rangées — la disposition de
+     * l'utilisateur changerait sans qu'il ait rien demandé.
+     */
+    function rowOrder(configured, manageNatives) {
+        var reference = manageNatives ? FULL_ROW_ORDER : PLUGIN_ROW_ORDER;
         var order = [];
         var parts = String(configured || '').toLowerCase().split(',');
         var i;
 
         for (i = 0; i < parts.length; i++) {
             var id = parts[i].replace(/^\s+|\s+$/g, '');
-            if (DEFAULT_ROW_ORDER.indexOf(id) !== -1 && order.indexOf(id) === -1) {
+            if (reference.indexOf(id) !== -1 && order.indexOf(id) === -1) {
                 order.push(id);
             }
         }
 
-        for (i = 0; i < DEFAULT_ROW_ORDER.length; i++) {
-            if (order.indexOf(DEFAULT_ROW_ORDER[i]) === -1) {
-                order.push(DEFAULT_ROW_ORDER[i]);
+        for (i = 0; i < reference.length; i++) {
+            if (order.indexOf(reference[i]) === -1) {
+                order.splice(Math.min(i, order.length), 0, reference[i]);
             }
         }
 
         return order;
+    }
+
+    /**
+     * Associe chaque type de section native à son indice dans la page de l'utilisateur.
+     *
+     * `.section0`, `.section1`… sont purement positionnels : jellyfin-web n'écrit aucun
+     * type dans le DOM. Le type vit dans les préférences d'affichage du compte
+     * (`homesection{i}`), qui sont propres à chaque utilisateur — d'où cette requête.
+     */
+    function loadNativeLayout() {
+        if (typeof window.ApiClient.getDisplayPreferences !== 'function') {
+            return Promise.resolve({});
+        }
+
+        return window.ApiClient
+            .getDisplayPreferences('usersettings', window.ApiClient.getCurrentUserId(), 'emby')
+            .then(function (prefs) {
+                var custom = (prefs && prefs.CustomPrefs) || {};
+                var map = {};
+
+                for (var i = 0; i < NATIVE_DEFAULT_LAYOUT.length; i++) {
+                    var type = custom['homesection' + i] || NATIVE_DEFAULT_LAYOUT[i];
+
+                    // Un type répété ne peut désigner qu'une section : la première gagne.
+                    if (type && type !== 'none' && !Object.prototype.hasOwnProperty.call(map, type)) {
+                        map[type] = i;
+                    }
+                }
+
+                return map;
+            }, function () {
+                // Sans préférences lisibles, les natives restent où Jellyfin les a mises.
+                return {};
+            });
     }
 
     function render() {
@@ -1026,15 +1157,21 @@
             injectStyles(opts.HighlightColor);
             onLightBackground = isLightBackground();
 
-            return collectRows(opts).then(function (rows) {
+            var natives = opts.ManageNativeSections === true
+                ? loadNativeLayout()
+                : Promise.resolve({});
+
+            return Promise.all([collectRows(opts), natives]).then(function (results) {
+                var collected = results[0];
+                var nativeLayout = results[1];
                 var target = findSectionsContainer();
 
                 // La page a pu être reconstruite pendant le chargement des données.
-                if (!target || target.querySelector('.' + ROW_CLASS) || !rows.length) {
+                if (!target || target.querySelector('.' + ROW_CLASS) || !collected.rows.length) {
                     return null;
                 }
 
-                var librarySection = insertRows(target, rows);
+                var librarySection = placeRows(target, collected.rows, collected.order, nativeLayout);
 
                 if (opts.HideNativeSections) {
                     hideNativeSections(target, librarySection);

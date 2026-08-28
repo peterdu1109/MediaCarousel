@@ -28,6 +28,19 @@ const stub = () => {
 
   window.ApiClient = {
     getCurrentUserId: () => 'user-1',
+    // Disposition native de CE compte : section0 bibliotheques, 1 reprise,
+    // 2 derniers ajouts, 3 prochainement.
+    getDisplayPreferences: () => {
+      window.__prefsCalls = (window.__prefsCalls || 0) + 1;
+      return Promise.resolve({
+      CustomPrefs: {
+        homesection0: 'smalllibrarytiles',
+        homesection1: 'resume',
+        homesection2: 'latestmedia',
+        homesection3: 'nextup'
+        }
+      });
+    },
     serverId: () => 'server-1',
     getUrl: (path, params) => path + '?' + new URLSearchParams(params || {}).toString(),
     getImageUrl: (id, o) => 'img://' + id + '/' + o.type,
@@ -42,6 +55,7 @@ const stub = () => {
           ReturningRowTitle: 'De retour cette semaine', ReturningRowSize: 20,
           NeverPlayedRowTitle: 'Jamais vu', NeverPlayedRowSize: 20,
           RowOrder: window.__rowOrder,
+          ManageNativeSections: window.__manageNatives === true,
           HideNativeSections: window.__hideNative === true,
           LocalRowTitle: 'Top 10 sur ce serveur', GlobalRowTitle: 'Top 10 mondial',
           StudioRowTitle: 'Par studio',
@@ -308,14 +322,56 @@ await fresh.close();
 // ajouter en fin les rangees absentes de la liste.
 const ordered = await browser.newPage({ viewport: { width: 1280, height: 900 } });
 ordered.on('pageerror', e => errors.push('pageerror(ordered): ' + e.message));
-await ordered.addInitScript(() => { window.__rowOrder = 'studios,because,inconnue,local'; });
+await ordered.addInitScript(() => {
+  window.__rowOrder = 'genres,local,global,returning,neverplayed,because,studios,inconnue';
+});
 await ordered.goto('file://' + path.join(here, 'home.html'));
 await ordered.evaluate(stub);
 await ordered.evaluate(script);
 await ordered.waitForFunction(() => document.querySelectorAll('.mc-row').length === 9, { timeout: 8000 });
 const orderedTitles = await ordered.evaluate(
   () => Array.from(document.querySelectorAll('.mc-row-title')).map(t => t.textContent));
+// Sans gestion des natives, celles-ci gardent leur place et nos rangees restent groupees.
+const orderedNative = await ordered.evaluate(() => {
+  const kids = Array.from(document.querySelector('#homeTab .homeSectionsContainer').children);
+  const seen = [];
+  kids.forEach(k => {
+    const tag = k.classList.contains('mc-row') ? 'mc-row'
+      : (k.className.match(/section\d+/) || [null])[0];
+    if (tag && (tag !== 'mc-row' || seen[seen.length - 1] !== 'mc-row')) seen.push(tag);
+  });
+  return seen;
+});
 await ordered.close();
+
+// Gestion des natives : l'ordre configure vaut pour tout le monde.
+const nativePage = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+nativePage.on('pageerror', e => errors.push('pageerror(native): ' + e.message));
+await nativePage.addInitScript(() => {
+  window.__manageNatives = true;
+  // Reprise en tete, puis les bibliotheques, nos rangees, prochainement, derniers ajouts.
+  window.__rowOrder = 'native:resume,local,native:smalllibrarytiles,global,returning,'
+    + 'neverplayed,because,studios,genres,native:nextup,native:latestmedia';
+});
+await nativePage.goto('file://' + path.join(here, 'home.html'));
+await nativePage.evaluate(stub);
+await nativePage.evaluate(script);
+await nativePage.waitForFunction(() => document.querySelectorAll('.mc-row').length === 9, { timeout: 8000 });
+await nativePage.evaluate(() => {
+  const c = document.querySelector('#homeTab .homeSectionsContainer');
+  const foreign = document.createElement('div');
+  foreign.className = 'verticalSection otherPluginRow';
+  c.appendChild(foreign);
+});
+const nativeOrder = await nativePage.evaluate(() => ({
+  layout: Array.from(document.querySelector('#homeTab .homeSectionsContainer').children)
+    .map(k => k.classList.contains('mc-row') ? 'mc-row'
+      : (k.className.match(/section\d+/) || ['autre'])[0])
+    .filter(t => t !== 'autre'),
+  prefsRequested: window.__prefsCalls === 1,
+  foreignSurvives: !!document.querySelector('.otherPluginRow')
+}));
+await nativePage.close();
 
 // Un theme clair : la couleur est lue sur la page, pas sur un media query que les
 // themes Jellyfin ne declenchent jamais.
@@ -596,11 +652,22 @@ check('ANIM: sans animation, la rangee reste visible',
   reduced.rowOpacity === '1' && reduced.rowVisible === true, reduced);
 
 check('ORDRE: les rangees suivent la configuration',
-  orderedTitles.slice(0, 3).join(' | ')
-    === 'Par studio | Parce que tu as regardé Blade <Runner> | Top 10 sur ce serveur', orderedTitles);
-check('ORDRE: les rangees absentes de la liste sont ajoutees en fin',
-  orderedTitles[3] === 'Top 10 mondial' && orderedTitles[orderedTitles.length - 1] === 'Vide', orderedTitles);
+  orderedTitles.slice(0, 4).join(' | ')
+    === 'Science-fiction | Comédie | Vide | Top 10 sur ce serveur', orderedTitles);
 check('ORDRE: un identifiant inconnu ne casse rien', orderedTitles.length === 9, orderedTitles.length);
+check('ORDRE: sans gestion des natives, elles ne bougent pas',
+  orderedNative.join(',') === 'section0,mc-row,section1,section2,section3', orderedNative);
+
+check('NATIF: l ordre configure interleave nos rangees et les natives',
+  nativeOrder.layout.join(',')
+    === 'section1,mc-row,section0,mc-row,mc-row,mc-row,mc-row,mc-row,mc-row,mc-row,mc-row,section3,section2',
+  nativeOrder.layout);
+check('NATIF: la disposition du compte est bien lue',
+  nativeOrder.prefsRequested === true, nativeOrder);
+check('NATIF: une section absente du compte est ignoree',
+  nativeOrder.layout.indexOf('section4') === -1, nativeOrder.layout);
+check('NATIF: la rangee d un autre plugin survit au reordonnancement',
+  nativeOrder.foreignSurvives === true, nativeOrder);
 
 check('VISUEL: silhouettes en place avant le chargement differe',
   beforeScroll.skeletons === 6 && beforeScroll.skeletonHidden === 'true', beforeScroll);
