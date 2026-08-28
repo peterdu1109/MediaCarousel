@@ -80,6 +80,17 @@ public class PosterController : ControllerBase
 
         if (cached is not null && System.IO.File.Exists(cached))
         {
+            // La purge du cache se fonde sur la date d'accès, que les systèmes montés en
+            // noatime ne maintiennent pas : elle est posée ici, à chaque service.
+            try
+            {
+                System.IO.File.SetLastAccessTimeUtc(cached, DateTime.UtcNow);
+            }
+            catch (IOException)
+            {
+                // Un horodatage qui ne se pose pas ne vaut pas de priver l'appelant de l'image.
+            }
+
             return ServeFile(cached, fileName);
         }
 
