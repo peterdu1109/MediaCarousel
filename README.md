@@ -24,6 +24,7 @@ Media Carousel génère **tout seul** plusieurs rangées et les tient à jour.
 | 💎 | **Jamais vu** | Les films bien notés que personne n'a encore lancés |
 | 🎬 | **Par studio** | Les studios les mieux représentés, avec leur logo — variantes fusionnées |
 | 🎭 | **Par genre** | Une rangée par genre, les plus fournis en premier |
+| ❤️ | **Parce que tu as regardé…** | Le dernier film terminé par **chaque** utilisateur, et d'autres titres du même genre |
 
 <div align="center">
   <em>Rang en grand chiffre, affiche, défilement horizontal — sous tes bibliothèques.</em>
@@ -94,7 +95,7 @@ Ensuite, plus rien à faire : le recalcul se relance au démarrage du serveur et
 | Lectures comptées par utilisateur | `3` | Empêche qu'un seul spectateur qui revoit un film en boucle fausse le classement |
 | Titres candidats par utilisateur | `100` | Plus haut = plus précis, mais plus long à calculer |
 | Utilisateurs exclus | — | Comptes de service, invités |
-| Bibliothèques exclues des classements | — | Vidéos perso, etc. Porte sur le Top du serveur, « jamais vu » et « de retour » ; studios, genres et Top mondial couvrent toute la bibliothèque |
+| Bibliothèques exclues des classements | — | Vidéos perso, etc. Porte sur le Top du serveur, « jamais vu », « de retour », studios et genres. Seul le Top mondial couvre encore toute la bibliothèque |
 
 Les **épisodes comptent pour leur série** : c'est la série qui apparaît au classement, pas
 l'épisode isolé.
@@ -130,10 +131,15 @@ jamais la liste.
 | Afficher « jamais vu » | ✅ | Films bien notés jamais lancés sur le serveur |
 | Note minimale | `7.0` | Note de la communauté, sur 10 |
 | Nombre de films | `20` | |
+| Afficher « parce que tu as regardé… » | ✅ | Rangée personnelle, propre à chaque compte |
+| Titre de la rangée | `Parce que tu as regardé {0}` | `{0}` est remplacé par le titre du film |
+| Nombre de titres | `20` | |
 
 « Jamais vu » est limité aux films : pour une série, Jellyfin ne la considère lue que si
 **tous** ses épisodes le sont, donc une série abandonnée en cours de route remonterait
-comme jamais vue.
+comme jamais vue. « Parce que tu as regardé… » l'est pour la même raison, et reste absente
+tant qu'un utilisateur n'a terminé aucun film. C'est la seule rangée que **chaque compte
+voit différemment** : elle est calculée par le navigateur, pas par la tâche planifiée.
 
 </details>
 

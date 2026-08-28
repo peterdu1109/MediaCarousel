@@ -49,7 +49,8 @@ MediaCarousel/
 │   ├── CatalogResponseDto.cs          # Contrat de sortie des catalogues
 │   ├── PluginStatusDto.cs             # Contrat de la page de configuration
 │   ├── ClientOptionsDto.cs            # Réglages d'affichage, lisibles sans droits admin
-│   └── AssetsController.cs            # Sert media-carousel.js depuis les ressources
+│   ├── AssetsController.cs            # Sert media-carousel.js depuis les ressources
+│   └── PosterController.cs            # Relaie et met en cache les affiches TMDB
 ├── Configuration/
 │   ├── PluginConfiguration.cs         # Modèle de config + enums
 │   └── configPage.html                # UI admin, ressource embarquée
@@ -73,7 +74,11 @@ MediaCarousel/
 │   ├── ITopListStore.cs / TopListStore.cs   # Publication atomique des classements
 │   ├── ICatalogStore.cs / CatalogStore.cs   # Publication atomique des catalogues
 │   ├── CatalogBuilder.cs                    # Agrégation studios / genres
+│   ├── CatalogCounter.cs                    # Comptage par nom et par bibliothèque
+│   ├── CatalogRepresentative.cs             # Choix de la variante affichée
 │   ├── StudioNameNormalizer.cs              # Regroupement des variantes d'un studio
+│   ├── TopListAccumulator.cs                # Règle de classement du Top du serveur
+│   ├── PosterProxy.cs                       # Validation des adresses d'affiches
 │   ├── LibraryRowBuilder.cs                 # Rangées « jamais vu » et « de retour »
 │   ├── SnapshotStorage.cs                   # Persistance JSON des instantanés
 │   ├── LocalTopListBuilder.cs               # Agrégation des statistiques de lecture
@@ -164,10 +169,41 @@ comme jamais vue. Sur-échantillonnage `size × 20` car la plupart des mieux not
 des épisodes donne donc directement le rang des séries. La limite de 1000 épisodes garantit
 qu'une saison ajoutée d'un bloc ne masque pas les séries suivantes.
 
+### Parce que tu as regardé
+
+La seule rangée **propre à chaque compte**, et la seule qui ne soit pas précalculée : un
+classement par utilisateur n'a rien à faire dans un instantané partagé. Elle vit donc
+entièrement dans le client, en deux requêtes à l'API native de Jellyfin — le dernier film
+terminé par l'utilisateur (`SortBy=DatePlayed`, `IsPlayed=true`), puis d'autres titres
+partageant ses genres (`Genres`, pipe-délimité, `ExcludeItemIds` pour retirer le film de
+départ). Aucun code serveur, aucune ligne dans la tâche planifiée.
+
+Limitée aux films pour la même raison que « jamais vu » : Jellyfin ne considère une série lue
+que si tous ses épisodes le sont, si bien qu'une série abandonnée passerait pour le dernier
+titre regardé. Deux genres au plus dans le filtre — au-delà, il devient si large qu'il ne
+recommande plus rien de particulier. La rangée est simplement absente tant que l'utilisateur
+n'a terminé aucun film.
+
 ### Studios et genres
 
-`CatalogBuilder` s'appuie sur `ILibraryManager.GetStudios` / `GetGenres`, qui renvoient un
-`QueryResult<(BaseItem, ItemCounts)>`.
+**Les décomptes de Jellyfin ne sont pas utilisables.** Dans `BaseItemRepository.GetItemValues`
+(vérifié sur le tag `v10.11.11`), l'`ItemCounts` attaché à chaque studio ou genre est calculé à
+partir d'un `itemCountQuery` qui **n'est corrélé à aucune ligne du résultat** : le `Select` sur
+l'entrée courante ne le référence jamais. La même valeur est donc renvoyée pour toutes les
+entrées — le nombre de titres possédant un studio, quel qu'il soit. Le code amont porte un
+`// TODO: This is bad refactor!` à cet endroit.
+
+Conséquence, tant que le plugin s'y fiait : les studios étaient classés par **nombre de variantes
+d'écriture** de leur nom, pas par nombre de titres, et `MinItemsPerStudio` / `MinItemsPerGenre` ne
+filtraient rien ou filtraient tout.
+
+`CatalogBuilder` recompte donc lui-même. `GetStudios` / `GetGenres` ne servent plus qu'à
+**l'identité** : l'identifiant qui fait le lien et le logo qui décide de la variante affichée.
+Le comptage passe par un balayage **bibliothèque par bibliothèque** (`AncestorIds`), ce qui a trois
+effets : les décomptes sont justes, `ExcludedLibraryIds` s'applique enfin aux catalogues, et chaque
+entrée porte sa ventilation par bibliothèque. `Studios` et `Genres` sont des colonnes de l'élément
+— des chaînes jointes par `|` — donc aucun `ItemFields` supplémentaire n'est nécessaire pour les
+lire. Les deux catalogues sont produits par un seul balayage : ils se comptent sur les mêmes titres.
 
 **Les variantes d'un même studio sont fusionnées.** Les fournisseurs de métadonnées écrivent
 la même société sous plusieurs libellés — « Warner Bros. », « Warner Bros. Pictures »,
@@ -191,10 +227,17 @@ clé vide.
 et genres partagent donc `NameGroup`, qui **additionne** les décomptes des variantes au lieu de
 ne garder que la plus grosse — sans quoi un genre éclaté en deux graphies affichait la moitié de
 ses titres et pouvait passer sous `MinItemsPerGenre`. Les genres se regroupent sur le nom
-insensible à la casse, les studios sur la clé normalisée. Ces agrégations groupent sur toute la bibliothèque : elles
-sont calculées une fois par la tâche planifiée, jamais par requête. Elles ne portent aucune donnée
-de titre — seulement des noms et des décomptes — et la visibilité réelle reste appliquée par
-Jellyfin quand l'utilisateur ouvre la page d'un studio ou d'un genre.
+insensible à la casse, les studios sur la clé normalisée. Ces agrégations sont calculées une fois par la
+tâche planifiée, jamais par requête.
+
+**La visibilité est appliquée à la lecture.** L'agrégation reste globale, mais chaque entrée porte
+son décompte ventilé par bibliothèque : `CatalogController` n'additionne que les bibliothèques
+visibles par l'appelant — `GetUserRootFolder().GetChildren(user, true)` — puis reclasse avant de
+tronquer, sans quoi la limite retiendrait les entrées d'après un ordre calculé sur des titres
+interdits. Une entrée dont le total visible tombe à zéro disparaît de la rangée, au lieu d'y
+afficher un nom menant à une page vide. Un instantané agrégé avant la mise à jour ne porte aucune
+ventilation : sa provenance est *inconnue*, pas vide, et il passe alors avec son total d'origine
+plutôt que de vider les rangées entre le redémarrage et le premier recalcul.
 
 Les **titres** d'une rangée de genre ne sont pas précalculés : le script les demande à l'API native
 de Jellyfin (`/Items?GenreIds=…`), une requête indexée, paginée et déjà filtrée par utilisateur —
@@ -232,6 +275,15 @@ si l'administrateur supprime la collection, elle est recréée au recalcul suiva
 `/MediaCarousel/media-carousel.js` (route stable, contrairement au nom du dossier d'installation).
 
 - **Aucun calcul** : le script appelle `Top/Local`, `Top/Global` et `ClientOptions`, puis rend.
+- **Les affiches externes passent par le serveur.** Le Top mondial peut classer des titres absents
+  de la bibliothèque ; leur affiche vient de TMDB. Servie telle quelle, elle ferait tomber le
+  navigateur de **chaque utilisateur** sur `image.tmdb.org` — leur adresse IP part chez un tiers, et
+  un client sans accès Internet sortant n'affiche rien. `PosterController` télécharge une fois, met
+  en cache dans le dossier de données, et sert ensuite depuis le disque. Le client n'envoie jamais
+  d'URL : seulement un nom de fichier, validé par `PosterProxy` (`^[A-Za-z0-9._-]{1,128}\.(jpg|jpeg|png|webp)$`,
+  refus de `..`), et l'hôte distant est une constante du plugin — aucune requête ne peut être
+  détournée vers une adresse choisie par l'appelant. Une adresse que le plugin ne sait pas relayer
+  est laissée intacte : mieux vaut une affiche chargée depuis sa source qu'une vignette vide.
 - **`ClientOptions` existe parce que** `GET /Plugins/{id}/Configuration` exige `RequiresElevation` :
   un utilisateur standard ne peut pas lire la configuration du plugin. Le contrat `ClientOptionsDto`
   n'expose que ce qui sert au rendu — jamais la clé d'API de la source externe.
@@ -343,7 +395,7 @@ dotnet run --project tests/ScriptTag.Tests -c Release
 cd tests/browser && npm install && node home-rows.test.mjs && node config-page.test.mjs
 ```
 
-Trois suites sans framework — 88 assertions — exécutées en CI avant la publication ; voir
+Trois suites sans framework — 169 assertions — exécutées en CI avant la publication ; voir
 `tests/README.md`. L'une charge un extrait des règles d'ElegantFin **après** les nôtres pour
 vérifier que la cohabitation tient.
 Les deux suites navigateur chargent le vrai `media-carousel.js` et le vrai `configPage.html`
@@ -465,14 +517,23 @@ sur des attributs dupliqués.
 **Filtrage de visibilité au service, pas au calcul :** le classement est global ; c'est à la lecture
 que `BaseItem.IsVisible(user)` retire ce que l'appelant n'a pas le droit de voir.
 
-**`ExcludedLibraryIds` ne couvre pas tout :** le réglage porte sur les classements construits à
-partir de la bibliothèque — Top du serveur, jamais vu, de retour — parce que ce sont les seuls
-calculs à itérer sur des éléments. Studios et genres passent par `GetStudios`/`GetGenres`, qui
-agrègent tout le serveur, et le rapprochement du Top mondial indexe lui aussi l'ensemble. Le nom
-de la propriété reste `ExcludedLibraryIds` : le renommer perdrait silencieusement les valeurs
-déjà écrites dans `MediaCarousel.xml` et casserait le tableau `lists` de la page de
-configuration. C'est le libellé de la page — « Bibliothèques exclues des classements » — et sa
-description qui énoncent la portée réelle.
+**Ne jamais se fier à `ItemCounts` de `GetStudios` / `GetGenres` :** la valeur est identique pour
+toutes les entrées (voir « Studios et genres »). Tout classement ou seuil bâti dessus est faux sans
+le paraître. Le plugin recompte lui-même ; si une future version de Jellyfin corrige le calcul, le
+balayage restera nécessaire pour la ventilation par bibliothèque.
+
+**Le proxy d'affiches ne prend jamais d'URL du client :** `PosterController` reçoit un nom de
+fichier, le valide, et reconstruit l'adresse distante à partir d'une constante. Accepter une URL
+— même « vérifiée » — rouvrirait une SSRF, et une liste blanche d'hôtes se contourne
+(`image.tmdb.org.attaquant.test`). La route est anonyme parce qu'une balise `<img src>` ne
+transmet aucun en-tête d'authentification, comme pour le script.
+
+**`ExcludedLibraryIds` ne couvre pas encore le Top mondial :** le réglage porte désormais sur le
+Top du serveur, « jamais vu », « de retour » **et** les catalogues studios / genres, qui le
+respectent depuis que leur comptage balaie bibliothèque par bibliothèque. Reste le rapprochement du
+Top mondial, qui indexe toute la bibliothèque via `LibraryTitleIndex`. Le nom de la propriété reste
+`ExcludedLibraryIds` : le renommer perdrait silencieusement les valeurs déjà écrites dans
+`MediaCarousel.xml` et casserait le tableau `lists` de la page de configuration.
 
 **La couleur d'accent est validée avant d'entrer dans le CSS :** `HighlightColor` est concaténée
 dans la feuille de styles construite par `buildCss`. `safeAccent` n'accepte que
