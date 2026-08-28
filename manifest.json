@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/icon.png",
     "versions": [
       {
+        "version": "3.8.0.0",
+        "changelog": "Nouveautes :\n- Rangee « de tous les temps » a cote du top du moment\n- Sections natives de Jellyfin deplacables dans l ordre des rangees",
+        "targetAbi": "10.11.11.0",
+        "sourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/3.8.0/JellyfinCarouselPlugin.zip",
+        "checksum": "8511a7b6152b7c58c27958da1df9e43a",
+        "timestamp": "2026-08-28T09:53:58Z"
+      },
+      {
         "version": "3.7.0.0",
         "changelog": "Nouveautes :\n- Ordre des rangees configurable",
         "targetAbi": "10.11.11.0",
