@@ -45,7 +45,8 @@ await page.addInitScript(() => {
           ReturningSeries: { Enabled: true, Count: 4, Source: 'Jellyfin', GeneratedUtc: '2026-08-27T03:00:00Z' },
           NeverPlayed: { Enabled: true, Count: 20, Source: 'Jellyfin', GeneratedUtc: '2026-08-27T03:00:00Z' },
           Studios: { Enabled: true, Count: 18, Source: 'Jellyfin', GeneratedUtc: '2026-08-27T03:00:00Z' },
-          Genres: { Enabled: false, Count: 0, Source: 'Jellyfin', GeneratedUtc: null }
+          Genres: { Enabled: false, Count: 0, Source: 'Jellyfin', GeneratedUtc: null },
+          LastRun: window.__lastRun || { StartedUtc: '2026-08-27T03:00:00Z', DurationSeconds: 12.4, Running: false, Failures: [] }
         });
       }
       return Promise.reject(new Error('route inattendue ' + url));
@@ -193,6 +194,32 @@ const refresh = await page.evaluate(() => ({
   feedback: document.querySelector('#mcFeedback').textContent
 }));
 
+// Second passage : le Top mondial a echoue au dernier recalcul. La tolerance aux
+// pannes conserve l'instantane precedent, donc seule cette tuile peut le dire.
+// addInitScript et non evaluate : le rechargement remet le contexte JS a zero,
+// seul un script d'initialisation survit a la navigation.
+await page.addInitScript(() => {
+  window.__lastRun = {
+    StartedUtc: '2026-08-27T03:00:00Z',
+    DurationSeconds: 8.1,
+    Running: false,
+    Failures: [{ Section: 'Top mondial', Message: 'TMDB a répondu 401 : clé d\u2019API invalide.' }]
+  };
+});
+await page.reload();
+await page.evaluate(() => {
+  document.querySelector('#mediaCarouselConfigPage').dispatchEvent(new Event('pageshow'));
+});
+await page.waitForFunction(() => document.querySelectorAll('.mcCfg-tile').length === 4, { timeout: 5000 });
+const failedRun = await page.evaluate(() => {
+  const t = document.querySelector('.mcCfg-tile');
+  return {
+    state: t.getAttribute('data-state'),
+    value: t.querySelector('.mcCfg-tile-value').textContent,
+    detail: t.querySelector('.mcCfg-tile-detail').textContent
+  };
+});
+
 await browser.close();
 
 let failed = 0;
@@ -202,6 +229,13 @@ check('version affichee', loaded.version === 'v3.0.1.0', loaded.version);
 check('4 tuiles de synthese', loaded.tiles.length === 4, loaded.tiles.length);
 check('tuile dernier calcul en temps relatif', loaded.tiles[0].state === 'ok'
   && /il y a|instant/.test(loaded.tiles[0].value), loaded.tiles[0]);
+check('ECHEC SILENCIEUX: la tuile passe en alerte', failedRun.state === 'warn', failedRun);
+check('ECHEC SILENCIEUX: la section en echec est nommee',
+  /Top mondial/.test(failedRun.value), failedRun.value);
+check('ECHEC SILENCIEUX: le message de l erreur est affiche',
+  /401/.test(failedRun.detail), failedRun.detail);
+check('tuile dernier calcul : la duree mesuree est affichee',
+  /12 s/.test(loaded.tiles[0].detail), loaded.tiles[0]);
 check('tuile Top serveur chiffree', loaded.tiles[1].value === '10', loaded.tiles[1]);
 check('tuile Top mondial : desactive lisible sans couleur',
   loaded.globalTileState === 'off' && loaded.globalTileValue === '—', loaded);

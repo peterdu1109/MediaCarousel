@@ -121,6 +121,16 @@ await page.evaluate(stub);
 await page.evaluate(script);
 await page.waitForFunction(() => document.querySelectorAll('.mc-row').length === 9, { timeout: 8000 });
 
+// Avant tout defilement, les rangees de genre differees montrent des silhouettes.
+const beforeScroll = await page.evaluate(() => {
+  const rows = Array.from(document.querySelectorAll('.mc-row'));
+  const genreRow = rows[rows.length - 1];
+  return {
+    skeletons: genreRow.querySelectorAll('.mc-skeleton').length,
+    skeletonHidden: genreRow.querySelector('.mc-skeleton')?.getAttribute('aria-hidden')
+  };
+});
+
 // Les rangees de genre se remplissent au defilement : on parcourt la page.
 await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
 await page.waitForFunction(
@@ -180,6 +190,7 @@ const result = await page.evaluate(() => {
     listRoles: rows[0].querySelector('.mc-strip').getAttribute('role') === 'list'
       && card.getAttribute('role') === 'listitem',
     unavailableIsLink: rows[1].querySelector('.mc-unavailable').tagName === 'A',
+    skeletonsLeft: document.querySelectorAll('.mc-row .mc-skeleton').length,
     posterHeight: Math.round(rows[0].querySelector('.mc-poster').getBoundingClientRect().height),
     rankFill: getComputedStyle(rows[0]).getPropertyValue('--mc-rank-fill').trim(),
     rankOutline: getComputedStyle(rows[0]).getPropertyValue('--mc-rank-outline').trim(),
@@ -292,6 +303,25 @@ const freshRows = await fresh.evaluate(() => ({
 }));
 await fresh.close();
 
+// Un theme clair : la couleur est lue sur la page, pas sur un media query que les
+// themes Jellyfin ne declenchent jamais.
+const light = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+light.on('pageerror', e => errors.push('pageerror(light): ' + e.message));
+await light.goto('file://' + path.join(here, 'home.html'));
+await light.evaluate(() => { document.body.style.background = '#f2f2f2'; });
+await light.evaluate(stub);
+await light.evaluate(script);
+await light.waitForFunction(() => document.querySelectorAll('.mc-row').length === 9, { timeout: 8000 });
+const lightMode = await light.evaluate(() => {
+  const row = document.querySelector('.mc-row');
+  const outline = getComputedStyle(row).getPropertyValue('--mc-rank-outline').trim();
+  return {
+    flagged: document.querySelectorAll('.mc-row.mc-on-light').length,
+    outlineIsDark: outline.indexOf('rgba(0,') === 0 || outline.indexOf('rgba(0 ') === 0
+  };
+});
+await light.close();
+
 // Second passage, sections natives masquees.
 const hidePage = await browser.newPage({ viewport: { width: 1280, height: 900 } });
 hidePage.on('pageerror', e => errors.push('pageerror(hide): ' + e.message));
@@ -394,7 +424,18 @@ const styling = await sizing.evaluate(() => {
     hasPlainFocusRule: /\.mc-card:focus,[^{]*\{[^}]*outline:/.test(css),
     focusVisibleOnlyGuard: css.indexOf(':focus:not(:focus-visible)') !== -1,
 
-    posterRatio: poster.getBoundingClientRect().height / poster.getBoundingClientRect().width
+    posterRatio: poster.getBoundingClientRect().height / poster.getBoundingClientRect().width,
+
+    // Fondu des images : meme en erreur (les src de ce banc sont factices), chaque
+    // image doit etre marquee prete, sinon elle resterait transparente a jamais.
+    imagesTotal: document.querySelectorAll('.mc-row img').length,
+    imagesReady: document.querySelectorAll('.mc-row img.mc-ready').length,
+    readyOpacity: getComputedStyle(document.querySelector('.mc-row img.mc-ready')).opacity,
+
+    snapType: getComputedStyle(document.querySelector('.mc-row .mc-strip')).scrollSnapType,
+
+    // Fond sombre : pas de mode clair.
+    lightRows: document.querySelectorAll('.mc-row.mc-on-light').length
   };
 });
 
@@ -539,6 +580,18 @@ check('ANIM: prefers-reduced-motion coupe les transitions',
   reduced.cardTransition === 'none', reduced.cardTransition);
 check('ANIM: sans animation, la rangee reste visible',
   reduced.rowOpacity === '1' && reduced.rowVisible === true, reduced);
+
+check('VISUEL: silhouettes en place avant le chargement differe',
+  beforeScroll.skeletons === 6 && beforeScroll.skeletonHidden === 'true', beforeScroll);
+check('VISUEL: plus aucune silhouette une fois tout charge', result.skeletonsLeft === 0, result.skeletonsLeft);
+check('VISUEL: toutes les images sont marquees pretes',
+  styling.imagesTotal > 0 && styling.imagesReady === styling.imagesTotal, styling);
+check('VISUEL: une image prete est opaque', styling.readyOpacity === '1', styling.readyOpacity);
+check('VISUEL: accroche de defilement posee (proximity est la valeur normalisee de « x »)',
+  /^x( proximity)?$/.test(styling.snapType), styling.snapType);
+check('CLAIR: fond sombre, aucun mode clair', styling.lightRows === 0, styling.lightRows);
+check('CLAIR: fond clair detecte sur les 9 rangees', lightMode.flagged === 9, lightMode.flagged);
+check('CLAIR: le contour des chiffres devient sombre', lightMode.outlineIsDark === true, lightMode);
 
 check('CSS: la feuille produit bien des regles', styling.ruleCount > 30, styling.ruleCount);
 check('CSS: accolades equilibrees', styling.bracesBalanced === true, styling.bracesBalanced);

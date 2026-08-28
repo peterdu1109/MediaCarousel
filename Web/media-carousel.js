@@ -100,6 +100,43 @@
     // Styles
     // ------------------------------------------------------------------
 
+    /* Vrai quand le theme hote peint un fond clair. Renseigne par render(). */
+    var onLightBackground = false;
+
+    /**
+     * Determine si le fond effectif de la page est clair.
+     *
+     * Les chiffres du rang sont des blancs translucides : invisibles sur un theme
+     * clair. Aucun media query ne peut le dire — les themes Jellyfin ne suivent pas
+     * prefers-color-scheme — donc la couleur est lue sur la page elle-meme, en
+     * remontant jusqu'au premier fond opaque.
+     */
+    function isLightBackground() {
+        try {
+            var el = document.body;
+            while (el) {
+                var raw = window.getComputedStyle(el).backgroundColor || '';
+                var match = raw.match(/rgba?\(([^)]+)\)/);
+                if (match) {
+                    var parts = match[1].split(',');
+                    var alpha = parts.length > 3 ? parseFloat(parts[3]) : 1;
+                    if (alpha > 0.1) {
+                        var luminance = 0.2126 * parseFloat(parts[0])
+                            + 0.7152 * parseFloat(parts[1])
+                            + 0.0722 * parseFloat(parts[2]);
+                        return luminance > 140;
+                    }
+                }
+                el = el.parentElement;
+            }
+        } catch (error) {
+            // Une couleur illisible n'est pas une raison de casser le rendu.
+        }
+
+        // Le theme par defaut de Jellyfin est sombre.
+        return false;
+    }
+
     function injectStyles(accent) {
         var css = buildCss(accent);
         var existing = document.getElementById(STYLE_ID);
@@ -188,8 +225,12 @@
             '.mc-row .mc-strip-wrap{position:relative;}',
             /* Le padding est répété ici : ElegantFin impose son propre padding-left
                à `.scrollX`, que notre bande porte pour neutraliser le swipe d'onglet. */
+            /* proximity plutot que mandatory : l'accroche aide en fin de geste sans
+               confisquer un defilement libre a la molette ou au doigt. */
             '.mc-row .mc-strip{display:flex;overflow-x:auto;overflow-y:hidden;',
-            'padding:var(--mc-strip-pad-y) var(--mc-side-padding);scrollbar-width:none;-ms-overflow-style:none;}',
+            'padding:var(--mc-strip-pad-y) var(--mc-side-padding);scrollbar-width:none;-ms-overflow-style:none;',
+            'scroll-snap-type:x proximity;scroll-padding-left:var(--mc-side-padding);}',
+            '.mc-row .mc-strip>*{scroll-snap-align:start;}',
             '.mc-row .mc-strip::-webkit-scrollbar{display:none;}',
             '.mc-row .mc-strip>*{margin-right:var(--mc-gap);}',
             '.mc-row .mc-strip>*:last-child{margin-right:0;}',
@@ -224,8 +265,11 @@
             'border-radius:var(--mc-radius);background:var(--mc-surface);box-shadow:var(--mc-shadow);}',
             /* L'affiche est légèrement agrandie dans son cadre : deux échelles superposées
                donnent de la profondeur là où une seule paraît plate. */
+            /* L'image nait transparente et se fond une fois chargee : le cadre colore
+               tient la place, rien ne surgit. */
             '.mc-row .mc-poster img{width:100%;height:100%;object-fit:cover;display:block;',
-            'transition:transform .45s var(--mc-ease);}',
+            'opacity:0;transition:transform .45s var(--mc-ease),opacity .35s var(--mc-ease);}',
+            '.mc-row .mc-poster img.mc-ready{opacity:1;}',
             '.mc-row .mc-card:hover .mc-poster img,.mc-row .mc-card:focus .mc-poster img,',
             '.mc-row .mc-plain:hover .mc-poster img,.mc-row .mc-plain:focus .mc-poster img{',
             'transform:scale(1.07);}',
@@ -247,7 +291,9 @@
             'background:var(--mc-surface);text-decoration:none;color:inherit;',
             'transition:transform var(--mc-dur) var(--mc-ease),background var(--mc-dur) var(--mc-ease);}',
             '.mc-row .mc-tile:hover{transform:scale(1.05);background:var(--mc-surface-hover);z-index:2;}',
-            '.mc-row .mc-tile img{max-width:100%;max-height:100%;object-fit:contain;display:block;}',
+            '.mc-row .mc-tile img{max-width:100%;max-height:100%;object-fit:contain;display:block;',
+            'opacity:0;transition:opacity .35s var(--mc-ease);}',
+            '.mc-row .mc-tile img.mc-ready{opacity:1;}',
             '.mc-row .mc-tile-name{font-size:var(--mc-label-size);font-weight:600;line-height:1.2;}',
 
             /* Carte simple, utilisée par les rangées de genre. */
@@ -270,6 +316,11 @@
             '.mc-row .mc-card:focus:not(:focus-visible),',
             '.mc-row .mc-tile:focus:not(:focus-visible),',
             '.mc-row .mc-plain:focus:not(:focus-visible){outline:none;transform:none;}',
+
+            /* Silhouettes d'attente des rangees differees : la pulsation ne touche que
+               l'opacite, seule animation qu'un televiseur encaisse sans broncher. */
+            '@keyframes mc-pulse{0%,100%{opacity:.45;}50%{opacity:.9;}}',
+            '.mc-row .mc-skeleton .mc-poster{animation:mc-pulse 1.4s ease-in-out infinite;box-shadow:none;}',
 
             '.mc-row .mc-empty{padding:0 var(--mc-side-padding) 1em;opacity:.6;font-size:.85em;}',
 
@@ -350,6 +401,18 @@
             '.verticalSection.mc-row{margin:0 0 1.6em;}',
             '}',
 
+            /* Fond clair, detecte en JS sur la couleur reelle de la page : les blancs
+               translucides des chiffres y sont invisibles, tout passe en sombre. */
+            '.mc-row.mc-on-light{',
+            '--mc-rank-fill:rgba(0,0,0,.14);',
+            '--mc-rank-outline:rgba(0,0,0,.65);',
+            '--mc-surface:rgba(0,0,0,.06);',
+            '--mc-surface-hover:rgba(0,0,0,.11);',
+            '--mc-scrim:rgba(0,0,0,.55);',
+            '--mc-shadow:0 3px 10px rgba(0,0,0,.18);',
+            '--mc-shadow-hover:0 6px 16px rgba(0,0,0,.25);',
+            '}',
+
             '@media (hover:none){.mc-row .mc-arrow{display:none;}',
             '.mc-row .mc-card:hover,.mc-row .mc-tile:hover,.mc-row .mc-plain:hover{transform:none;}}',
 
@@ -358,8 +421,8 @@
                sans quoi elles resteraient figées sur l'image de départ, invisibles. */
             '@media (prefers-reduced-motion:reduce){',
             '.mc-row .mc-card,.mc-row .mc-tile,.mc-row .mc-plain,',
-            '.mc-row .mc-poster,.mc-row .mc-poster img,.mc-row .mc-arrow{transition:none;}',
-            '.verticalSection.mc-row{animation:none;}',
+            '.mc-row .mc-poster,.mc-row .mc-poster img,.mc-row .mc-tile img,.mc-row .mc-arrow{transition:none;}',
+            '.verticalSection.mc-row,.mc-row .mc-skeleton .mc-poster{animation:none;}',
             '.mc-row .mc-card:hover,.mc-row .mc-tile:hover,.mc-row .mc-plain:hover,',
             '.mc-row .mc-card:focus,.mc-row .mc-plain:focus{transform:none;}',
             '.mc-row .mc-card:hover .mc-poster img,.mc-row .mc-plain:hover .mc-poster img{transform:none;}',
@@ -448,7 +511,7 @@
         var section = document.createElement('div');
         var headingId = 'mc-row-title-' + (++sequence);
 
-        section.className = 'verticalSection ' + ROW_CLASS;
+        section.className = 'verticalSection ' + ROW_CLASS + (onLightBackground ? ' mc-on-light' : '');
         section.setAttribute('aria-labelledby', headingId);
 
         section.innerHTML =
@@ -464,6 +527,7 @@
             + '</div>';
 
         wireArrows(section);
+        watchImages(section.querySelector('.mc-strip'));
         return section;
     }
 
@@ -500,11 +564,45 @@
         window.setTimeout(refresh, 800);
     }
 
+    /**
+     * Fait apparaitre chaque image en fondu une fois chargee, au lieu de la laisser
+     * surgir. L'evenement load ne remonte pas en bulle mais se capture ; une image
+     * deja en cache est marquee immediatement, une image en erreur aussi — une
+     * vignette cassee vaut mieux qu'une vignette invisible pour toujours.
+     */
+    function watchImages(root) {
+        function ready(img) {
+            img.className += img.className.indexOf('mc-ready') === -1 ? ' mc-ready' : '';
+        }
+
+        var images = root.querySelectorAll('img');
+        for (var i = 0; i < images.length; i++) {
+            if (images[i].complete) {
+                ready(images[i]);
+            }
+        }
+
+        if (!root.mcWatchesImages) {
+            root.mcWatchesImages = true;
+            root.addEventListener('load', function (event) {
+                if (event.target && event.target.tagName === 'IMG') {
+                    ready(event.target);
+                }
+            }, true);
+            root.addEventListener('error', function (event) {
+                if (event.target && event.target.tagName === 'IMG') {
+                    ready(event.target);
+                }
+            }, true);
+        }
+    }
+
     function fillRow(section, cardsHtml, emptyMessage) {
         var strip = section.querySelector('.mc-strip');
 
         if (cardsHtml) {
             strip.innerHTML = cardsHtml;
+            watchImages(strip);
         } else {
             strip.innerHTML = '';
             var empty = document.createElement('p');
@@ -733,6 +831,15 @@
         return pattern.indexOf('{0}') === -1 ? pattern : pattern.replace('{0}', name);
     }
 
+    /** Silhouettes d'attente, aux dimensions exactes des cartes qu'elles precedent. */
+    function skeletonCards(count) {
+        var html = '';
+        for (var i = 0; i < count; i++) {
+            html += '<span class="mc-plain mc-skeleton" aria-hidden="true"><span class="mc-poster"></span></span>';
+        }
+        return html;
+    }
+
     /**
      * Les rangées de genre sont remplies quand elles approchent du champ de vision,
      * pour ne pas déclencher toutes les requêtes au chargement de la page.
@@ -841,7 +948,9 @@
             }
 
             results[5].forEach(function (genre) {
-                var row = buildRow(genre.Name, '');
+                // Des silhouettes occupent la bande en attendant le chargement differe :
+                // une rangee titree mais vide ressemble a une panne.
+                var row = buildRow(genre.Name, skeletonCards(6));
                 rows.push(row);
                 deferGenreRow(row, genre, opts.GenreRowItemCount || 20);
             });
@@ -868,6 +977,7 @@
             }
 
             injectStyles(opts.HighlightColor);
+            onLightBackground = isLightBackground();
 
             return collectRows(opts).then(function (rows) {
                 var target = findSectionsContainer();
