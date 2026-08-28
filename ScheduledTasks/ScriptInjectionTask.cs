@@ -211,7 +211,12 @@ public sealed class ScriptInjectionTask : IScheduledTask
                 return;
             }
 
-            File.WriteAllText(path, updated);
+            // index.html est le point d'entrée de toute l'interface web : une coupure pendant
+            // l'écriture le laisserait tronqué et Jellyfin ne chargerait plus du tout. Le fichier
+            // temporaire est créé dans le même répertoire pour que le remplacement soit atomique.
+            var temporary = path + ".mediacarousel.tmp";
+            File.WriteAllText(temporary, updated);
+            File.Move(temporary, path, overwrite: true);
 #pragma warning disable CA2254 // Le message est un littéral choisi par l'appelant, pas une interpolation.
             _logger.LogInformation(successMessage, path);
 #pragma warning restore CA2254
@@ -221,6 +226,11 @@ public sealed class ScriptInjectionTask : IScheduledTask
             _logger.LogWarning(
                 "Accès refusé à {Path}. Installez le plugin « File Transformation » pour intégrer les rangées sans écrire sur le disque.",
                 path);
+        }
+        catch (IOException ex)
+        {
+            // Le remplacement a échoué : index.html reste dans son état d'origine.
+            _logger.LogWarning(ex, "Écriture de {Path} impossible ; le fichier est inchangé.", path);
         }
     }
 
