@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace JellyfinCarouselPlugin.Models;
 
@@ -18,7 +19,18 @@ public sealed class CatalogEntry
     public string Name { get; set; } = string.Empty;
 
     /// <summary>
-    /// Obtient ou définit le nombre de films et séries rattachés.
+    /// Obtient ou définit le nombre de films et séries rattachés, toutes bibliothèques confondues.
     /// </summary>
     public int ItemCount { get; set; }
+
+    /// <summary>
+    /// Obtient ou définit le nombre de titres rattachés, ventilé par bibliothèque.
+    /// </summary>
+    /// <remarks>
+    /// L'agrégation est globale, mais la lecture ne l'est pas : à la requête, seules les
+    /// bibliothèques visibles par l'appelant sont additionnées, et une entrée qui n'existe
+    /// que dans une bibliothèque interdite disparaît de la rangée au lieu d'y afficher un
+    /// nom menant à une page vide.
+    /// </remarks>
+    public Dictionary<Guid, int> CountsByLibrary { get; set; } = new();
 }

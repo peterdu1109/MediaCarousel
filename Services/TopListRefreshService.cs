@@ -163,20 +163,22 @@ public sealed class TopListRefreshService
     {
         try
         {
+            if (!config.EnableStudioRow && !config.EnableGenreRows)
+            {
+                return;
+            }
+
+            // Les deux catalogues se comptent sur les mêmes titres : un seul balayage les produit.
+            var (studios, genres) = _catalogBuilder.Build(config, cancellationToken);
+
             if (config.EnableStudioRow)
             {
-                _catalogStore.Publish(_catalogBuilder.BuildStudios(
-                    config.StudioRowSize,
-                    config.MinItemsPerStudio,
-                    cancellationToken));
+                _catalogStore.Publish(studios);
             }
 
             if (config.EnableGenreRows)
             {
-                _catalogStore.Publish(_catalogBuilder.BuildGenres(
-                    config.GenreRowCount,
-                    config.MinItemsPerGenre,
-                    cancellationToken));
+                _catalogStore.Publish(genres);
             }
         }
         catch (OperationCanceledException)
