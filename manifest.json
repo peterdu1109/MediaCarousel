@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/icon.png",
     "versions": [
       {
+        "version": "3.5.0.0",
+        "changelog": "Nouveautes :\n- Dimensionnement adaptatif et rendu compatible Tizen",
+        "targetAbi": "10.11.11.0",
+        "sourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/3.5.0/JellyfinCarouselPlugin.zip",
+        "checksum": "96d61bed924b8d920985e625306340db",
+        "timestamp": "2026-08-28T05:57:43Z"
+      },
+      {
         "version": "3.4.0.0",
         "changelog": "Nouveautes :\n- Rangee « parce que tu as regarde… »\n- Relayer les affiches externes au lieu de les faire charger par les clients\nCorrections :\n- Filtrer studios et genres selon les droits de l'utilisateur\n- Compter les studios et genres au lieu de croire Jellyfin",
         "targetAbi": "10.11.11.0",
