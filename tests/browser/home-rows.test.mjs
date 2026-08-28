@@ -180,12 +180,12 @@ const result = await page.evaluate(() => {
     listRoles: rows[0].querySelector('.mc-strip').getAttribute('role') === 'list'
       && card.getAttribute('role') === 'listitem',
     unavailableIsLink: rows[1].querySelector('.mc-unavailable').tagName === 'A',
-    posterHeight: rows[0].querySelector('.mc-poster').getBoundingClientRect().height,
+    posterHeight: Math.round(rows[0].querySelector('.mc-poster').getBoundingClientRect().height),
     rankFill: getComputedStyle(rows[0]).getPropertyValue('--mc-rank-fill').trim(),
     rankOutline: getComputedStyle(rows[0]).getPropertyValue('--mc-rank-outline').trim(),
     accentDefault: getComputedStyle(rows[0]).getPropertyValue('--mc-accent').trim(),
-    genrePosterHeight: rows[6].querySelector('.mc-plain .mc-poster').getBoundingClientRect().height,
-    tileHeight: rows[5].querySelector('.mc-tile').getBoundingClientRect().height
+    genrePosterHeight: Math.round(rows[6].querySelector('.mc-plain .mc-poster').getBoundingClientRect().height),
+    tileHeight: Math.round(rows[5].querySelector('.mc-tile').getBoundingClientRect().height)
   };
 });
 
@@ -265,7 +265,7 @@ const theme = await themed.evaluate(() => {
     rowMarginBottom: getComputedStyle(row).marginBottom,
     // Le rayon du theme doit etre repris.
     posterRadius: getComputedStyle(poster).borderTopLeftRadius,
-    posterHeight: poster.getBoundingClientRect().height,
+    posterHeight: Math.round(poster.getBoundingClientRect().height),
     // La gouttiere passe desormais par la marge des cartes, `gap` n'existant pas
     // en flexbox avant Chromium 84 : le jeton du theme doit s'y retrouver.
     cardGutter: getComputedStyle(strip.querySelector('.mc-card')).marginRight
@@ -397,7 +397,57 @@ const styling = await sizing.evaluate(() => {
     posterRatio: poster.getBoundingClientRect().height / poster.getBoundingClientRect().width
   };
 });
+
+// Le chiffre du rang doit rester entierement visible, « 1 » compris.
+const rank = await sizing.evaluate(() => {
+  const cards = document.querySelectorAll('.mc-row .mc-card');
+  const one = cards[0].querySelector('.mc-rank');
+  const two = cards[1].querySelector('.mc-rank');
+  const oneBox = one.getBoundingClientRect();
+  const posterBox = cards[0].querySelector('.mc-poster').getBoundingClientRect();
+  const style = getComputedStyle(one);
+
+  return {
+    text: one.textContent,
+    position: style.position,
+    zIndex: style.zIndex,
+    // A chasse fixe, le « 1 » occupe exactement la meme largeur que le « 2 ».
+    oneWidth: Math.round(oneBox.width * 100) / 100,
+    twoWidth: Math.round(two.getBoundingClientRect().width * 100) / 100,
+    // L'affiche mord volontairement sur le chiffre, mais ne doit pas l'avaler.
+    overlap: oneBox.right - posterBox.left,
+    posterPosition: getComputedStyle(cards[0].querySelector('.mc-poster')).position
+  };
+});
+
+// Animations : presence, decalage par rangee, et arret complet si le systeme le demande.
+const motion = await sizing.evaluate(() => {
+  const rows = Array.from(document.querySelectorAll('.mc-row'));
+  return {
+    name: getComputedStyle(rows[0]).animationName,
+    delays: rows.slice(0, 4).map(r => r.style.animationDelay),
+    cardTransition: getComputedStyle(document.querySelector('.mc-row .mc-card')).transitionProperty
+  };
+});
 await sizing.close();
+
+const calm = await browser.newPage({ viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce' });
+calm.on('pageerror', e => errors.push('pageerror(calm): ' + e.message));
+await calm.goto('file://' + path.join(here, 'home.html'));
+await calm.evaluate(stub);
+await calm.evaluate(script);
+await calm.waitForFunction(() => document.querySelectorAll('.mc-row').length === 9, { timeout: 8000 });
+const reduced = await calm.evaluate(() => {
+  const row = document.querySelector('.mc-row');
+  return {
+    animationName: getComputedStyle(row).animationName,
+    cardTransition: getComputedStyle(row.querySelector('.mc-card')).transitionProperty,
+    // Une rangee figee sur l'image de depart de l'animation serait invisible.
+    rowOpacity: getComputedStyle(row).opacity,
+    rowVisible: row.getBoundingClientRect().height > 0
+  };
+});
+await calm.close();
 
 await browser.close();
 
@@ -469,6 +519,26 @@ check('D1: une couleur invalide retombe sur le defaut',
   accent.applied === '#775BF4', accent.applied);
 check('D1: aucune declaration injectee dans la feuille',
   !accent.css.includes('body{display:none}') && accent.bodyVisible, accent.css.slice(0, 120));
+
+check('RANG: le chiffre est bien un « 1 »', rank.text === '1', rank.text);
+check('RANG: il est peint devant l affiche', rank.position === 'relative' && rank.zIndex === '1', rank);
+check('RANG: l affiche est positionnee, donc le chiffre doit lui passer devant',
+  rank.posterPosition === 'relative', rank.posterPosition);
+check('RANG: le « 1 » a la meme largeur que le « 2 » (chasse fixe)',
+  rank.oneWidth === rank.twoWidth, rank);
+check('RANG: l affiche mord sur le chiffre', rank.overlap > 0, rank.overlap);
+check('RANG: mais sans l avaler', rank.overlap < rank.oneWidth, rank);
+
+check('ANIM: les rangees entrent en animation', motion.name === 'mc-rise', motion.name);
+check('ANIM: chaque rangee entre apres la precedente',
+  JSON.stringify(motion.delays) === JSON.stringify(['0ms', '55ms', '110ms', '165ms']), motion.delays);
+check('ANIM: les cartes ne transitionnent que sur transform',
+  motion.cardTransition === 'transform', motion.cardTransition);
+check('ANIM: prefers-reduced-motion coupe l entree', reduced.animationName === 'none', reduced.animationName);
+check('ANIM: prefers-reduced-motion coupe les transitions',
+  reduced.cardTransition === 'none', reduced.cardTransition);
+check('ANIM: sans animation, la rangee reste visible',
+  reduced.rowOpacity === '1' && reduced.rowVisible === true, reduced);
 
 check('CSS: la feuille produit bien des regles', styling.ruleCount > 30, styling.ruleCount);
 check('CSS: accolades equilibrees', styling.bracesBalanced === true, styling.bracesBalanced);

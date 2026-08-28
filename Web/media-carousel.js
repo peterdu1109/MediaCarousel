@@ -155,6 +155,8 @@
             '--mc-tile-width:172px;--mc-tile-height:104px;',
             '--mc-rank-size:7rem;--mc-rank-stroke:3px;',
             '--mc-label-size:.78em;--mc-strip-pad-y:1.6em;',
+            /* Courbe et durée communes : une seule décélération pour tout le rendu. */
+            '--mc-ease:cubic-bezier(.22,.61,.36,1);--mc-dur:.28s;',
             '--mc-rank-fill:rgba(255,255,255,.25);',
             '--mc-rank-outline:rgba(255,255,255,.85);',
             '--mc-surface:rgba(255,255,255,.07);',
@@ -167,7 +169,14 @@
             /* Ne pas dépendre de la remise à zéro du client hôte pour nos dimensions. */
             '.mc-row *,.mc-row *::before,.mc-row *::after{box-sizing:border-box;}',
 
-            '.verticalSection.mc-row{margin:0 0 2.4em;}',
+            /* Entrée des rangées : opacité et translation seules — ce sont les deux
+               propriétés que le compositeur traite sans repasser par la mise en page,
+               donc les seules tenables sur le processeur d'un téléviseur. Le décalage
+               par rangée est posé en JS, à l'insertion. */
+            '@keyframes mc-rise{from{opacity:0;transform:translate3d(0,16px,0);}',
+            'to{opacity:1;transform:translate3d(0,0,0);}}',
+            '.verticalSection.mc-row{margin:0 0 2.4em;',
+            'animation:mc-rise .45s var(--mc-ease) both;}',
             /* L'espacement passe par des marges, jamais par `gap` : la propriété n'arrive
                qu'avec Chromium 84 en flexbox, et les téléviseurs Tizen jusqu'à la 6.0
                tournent en Chromium 76 — les cartes s'y colleraient les unes aux autres. */
@@ -187,14 +196,25 @@
 
             /* Carte classée : le chiffre géant est en retrait derrière l'affiche. */
             '.mc-row .mc-card{position:relative;display:flex;align-items:flex-end;flex:0 0 auto;',
-            'text-decoration:none;color:inherit;transition:transform .18s ease;transform-origin:center bottom;}',
-            '.mc-row .mc-card:hover{transform:scale(1.06);z-index:2;}',
+            'text-decoration:none;color:inherit;transform-origin:center bottom;',
+            'transition:transform var(--mc-dur) var(--mc-ease);}',
+            '.mc-row .mc-card:hover{transform:scale(1.045);z-index:2;}',
 
             /* La couleur pleine sert de repli : sans -webkit-text-stroke, le chiffre reste lisible. */
-            '.mc-row .mc-rank{font-size:var(--mc-rank-size);line-height:.72;font-weight:900;font-style:italic;',
+            /* Le chiffre passe DEVANT l'affiche. Sans `position`, il reste un élément
+               statique là où `.mc-poster` est positionné : l'affiche peindrait par-dessus
+               et la marge négative avalerait le glyphe — presque entièrement sur un « 1 »,
+               qui est le plus étroit des chiffres. */
+            '.mc-row .mc-rank{position:relative;z-index:1;',
+            'font-size:var(--mc-rank-size);line-height:.72;font-weight:900;font-style:italic;',
             'color:var(--mc-rank-fill);-webkit-text-stroke:var(--mc-rank-stroke) var(--mc-rank-outline);',
-            'margin:0 -.28em 0 0;user-select:none;pointer-events:none;flex:0 0 auto;}',
-            '.mc-row .mc-card:hover .mc-rank{-webkit-text-stroke-color:var(--mc-accent);}',
+            /* Chiffres à chasse fixe : le « 1 » occupe la même largeur que le « 8 »,
+               sinon le recouvrement, constant, en mange une bien plus grande part. */
+            'font-variant-numeric:tabular-nums;font-feature-settings:"tnum";',
+            'margin:0 -.24em 0 0;user-select:none;pointer-events:none;flex:0 0 auto;',
+            'transition:-webkit-text-stroke-color var(--mc-dur) var(--mc-ease);}',
+            '.mc-row .mc-card:hover .mc-rank,.mc-row .mc-card:focus .mc-rank{',
+            '-webkit-text-stroke-color:var(--mc-accent);}',
             '.mc-row .mc-rank-10{letter-spacing:-.06em;}',
 
             /* display:block est indispensable : hors conteneur flex, un span reste inline
@@ -202,8 +222,16 @@
             '.mc-row .mc-poster{position:relative;display:block;overflow:hidden;flex:0 0 auto;',
             'width:var(--mc-poster-width);height:var(--mc-poster-height);',
             'border-radius:var(--mc-radius);background:var(--mc-surface);box-shadow:var(--mc-shadow);}',
-            '.mc-row .mc-poster img{width:100%;height:100%;object-fit:cover;display:block;}',
-            '.mc-row .mc-card:hover .mc-poster{box-shadow:var(--mc-shadow-hover);}',
+            /* L'affiche est légèrement agrandie dans son cadre : deux échelles superposées
+               donnent de la profondeur là où une seule paraît plate. */
+            '.mc-row .mc-poster img{width:100%;height:100%;object-fit:cover;display:block;',
+            'transition:transform .45s var(--mc-ease);}',
+            '.mc-row .mc-card:hover .mc-poster img,.mc-row .mc-card:focus .mc-poster img,',
+            '.mc-row .mc-plain:hover .mc-poster img,.mc-row .mc-plain:focus .mc-poster img{',
+            'transform:scale(1.07);}',
+            '.mc-row .mc-poster{transition:box-shadow var(--mc-dur) var(--mc-ease);}',
+            '.mc-row .mc-card:hover .mc-poster,.mc-row .mc-card:focus .mc-poster{',
+            'box-shadow:var(--mc-shadow-hover);}',
 
             '.mc-row .mc-fallback{display:flex;align-items:center;justify-content:center;height:100%;',
             'padding:.6em;text-align:center;font-size:var(--mc-label-size);line-height:1.25;opacity:.85;}',
@@ -217,15 +245,15 @@
             'width:var(--mc-tile-width);height:var(--mc-tile-height);border-radius:var(--mc-radius);',
             'display:flex;align-items:center;justify-content:center;padding:.9em;text-align:center;',
             'background:var(--mc-surface);text-decoration:none;color:inherit;',
-            'transition:transform .18s ease,background .18s ease;}',
+            'transition:transform var(--mc-dur) var(--mc-ease),background var(--mc-dur) var(--mc-ease);}',
             '.mc-row .mc-tile:hover{transform:scale(1.05);background:var(--mc-surface-hover);z-index:2;}',
             '.mc-row .mc-tile img{max-width:100%;max-height:100%;object-fit:contain;display:block;}',
             '.mc-row .mc-tile-name{font-size:var(--mc-label-size);font-weight:600;line-height:1.2;}',
 
             /* Carte simple, utilisée par les rangées de genre. */
             '.mc-row .mc-plain{flex:0 0 auto;width:var(--mc-poster-width);text-decoration:none;',
-            'color:inherit;transition:transform .18s ease;}',
-            '.mc-row .mc-plain:hover{transform:scale(1.06);z-index:2;}',
+            'color:inherit;transition:transform var(--mc-dur) var(--mc-ease);}',
+            '.mc-row .mc-plain:hover{transform:scale(1.045);z-index:2;}',
             '.mc-row .mc-plain-name{margin-top:.4em;font-size:var(--mc-label-size);line-height:1.25;',
             'display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}',
 
@@ -237,7 +265,7 @@
                recherché. */
             '.mc-row .mc-card:focus,.mc-row .mc-tile:focus,.mc-row .mc-plain:focus{',
             'outline:3px solid var(--mc-accent);outline-offset:3px;border-radius:6px;z-index:2;}',
-            '.mc-row .mc-card:focus,.mc-row .mc-plain:focus{transform:scale(1.06);}',
+            '.mc-row .mc-card:focus,.mc-row .mc-plain:focus{transform:scale(1.045);}',
             '.mc-row .mc-tile:focus{transform:scale(1.05);background:var(--mc-surface-hover);}',
             '.mc-row .mc-card:focus:not(:focus-visible),',
             '.mc-row .mc-tile:focus:not(:focus-visible),',
@@ -252,10 +280,11 @@
             /* Flèches de défilement : confort souris, masquées au clavier et au tactile. */
             '.mc-row .mc-arrow{position:absolute;top:0;bottom:0;width:3.2vw;min-width:34px;max-width:72px;',
             'border:0;cursor:pointer;background:var(--mc-scrim);color:#fff;font-size:1.5em;line-height:1;',
-            'opacity:0;transition:opacity .18s ease;z-index:3;}',
-            '.mc-row .mc-arrow-prev{left:0;}',
-            '.mc-row .mc-arrow-next{right:0;}',
-            '.mc-row .mc-strip-wrap:hover .mc-arrow{opacity:1;}',
+            'opacity:0;transition:opacity var(--mc-dur) var(--mc-ease),transform var(--mc-dur) var(--mc-ease);',
+            'z-index:3;}',
+            '.mc-row .mc-arrow-prev{left:0;transform:translate3d(-6px,0,0);}',
+            '.mc-row .mc-arrow-next{right:0;transform:translate3d(6px,0,0);}',
+            '.mc-row .mc-strip-wrap:hover .mc-arrow{opacity:1;transform:translate3d(0,0,0);}',
             '.mc-row .mc-arrow:disabled{opacity:0!important;pointer-events:none;}',
 
             /* ------------------------------------------------------------------
@@ -324,8 +353,16 @@
             '@media (hover:none){.mc-row .mc-arrow{display:none;}',
             '.mc-row .mc-card:hover,.mc-row .mc-tile:hover,.mc-row .mc-plain:hover{transform:none;}}',
 
+            /* Rien ne bouge quand le système le demande : ni entrée, ni survol, ni
+               défilement animé. `animation:none` doit aussi retirer l'entrée des rangées,
+               sans quoi elles resteraient figées sur l'image de départ, invisibles. */
             '@media (prefers-reduced-motion:reduce){',
-            '.mc-row .mc-card,.mc-row .mc-tile,.mc-row .mc-plain{transition:none;}',
+            '.mc-row .mc-card,.mc-row .mc-tile,.mc-row .mc-plain,',
+            '.mc-row .mc-poster,.mc-row .mc-poster img,.mc-row .mc-arrow{transition:none;}',
+            '.verticalSection.mc-row{animation:none;}',
+            '.mc-row .mc-card:hover,.mc-row .mc-tile:hover,.mc-row .mc-plain:hover,',
+            '.mc-row .mc-card:focus,.mc-row .mc-plain:focus{transform:none;}',
+            '.mc-row .mc-card:hover .mc-poster img,.mc-row .mc-plain:hover .mc-poster img{transform:none;}',
             '.mc-row .mc-strip{scroll-behavior:auto;}',
             '}',
 
@@ -561,7 +598,11 @@
         // Les rangées sont insérées à la suite, dans l'ordre, juste sous les bibliothèques.
         var librarySection = anchor;
 
-        rows.forEach(function (row) {
+        rows.forEach(function (row, index) {
+            // Décalage d'entrée : les rangées arrivent l'une après l'autre plutôt que
+            // toutes d'un bloc. Plafonné, sinon la dernière attendrait trop longtemps.
+            row.style.animationDelay = Math.min(index * 55, 400) + 'ms';
+
             if (anchor) {
                 anchor.insertAdjacentElement('afterend', row);
             } else {

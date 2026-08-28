@@ -305,6 +305,10 @@ si l'administrateur supprime la collection, elle est recréée au recalcul suiva
   jamais une règle. `clamp()` serait plus concis mais demande Chromium 79, que les téléviseurs
   Tizen n'ont pas. Les affiches gardent partout la proportion 2:3, et les libellés grossissent plus
   vite que les affiches sur les grands écrans — ils se lisent de loin.
+- **Animation** : les rangées entrent en fondu montant, décalées de 55 ms l'une après l'autre
+  (plafond 400 ms, posé en JS à l'insertion). Au survol et au focus, la carte s'agrandit
+  légèrement et l'affiche respire dans son cadre — deux échelles superposées donnent de la
+  profondeur là où une seule paraît plate.
 - **Contraintes Tizen** (voir la section dédiée) : pas de `gap` en flexbox, contour de focus porté
   par `:focus` et non `:focus-visible`, pas de `clamp()`.
 - **Cohabitation avec les thèmes** : tous les réglages passent par des variables portées par
@@ -413,7 +417,7 @@ dotnet run --project tests/ScriptTag.Tests -c Release
 cd tests/browser && npm install && node home-rows.test.mjs && node config-page.test.mjs
 ```
 
-Trois suites sans framework — 185 assertions — exécutées en CI avant la publication ; voir
+Trois suites sans framework — 197 assertions — exécutées en CI avant la publication ; voir
 `tests/README.md`. L'une charge un extrait des règles d'ElegantFin **après** les nôtres pour
 vérifier que la cohabitation tient.
 Les deux suites navigateur chargent le vrai `media-carousel.js` et le vrai `configPage.html`
@@ -527,6 +531,21 @@ n'annule le changement d'onglet que si un ancêtre porte la classe `scrollX` ou 
 Une bande à `overflow-x:auto` **sans cette classe** fait basculer l'accueil vers l'onglet Favoris
 au moindre balayage sur mobile. Toute zone défilant horizontalement doit porter
 `scrollX hiddenScrollX smoothScrollX`.
+
+**Le chiffre du rang doit être positionné pour rester visible :** `.mc-poster` porte
+`position:relative` (son étiquette « Absent » est en `::after`), et un élément positionné peint
+**toujours** au-dessus d'un élément statique, quel que soit l'ordre du DOM. Sans
+`position:relative;z-index:1` sur `.mc-rank`, l'affiche passe donc devant le chiffre, et la marge
+négative qui les fait se chevaucher en avale une part d'autant plus grande que le glyphe est
+étroit — le « 1 » disparaissait presque entièrement. `font-variant-numeric:tabular-nums` complète
+le correctif : tous les rangs occupent la même chasse, donc le recouvrement, constant, en mange
+partout la même proportion.
+
+**Les animations ne portent que sur `transform` et `opacity` :** ce sont les deux propriétés que
+le compositeur traite sans repasser par la mise en page ni le dessin. Toute autre propriété
+animée — `width`, `top`, `box-shadow` sur une grande surface — se paie sur le processeur, et un
+téléviseur n'en a pas les moyens. `prefers-reduced-motion` coupe **aussi** l'animation d'entrée,
+pas seulement les transitions : une rangée figée sur l'image de départ resterait invisible.
 
 **Un `<span>` reste `display:inline` hors conteneur flex :** `width` et `height` y sont ignorés.
 Les affiches des rangées de genre, qui ne sont pas des enfants directs de la bande flex, exigent

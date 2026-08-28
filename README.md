@@ -37,7 +37,9 @@ Rien à installer ni à bricoler : le plugin s'intègre tout seul à l'interface
 du serveur. Tout le calcul est fait côté serveur, en tâche de fond.
 
 Les rangées **s'adaptent à l'écran** : du téléphone en portrait au téléviseur 4K, les affiches
-et les chiffres de rang changent de taille à sept paliers.
+et les chiffres de rang changent de taille à sept paliers. Les rangées entrent en fondu, l'une après
+l'autre, et les cartes s'animent au survol comme à la télécommande — tout est coupé si le système
+demande à réduire les animations.
 
 > **Téléviseurs Samsung et LG.** Les applications Tizen et webOS embarquent leur propre copie de
 > l'interface web et ne chargent jamais celle du serveur : les rangées n'y apparaissent pas, et
