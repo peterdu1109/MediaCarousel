@@ -27,8 +27,11 @@ namespace JellyfinCarouselPlugin.Api;
 [Produces("application/json")]
 public class CatalogController : ControllerBase
 {
+    private const string UserIdClaim = "Jellyfin-UserId";
+
     private readonly ICatalogStore _store;
     private readonly ILibraryManager _libraryManager;
+    private readonly IUserManager _userManager;
     private readonly IDtoService _dtoService;
 
     /// <summary>
@@ -36,11 +39,17 @@ public class CatalogController : ControllerBase
     /// </summary>
     /// <param name="store">Stockage des catalogues.</param>
     /// <param name="libraryManager">Gestionnaire de bibliothèque.</param>
+    /// <param name="userManager">Gestionnaire d'utilisateurs.</param>
     /// <param name="dtoService">Service de conversion en DTO.</param>
-    public CatalogController(ICatalogStore store, ILibraryManager libraryManager, IDtoService dtoService)
+    public CatalogController(
+        ICatalogStore store,
+        ILibraryManager libraryManager,
+        IUserManager userManager,
+        IDtoService dtoService)
     {
         _store = store;
         _libraryManager = libraryManager;
+        _userManager = userManager;
         _dtoService = dtoService;
     }
 
@@ -70,12 +79,27 @@ public class CatalogController : ControllerBase
     {
         var snapshot = _store.Get(kind);
         var take = Math.Clamp(limit ?? snapshot.Entries.Count, 0, 100);
+        var visibleLibraries = ResolveVisibleLibraries(ResolveUser());
 
         var entries = new List<CatalogEntryDto>(Math.Min(take, snapshot.Entries.Count));
         var items = new List<BaseItem>();
         var targets = new List<CatalogEntryDto>();
 
+        // Le filtrage de visibilité change les décomptes, donc le classement : il faut
+        // reclasser avant de tronquer, sans quoi la limite retiendrait les entrées d'après
+        // un ordre calculé sur des titres que l'appelant n'a pas le droit de voir.
+        var visible = new List<(CatalogEntry Entry, int Count)>(snapshot.Entries.Count);
+
         foreach (var entry in snapshot.Entries)
+        {
+            var count = CountVisible(entry, visibleLibraries);
+            if (count > 0)
+            {
+                visible.Add((entry, count));
+            }
+        }
+
+        foreach (var (entry, count) in visible.OrderByDescending(x => x.Count))
         {
             if (entries.Count == take)
             {
@@ -93,7 +117,7 @@ public class CatalogController : ControllerBase
             {
                 Id = entry.ItemId,
                 Name = entry.Name,
-                ItemCount = entry.ItemCount
+                ItemCount = count
             };
 
             entries.Add(dto);
@@ -116,6 +140,75 @@ public class CatalogController : ControllerBase
             GeneratedUtc = snapshot.GeneratedUtc,
             Items = entries
         };
+    }
+
+    /// <summary>
+    /// Additionne les titres d'une entrée dans les seules bibliothèques visibles.
+    /// </summary>
+    /// <remarks>
+    /// Une entrée agrégée avant la mise à jour ne porte aucune ventilation : sa provenance
+    /// est inconnue, pas vide. On la laisse alors passer avec son total d'origine plutôt que
+    /// de vider les rangées entre le redémarrage et le premier recalcul.
+    /// </remarks>
+    private static int CountVisible(CatalogEntry entry, IReadOnlyCollection<Guid>? visibleLibraries)
+    {
+        if (entry.CountsByLibrary.Count == 0)
+        {
+            return entry.ItemCount;
+        }
+
+        // Pas d'utilisateur rattaché — une clé d'API, par exemple : rien à filtrer.
+        if (visibleLibraries is null)
+        {
+            return entry.ItemCount;
+        }
+
+        var total = 0;
+        foreach (var libraryId in visibleLibraries)
+        {
+            if (entry.CountsByLibrary.TryGetValue(libraryId, out var count))
+            {
+                total += count;
+            }
+        }
+
+        return total;
+    }
+
+    /// <summary>
+    /// Énumère les bibliothèques que cet utilisateur a le droit de voir.
+    /// </summary>
+    /// <param name="user">Utilisateur appelant, ou <see langword="null"/> pour une clé d'API.</param>
+    /// <returns>Les identifiants des bibliothèques visibles, ou <see langword="null"/> si le filtrage ne s'applique pas.</returns>
+    private IReadOnlyCollection<Guid>? ResolveVisibleLibraries(Jellyfin.Database.Implementations.Entities.User? user)
+    {
+        if (user is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            return _libraryManager.GetUserRootFolder()
+                .GetChildren(user, includeLinkedChildren: true)
+                .Select(child => child.Id)
+                .ToHashSet();
+        }
+        catch (Exception)
+        {
+            // Faute de pouvoir établir les droits, on ne publie rien plutôt que de publier trop.
+            return Array.Empty<Guid>();
+        }
+    }
+
+    private Jellyfin.Database.Implementations.Entities.User? ResolveUser()
+    {
+        var claim = User.Claims.FirstOrDefault(c => string.Equals(c.Type, UserIdClaim, StringComparison.OrdinalIgnoreCase))?.Value;
+
+        // Une clé d'API n'est rattachée à aucun utilisateur : la visibilité n'est alors pas filtrée.
+        return Guid.TryParse(claim, out var guid) && guid != Guid.Empty
+            ? _userManager.GetUserById(guid)
+            : null;
     }
 
     /// <summary>
