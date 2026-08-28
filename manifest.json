@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/icon.png",
     "versions": [
       {
+        "version": "3.3.2.0",
+        "changelog": "- Corrections et ajustements divers",
+        "targetAbi": "10.11.11.0",
+        "sourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/3.3.2/JellyfinCarouselPlugin.zip",
+        "checksum": "536610539507e978d411156492bb4017",
+        "timestamp": "2026-08-28T05:04:06Z"
+      },
+      {
         "version": "3.3.1.0",
         "changelog": "Corrections :\n- Chiffres lisibles au repos et accent valide avant injection\n- Ecrire index.html de facon atomique\n- Additionner les decomptes des variantes de genre\n- Trier par date de lecture quand une fenetre est definie",
         "targetAbi": "10.11.11.0",
