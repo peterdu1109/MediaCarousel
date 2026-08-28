@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/icon.png",
     "versions": [
       {
+        "version": "3.9.4.0",
+        "changelog": "Corrections :\n- Chiffres evides detaches par un halo, rangees plus aerees",
+        "targetAbi": "10.11.11.0",
+        "sourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/3.9.4/JellyfinCarouselPlugin.zip",
+        "checksum": "607c5ab32741ec408499e885155ab28b",
+        "timestamp": "2026-08-28T18:21:43Z"
+      },
+      {
         "version": "3.9.3.0",
         "changelog": "Corrections :\n- Sections natives completes et rangees plus lisibles",
         "targetAbi": "10.11.11.0",

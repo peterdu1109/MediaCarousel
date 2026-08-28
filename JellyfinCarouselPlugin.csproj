@@ -2,8 +2,8 @@
 
   <PropertyGroup>
     <TargetFramework>net9.0</TargetFramework>
-    <AssemblyVersion>3.9.3.0</AssemblyVersion>
-    <FileVersion>3.9.3.0</FileVersion>
+    <AssemblyVersion>3.9.4.0</AssemblyVersion>
+    <FileVersion>3.9.4.0</FileVersion>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <!-- Les symboles de debogage ne sont pas lus par Jellyfin. -->
     <DebugType>none</DebugType>
