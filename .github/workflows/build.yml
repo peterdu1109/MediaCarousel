@@ -156,7 +156,7 @@ jobs:
             printf '4. Clique sur **Recalculer maintenant**\n\n'
             printf 'Le recalcul se relance ensuite tout seul, au demarrage du serveur et a intervalle regulier.\n\n'
             printf -- '---\n\n'
-            printf '**Prerequis : Jellyfin 10.11.9 ou plus recent.**\n'
+            printf '**Prerequis : Jellyfin 10.11.11 ou plus recent.**\n'
           } > "$N"
 
           gh release delete "$V" --yes --cleanup-tag 2>/dev/null || true
