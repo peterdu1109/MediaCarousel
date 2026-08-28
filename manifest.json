@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/icon.png",
     "versions": [
       {
+        "version": "3.9.1.0",
+        "changelog": "Corrections :\n- Ne plus remuer le DOM quand l ordre est deja le bon",
+        "targetAbi": "10.11.11.0",
+        "sourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/3.9.1/JellyfinCarouselPlugin.zip",
+        "checksum": "24ce3f7d095145cc19e8d4936f8e3185",
+        "timestamp": "2026-08-28T10:08:41Z"
+      },
+      {
         "version": "3.9.0.0",
         "changelog": "Nouveautes :\n- Choisir la liste TMDB — tendances, a l affiche, prochaines sorties",
         "targetAbi": "10.11.11.0",
