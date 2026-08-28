@@ -326,6 +326,9 @@ si l'administrateur supprime la collection, elle est recréée au recalcul suiva
   honorés.
 - **CSS** : injecté dans un `<style id="mc-styles">`, tout est préfixé `mc-`, rien n'est surchargé
   hors de ces classes.
+- **La gouttière ne vient pas du thème** : c'est la seule dimension que nous ne reprenons
+  pas de l'hôte. Voir le piège dédié — un jeton sans unité colle les cartes *et* invalide
+  silencieusement tout `calc()` qui s'appuie dessus.
 - **Dimensionnement adaptatif** : sept paliers, du téléphone en portrait au téléviseur 4K, plus un
   palier pour les écrans bas et larges. Les points de rupture ne redéfinissent **que des jetons**,
   jamais une règle. `clamp()` serait plus concis mais demande Chromium 79, que les téléviseurs
@@ -385,15 +388,15 @@ si l'administrateur supprime la collection, elle est recréée au recalcul suiva
   s'inversent. Le survol teinte le **contour**, pas le remplissage.
 - **Gouttière large hors des rangées classées** : genres, studios, « jamais vu » n'ont pas
   ce chiffre géant pour écarter leurs affiches et se retrouvaient collés. Ils prennent
-  `--mc-gap-wide`, dérivé de la gouttière du thème (`+ 1.1em`) plutôt que fixé en dur,
-  pour qu'un thème qui resserre ses rangées resserre les nôtres avec lui. Le libellé
-  réserve toujours ses deux lignes (`min-height`), sinon un titre court et un titre long
-  ne finissent pas à la même hauteur.
+  `--mc-gap-wide` (1,9 em), contre 0,8 em pour les rangées classées. Le libellé réserve
+  toujours ses deux lignes (`min-height`), et pose explicitement `white-space:normal` :
+  un thème qui met ses liens en `nowrap` faisait tenir le titre sur une seule ligne,
+  rognée net au milieu d'un mot au bord de la carte.
 - **Contraintes Tizen** (voir la section dédiée) : pas de `gap` en flexbox, contour de focus porté
   par `:focus` et non `:focus-visible`, pas de `clamp()`.
 - **Cohabitation avec les thèmes** : tous les réglages passent par des variables portées par
   `.mc-row`, jamais par `:root`. Quand le thème hôte expose déjà un jeton — `--sidePadding`,
-  `--itemColumnGap`, `--smallRadius` — il est adopté, avec la valeur native de Jellyfin en repli.
+  `--smallRadius` — il est adopté, avec la valeur native de Jellyfin en repli.
   Les couleurs de texte sont héritées : les titres réutilisent `sectionTitle`, donc ils suivent
   le thème sans effort.
 - **Cache client** : `jellyfin-web` reconstruit le conteneur à chaque affichage de l'accueil, donc
@@ -497,7 +500,7 @@ dotnet run --project tests/ScriptTag.Tests -c Release
 cd tests/browser && npm install && node home-rows.test.mjs && node config-page.test.mjs
 ```
 
-Trois suites sans framework — 239 assertions — exécutées en CI avant la publication ; voir
+Trois suites sans framework — 240 assertions — exécutées en CI avant la publication ; voir
 `tests/README.md`. L'une charge un extrait des règles d'ElegantFin **après** les nôtres pour
 vérifier que la cohabitation tient.
 Les deux suites navigateur chargent le vrai `media-carousel.js` et le vrai `configPage.html`
@@ -697,6 +700,18 @@ restreindre à des ancêtres mais pas en exclure ; sans exclusion, la requête u
 titre externe d'une bibliothèque exclue apparaît « absent » au lieu d'y mener. Le nom de la
 propriété reste `ExcludedLibraryIds` : le renommer perdrait silencieusement les valeurs déjà
 écrites dans `MediaCarousel.xml` et casserait le tableau `lists` de la page de configuration.
+
+**Un jeton de thème sans unité invalide silencieusement un `calc()` :**
+`--itemColumnGap` n'existe pas dans `jellyfin-web` — ce sont les thèmes qui l'inventent, et
+l'un d'eux le déclare `0`, sans unité. Deux effets muets : la valeur est valide pour
+`margin-right`, donc nos cartes se collent ; et `calc(var(--mc-gap) + 1.1em)` devient
+**invalide** — on n'additionne pas un nombre et une longueur — si bien que la déclaration
+retombe à sa valeur initiale, zéro. Les rangées de genres se retrouvaient collées alors que
+la règle existait et qu'aucun message n'apparaissait nulle part. `max()` réglerait le
+problème mais demande Chromium 79, que les téléviseurs Tizen n'ont pas : la gouttière est
+donc écrite en dur. `--sidePadding` et `--smallRadius` restent adoptés, eux ne servent que
+de valeurs directes. Le test navigateur injecte `--itemColumnGap:0` et vérifie que les deux
+gouttières tiennent.
 
 **La couleur d'accent est validée avant d'entrer dans le CSS :** `HighlightColor` est concaténée
 dans la feuille de styles construite par `buildCss`. `safeAccent` n'accepte que

@@ -167,8 +167,9 @@
      * Deux règles de cohabitation avec les thèmes (ElegantFin, Custom CSS de Jellyfin) :
      *
      * 1. Tout est réglé par des variables portées par `.mc-row`, jamais par `:root`.
-     *    Quand le thème hôte expose déjà un jeton — `--sidePadding`, `--itemColumnGap`,
-     *    `--smallRadius` — on l'adopte, avec la valeur native de Jellyfin en repli.
+     *    Quand le thème hôte expose déjà un jeton — `--sidePadding`, `--smallRadius` —
+     *    on l'adopte, avec la valeur native de Jellyfin en repli. La gouttière fait
+     *    exception, pour la raison expliquée là où elle est définie.
      *    Un thème ou l'administrateur peut redéfinir n'importe quel `--mc-*` sans
      *    avoir à surcharger nos règles.
      *
@@ -184,14 +185,20 @@
             '--mc-accent:' + safeAccent(accent) + ';',
             /* Jetons repris du thème hôte quand il en expose. */
             '--mc-side-padding:var(--sidePadding,3.3%);',
-            '--mc-gap:var(--itemColumnGap,.7em);',
+            /* La gouttière est la SEULE dimension que nous ne reprenons plus du thème
+               hôte. `--itemColumnGap` n'existe pas dans jellyfin-web ; ce sont les thèmes
+               qui l'inventent, et l'un d'eux le déclare `0` — sans unité. Deux effets, tous
+               deux muets : nos cartes se collent, et surtout `calc(var(--mc-gap) + 1.1em)`
+               devient INVALIDE (on n'additionne pas un nombre et une longueur), si bien que
+               `margin-right` retombe à sa valeur initiale, zéro. Les rangées de genres se
+               retrouvaient donc collées alors même que la règle existait. Sans `max()`
+               (Chromium 79, les téléviseurs Tizen plafonnent à 76), la seule défense est de
+               ne pas dépendre du jeton. */
+            '--mc-gap:.8em;',
             /* Les rangées classées écartent leurs affiches d'elles-mêmes : le chiffre
                géant tient la place. Celles qui n'en ont pas — genres, studios — se
-               retrouvaient collées, et deux libellés sur deux lignes semblaient se
-               toucher. Elles prennent donc une gouttière plus large. */
-            /* Exprimée à partir de la gouttière du thème plutôt qu'en dur : un thème
-               qui resserre ses rangées voit les nôtres se resserrer avec lui. */
-            '--mc-gap-wide:calc(var(--mc-gap) + 1.1em);',
+               retrouvaient collées, et deux libellés voisins semblaient se toucher. */
+            '--mc-gap-wide:1.9em;',
             '--mc-radius:var(--smallRadius,5px);',
             /* Dimensions par défaut : ordinateur de bureau. Les points de rupture plus bas
                ne redéfinissent que ces jetons, jamais une règle. */
@@ -314,7 +321,8 @@
             '.mc-row .mc-tile img{max-width:100%;max-height:100%;object-fit:contain;display:block;',
             'opacity:0;transition:opacity .35s var(--mc-ease);}',
             '.mc-row .mc-tile img.mc-ready{opacity:1;}',
-            '.mc-row .mc-tile-name{font-size:var(--mc-label-size);font-weight:600;line-height:1.2;}',
+            '.mc-row .mc-tile-name{font-size:var(--mc-label-size);font-weight:600;line-height:1.2;',
+            'white-space:normal;word-break:break-word;}',
 
             /* Carte simple, utilisée par les rangées de genre. */
             '.mc-row .mc-plain{flex:0 0 auto;width:var(--mc-poster-width);text-decoration:none;',
@@ -325,8 +333,12 @@
             /* `min-height` vaut deux lignes : sans elle, un titre court et un titre
                long ne finissent pas à la même hauteur et la rangée paraît de travers.
                La marge de droite empêche deux libellés voisins de se rejoindre. */
+            /* `white-space` et `word-break` sont posés explicitement : un thème qui met
+               ses liens en `nowrap` faisait tenir le titre sur une seule ligne, rognée net
+               au milieu d'un mot au bord de la carte au lieu de se replier sur deux. */
             '.mc-row .mc-plain-name{margin-top:.55em;padding-right:.4em;font-weight:500;',
             'font-size:var(--mc-label-size);line-height:1.3;min-height:2.6em;opacity:.92;',
+            'white-space:normal;word-break:break-word;',
             'display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}',
 
             /* Focus : `:focus` d'abord, car `:focus-visible` n'arrive qu'avec Chromium 86 et

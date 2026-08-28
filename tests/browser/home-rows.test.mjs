@@ -295,12 +295,29 @@ const theme = await themed.evaluate(() => {
     // Le rayon du theme doit etre repris.
     posterRadius: getComputedStyle(poster).borderTopLeftRadius,
     posterHeight: Math.round(poster.getBoundingClientRect().height),
-    // La gouttiere passe desormais par la marge des cartes, `gap` n'existant pas
-    // en flexbox avant Chromium 84 : le jeton du theme doit s'y retrouver.
+    // La gouttiere passe par la marge des cartes, `gap` n'existant pas en flexbox
+    // avant Chromium 84. Elle ne suit PLUS le jeton du theme : voir plus bas.
     cardGutter: getComputedStyle(strip.querySelector('.mc-card')).marginRight
   };
 });
 await themed.close();
+
+// Un theme qui declare la gouttiere « 0 », SANS UNITE. La valeur reste valide pour
+// `margin-right` mais elle est invalide dans un `calc()` : tant que notre gouttiere
+// large en dependait, la marge des rangees sans rang retombait a zero, en silence.
+const zeroGapPage = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+zeroGapPage.on('pageerror', e => errors.push('pageerror(zerogap): ' + e.message));
+await zeroGapPage.goto('file://' + path.join(here, 'home.html'));
+await zeroGapPage.evaluate(stub);
+await zeroGapPage.evaluate(script);
+await zeroGapPage.waitForFunction(() => document.querySelectorAll('.mc-row').length === 10, { timeout: 8000 });
+await zeroGapPage.addStyleTag({ content: ':root{--itemColumnGap:0;--sidePadding:0}' });
+await zeroGapPage.waitForTimeout(200);
+const zeroGap = await zeroGapPage.evaluate(() => ({
+  ranked: parseFloat(getComputedStyle(document.querySelector('.mc-row .mc-card')).marginRight),
+  plain: parseFloat(getComputedStyle(document.querySelector('.mc-row .mc-plain')).marginRight)
+}));
+await zeroGapPage.close();
 
 // Un compte sans historique : la rangee personnalisee doit simplement ne pas exister,
 // plutot que d'afficher un titre vide ou une bande sans carte.
@@ -730,7 +747,10 @@ check('THEME: le jeton --sidePadding du theme est adopte',
 check('THEME: notre marge de rangee resiste a .verticalSection',
   theme.rowMarginBottom !== '16px' && parseFloat(theme.rowMarginBottom) > 20, theme.rowMarginBottom);
 check('THEME: le rayon du theme est repris', theme.posterRadius === '16px', theme.posterRadius);
-check('THEME: la gouttiere du theme est reprise', theme.cardGutter === '8px', theme.cardGutter);
+check('THEME: la gouttiere ne suit PAS le jeton du theme (0.5em = 8px)',
+  theme.cardGutter !== '8px' && parseFloat(theme.cardGutter) > 8, theme.cardGutter);
+check('THEME: un --itemColumnGap sans unite ne colle plus les cartes',
+  zeroGap.ranked > 0 && zeroGap.plain > zeroGap.ranked, zeroGap);
 check('THEME: les affiches gardent leur hauteur', theme.posterHeight === 213, theme.posterHeight);
 
 check('C1: chiffres evides, contour clair',
