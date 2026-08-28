@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/icon.png",
     "versions": [
       {
+        "version": "3.6.0.0",
+        "changelog": "Nouveautes :\n- Theme clair, silhouettes de chargement, fondu des affiches, accroche\n- Les bibliotheques exclues couvrent enfin le Top mondial\n- Purger le cache d'affiches apres chaque recalcul\n- Bilan du recalcul visible dans la page de configuration",
+        "targetAbi": "10.11.11.0",
+        "sourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/3.6.0/JellyfinCarouselPlugin.zip",
+        "checksum": "77fb67aab76f876a22074c7763a6a629",
+        "timestamp": "2026-08-28T08:06:50Z"
+      },
+      {
         "version": "3.5.1.0",
         "changelog": "Corrections :\n- Chiffre du rang masque par l affiche, et animations plus fluides",
         "targetAbi": "10.11.11.0",
