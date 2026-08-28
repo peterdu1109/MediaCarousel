@@ -120,6 +120,7 @@ l'épisode isolé.
 | Activer le Top mondial | ❌ | Interrupteur principal |
 | Source | TMDB | TMDB ou Trakt |
 | Clé d'API | — | Voir le tableau ci-dessus |
+| Liste | Tendances du moment | Ou « à l'affiche », ou « prochaines sorties ». Propre à TMDB ; Trakt ne publie que les tendances |
 | Types de médias | Films | Ce qui est classé |
 | Nombre d'entrées | `10` | Taille du classement |
 | Ne garder que ce que j'ai | ✅ | Masque les titres absents de ta bibliothèque |

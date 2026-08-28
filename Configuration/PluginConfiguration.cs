@@ -117,6 +117,15 @@ public class PluginConfiguration : BasePluginConfiguration
     public TopListMediaKind GlobalTopMediaKind { get; set; } = TopListMediaKind.Movies;
 
     /// <summary>
+    /// Obtient ou définit la liste demandée à la source externe.
+    /// </summary>
+    /// <remarks>
+    /// Seul TMDB distingue ces listes ; Trakt ne publie que les tendances et ignore ce
+    /// réglage. « Prochaines sorties » n'existe que pour les films chez TMDB.
+    /// </remarks>
+    public Providers.TrendingFeed GlobalTopFeed { get; set; } = Providers.TrendingFeed.Trending;
+
+    /// <summary>
     /// Obtient ou définit le nombre d'entrées conservées dans le Top global.
     /// </summary>
     public int GlobalTopSize { get; set; } = 10;

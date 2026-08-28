@@ -138,6 +138,26 @@ public sealed class TmdbTrendingProvider : ITrendingProvider
         return titles;
     }
 
+    /// <summary>
+    /// Chemin TMDB correspondant au couple type de média / liste demandée.
+    /// </summary>
+    /// <returns>Le chemin, ou <see langword="null"/> si TMDB n'offre pas cette combinaison.</returns>
+    private static string? ResolvePath(string mediaType, bool isMovie, TrendingFeed feed)
+    {
+        switch (feed)
+        {
+            case TrendingFeed.NowPlaying:
+                // Côté séries, l'équivalent d'« à l'affiche » est « en cours de diffusion ».
+                return isMovie ? "movie/now_playing" : "tv/on_the_air";
+
+            case TrendingFeed.Upcoming:
+                return isMovie ? "movie/upcoming" : null;
+
+            default:
+                return "trending/" + mediaType + "/week";
+        }
+    }
+
     private static string? ReadString(JsonElement element, string propertyName)
         => element.TryGetProperty(propertyName, out var value) && value.ValueKind == JsonValueKind.String
             ? value.GetString()

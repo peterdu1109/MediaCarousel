@@ -118,7 +118,7 @@
                         </button>
                         <button is="emby-button" type="button" class="mcCfg-tab" role="tab" id="tabGlobal"
                                 aria-controls="panelGlobal" aria-selected="false">
-                            <span>Top mondial</span><span class="mcCfg-tab-count">7</span>
+                            <span>Top mondial</span><span class="mcCfg-tab-count">8</span>
                         </button>
                         <button is="emby-button" type="button" class="mcCfg-tab" role="tab" id="tabCatalog"
                                 aria-controls="panelCatalog" aria-selected="false">
@@ -271,6 +271,18 @@
                                             <option value="Tmdb">TMDB</option>
                                             <option value="Trakt">Trakt</option>
                                         </select>
+                                    </div>
+                                    <div class="selectContainer">
+                                        <select is="emby-select" id="GlobalTopFeed" label="Liste"
+                                                aria-describedby="hintFeed">
+                                            <option value="Trending">Tendances du moment</option>
+                                            <option value="NowPlaying">À l'affiche / en diffusion</option>
+                                            <option value="Upcoming">Prochaines sorties</option>
+                                        </select>
+                                        <div class="fieldDescription" id="hintFeed">
+                                            Propre à TMDB : Trakt ne publie que les tendances et ignore ce
+                                            réglage. « Prochaines sorties » n'existe que pour les films.
+                                        </div>
                                     </div>
                                     <div class="selectContainer">
                                         <select is="emby-select" id="GlobalTopMediaKind" label="Types de médias">
@@ -679,6 +691,7 @@
                 var decimals = ['NeverPlayedMinRating'];
                 var texts = [
                     'LocalTopMediaKind', 'GlobalTopProvider', 'GlobalTopApiKey', 'GlobalTopMediaKind',
+                    'GlobalTopFeed',
                     'MetadataLanguage', 'StudioRowTitle', 'ReturningRowTitle', 'NeverPlayedRowTitle',
                     'BecauseRowTitle', 'AllTimeRowTitle', 'RowOrder',
                     'LocalRowTitle', 'GlobalRowTitle',

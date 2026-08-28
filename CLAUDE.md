@@ -64,6 +64,7 @@ MediaCarousel/
 ├── Providers/
 │   ├── ITrendingProvider.cs           # Contrat d'une source externe
 │   ├── TrendingRequest.cs             # Paramètres d'interrogation
+│   ├── TrendingFeed.cs                # Liste demandée : tendances, à l'affiche, à venir
 │   ├── TrendingTitle.cs               # Titre renvoyé par une source
 │   ├── TmdbTrendingProvider.cs        # TMDB /trending
 │   └── TraktTrendingProvider.cs       # Trakt /trending
@@ -151,7 +152,11 @@ choisir entre tendance du moment et fond de catalogue.
 ### Top mondial
 
 `ITrendingProvider` abstrait la source ; `GlobalTopListBuilder` choisit l'implémentation d'après
-`GlobalTopProvider`. Les clients HTTP viennent de `IHttpClientFactory.CreateClient(NamedClient.Default)`
+`GlobalTopProvider`. `GlobalTopFeed` choisit ensuite la **liste** : tendances de la semaine,
+à l'affiche (`movie/now_playing`, `tv/on_the_air`) ou prochaines sorties (`movie/upcoming`).
+Toutes les combinaisons n'existent pas chez TMDB — il n'y a pas d'« à venir » pour les séries —
+et `ResolvePath` renvoie alors `null` : le type est ignoré et journalisé, plutôt qu'inventé.
+Trakt ne publie que les tendances et ignore ce réglage, ce que la page de configuration dit. Les clients HTTP viennent de `IHttpClientFactory.CreateClient(NamedClient.Default)`
 (client Jellyfin, avec User-Agent et compression). Délai maximal de 30 s, une nouvelle tentative
 sur erreur transitoire.
 

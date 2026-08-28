@@ -64,7 +64,8 @@ public sealed class GlobalTopListBuilder
             config.GlobalTopMediaKind,
             fetchLimit,
             string.IsNullOrWhiteSpace(config.MetadataLanguage) ? "en-US" : config.MetadataLanguage,
-            config.GlobalTopApiKey);
+            config.GlobalTopApiKey,
+            config.GlobalTopFeed);
 
         var titles = await FetchWithRetryAsync(provider, request, cancellationToken).ConfigureAwait(false);
 
