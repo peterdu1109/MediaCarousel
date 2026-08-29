@@ -69,17 +69,71 @@
     }
 
     /**
-     * Reproduit les règles de routage de appRouter pour les types que nous affichons.
-     * Un dossier ouvre une liste filtrée, tout le reste ouvre une fiche.
+     * Types que `appRouter` ouvre sur une fiche, même lorsqu'ils sont des dossiers.
+     * L'ordre reproduit celui de `getRouteUrl` pour que la comparaison reste lisible.
+     */
+    var DETAIL_TYPES = [
+        'Series', 'Season', 'Episode',
+        'Playlist', 'TvChannel', 'Program', 'BoxSet',
+        'MusicAlbum', 'MusicArtist', 'Person', 'Recording'
+    ];
+
+    /**
+     * Reproduit les règles de `appRouter.getRouteUrl` de jellyfin-web pour les types que
+     * nos rangées affichent.
+     *
+     * Ces règles ne se devinent pas depuis le DTO. Une série porte `IsFolder: true`, mais
+     * elle s'ouvre sur sa **fiche** — router au dossier menait à la liste nue de ses
+     * saisons, sans synopsis, sans distribution, sans bouton de lecture. Un studio et un
+     * genre, eux, s'ouvrent sur une liste filtrée par `studioId` ou `genreId` : `parentId`
+     * n'a aucun sens pour eux, ils ne sont le parent de rien, et la page arrivait vide.
+     *
+     * Toute nouvelle rangée qui afficherait un type absent de cette fonction doit d'abord
+     * être confrontée à `getRouteUrl` : le repli sur `IsFolder` n'est correct que pour les
+     * vrais conteneurs.
      */
     function routeUrl(item) {
+        var id = encodeURIComponent(item.Id);
         var suffix = '&serverId=' + encodeURIComponent(item.ServerId || serverId() || '');
 
-        if (item.IsFolder) {
-            return '#/list?parentId=' + encodeURIComponent(item.Id) + suffix;
+        if (item.Type === 'Genre') {
+            return '#/list?genreId=' + id + suffix;
         }
 
-        return '#/details?id=' + encodeURIComponent(item.Id) + suffix;
+        if (item.Type === 'MusicGenre') {
+            return '#/list?musicGenreId=' + id + suffix;
+        }
+
+        if (item.Type === 'Studio') {
+            return '#/list?studioId=' + id + suffix;
+        }
+
+        if (DETAIL_TYPES.indexOf(item.Type) !== -1) {
+            return '#/details?id=' + id + suffix;
+        }
+
+        if (item.IsFolder) {
+            return '#/list?parentId=' + id + suffix;
+        }
+
+        return '#/details?id=' + id + suffix;
+    }
+
+    /**
+     * Résout l'adresse d'une affiche du Top mondial.
+     *
+     * Le plugin relaie les affiches externes par sa propre route, et la renvoie **relative**
+     * pour que `ApiClient.getUrl` y applique le chemin de base du serveur : une adresse
+     * absolue commençant par une barre tombe en 404 dès que Jellyfin est servi sous un
+     * sous-chemin. Une adresse déjà absolue — un instantané enregistré par une version
+     * antérieure, ou une source que le relais ne prend pas en charge — passe telle quelle.
+     */
+    function posterUrl(value) {
+        if (!value) {
+            return null;
+        }
+
+        return /^https?:\/\//i.test(value) ? value : window.ApiClient.getUrl(value);
     }
 
     function imageUrl(item, type, maxWidth) {
@@ -164,206 +218,106 @@
     /**
      * Feuille de style de nos rangées.
      *
-     * Deux règles de cohabitation avec les thèmes (ElegantFin, Custom CSS de Jellyfin) :
+     * Elle ne dimensionne RIEN. Nos cartes portent le balisage et les classes de
+     * `cardBuilder` : `.card`, `.overflowPortraitCard`, `.cardBox`, `.cardScalable`,
+     * `.cardPadder`, `.cardImageContainer`, `.cardText`. Leur largeur, leurs marges et
+     * leur typographie viennent donc de jellyfin-web et du thème actif — ElegantFin
+     * calcule `--cardWidth` à partir d'un `--cardCount` révisé sur une quinzaine de
+     * paliers. Toute dimension réinventée ici finit par diverger du reste de la page
+     * d'accueil : c'était le défaut de la version précédente, dont les affiches en
+     * pixels fixes ne ressemblaient à aucune rangée native.
      *
-     * 1. Tout est réglé par des variables portées par `.mc-row`, jamais par `:root`.
-     *    Quand le thème hôte expose déjà un jeton — `--sidePadding`, `--smallRadius` —
-     *    on l'adopte, avec la valeur native de Jellyfin en repli. La gouttière fait
-     *    exception, pour la raison expliquée là où elle est définie.
-     *    Un thème ou l'administrateur peut redéfinir n'importe quel `--mc-*` sans
-     *    avoir à surcharger nos règles.
-     *
-     * 2. Nos sélecteurs portent toujours deux classes. Nos rangées réutilisent
-     *    volontairement `verticalSection`, `sectionTitle` et `scrollX` pour hériter du
-     *    style natif — mais ElegantFin cible aussi ces classes, à égalité de
-     *    spécificité. Sans ce doublement, le vainqueur dépendrait de l'ordre
-     *    d'insertion des feuilles de style, qui n'est pas sous notre contrôle.
+     * Ne restent que les trois choses qui n'existent pas dans Jellyfin : le chiffre du
+     * rang, la bande défilante, et les flèches de confort.
      */
     function buildCss(accent) {
         return [
             '.mc-row{',
             '--mc-accent:' + safeAccent(accent) + ';',
-            /* Jetons repris du thème hôte quand il en expose. */
+            /* Repris du thème quand il l'expose ; sinon la valeur de `.padded-left`. */
             '--mc-side-padding:var(--sidePadding,3.3%);',
-            /* La gouttière est la SEULE dimension que nous ne reprenons plus du thème
-               hôte. `--itemColumnGap` n'existe pas dans jellyfin-web ; ce sont les thèmes
-               qui l'inventent, et l'un d'eux le déclare `0` — sans unité. Deux effets, tous
-               deux muets : nos cartes se collent, et surtout `calc(var(--mc-gap) + 1.1em)`
-               devient INVALIDE (on n'additionne pas un nombre et une longueur), si bien que
-               `margin-right` retombe à sa valeur initiale, zéro. Les rangées de genres se
-               retrouvaient donc collées alors même que la règle existait. Sans `max()`
-               (Chromium 79, les téléviseurs Tizen plafonnent à 76), la seule défense est de
-               ne pas dépendre du jeton. */
-            '--mc-gap:.8em;',
-            /* Les rangées classées écartent leurs affiches d'elles-mêmes : le chiffre
-               géant tient la place. Celles qui n'en ont pas — genres, studios — se
-               retrouvaient collées, et deux libellés voisins semblaient se toucher. */
-            '--mc-gap-wide:1.9em;',
-            '--mc-radius:var(--smallRadius,5px);',
-            /* Dimensions par défaut : ordinateur de bureau. Les points de rupture plus bas
-               ne redéfinissent que ces jetons, jamais une règle. */
-            '--mc-poster-width:124px;--mc-poster-height:186px;',
-            '--mc-tile-width:172px;--mc-tile-height:104px;',
-            '--mc-rank-size:7rem;--mc-rank-stroke:3px;',
-            '--mc-label-size:.78em;--mc-strip-pad-y:1.6em;',
-            /* Courbe et durée communes : une seule décélération pour tout le rendu. */
             '--mc-ease:cubic-bezier(.22,.61,.36,1);--mc-dur:.28s;',
-            '--mc-rank-fill:rgba(255,255,255,.25);',
-            '--mc-rank-outline:rgba(255,255,255,.9);',
-            /* Le halo est ce qui fait un chiffre COMPLET : le contour blanc disparaît
-               sur la moitié du glyphe qui chevauche une affiche claire, et le « 1 » y
-               perdait sa hampe. Une ombre sombre portée tout autour le détache de
-               n'importe quel fond, sans remplir le chiffre. */
-            '--mc-rank-halo:rgba(0,0,0,.8);',
-            '--mc-surface:rgba(255,255,255,.07);',
-            '--mc-surface-hover:rgba(255,255,255,.13);',
+            '--mc-rank-fill:rgba(255,255,255,.2);',
+            '--mc-rank-outline:rgba(255,255,255,.94);',
+            /* Le halo est ce qui fait un chiffre COMPLET : sans lui, le contour blanc
+               disparaît sur la moitié du glyphe qui chevauche une affiche claire. */
+            '--mc-rank-halo:rgba(0,0,0,.78);',
             '--mc-scrim:rgba(0,0,0,.45);',
-            '--mc-shadow:0 4px 14px rgba(0,0,0,.45);',
-            '--mc-shadow-hover:0 8px 22px rgba(0,0,0,.6);',
             '}',
 
-            /* Ne pas dépendre de la remise à zéro du client hôte pour nos dimensions. */
-            '.mc-row *,.mc-row *::before,.mc-row *::after{box-sizing:border-box;}',
+            /* Aucune marge propre : `.verticalSection` est déjà espacée par Jellyfin et
+               par le thème, exactement comme les sections natives voisines. */
 
-            /* Entrée des rangées : opacité et translation seules — ce sont les deux
-               propriétés que le compositeur traite sans repasser par la mise en page,
-               donc les seules tenables sur le processeur d'un téléviseur. Le décalage
-               par rangée est posé en JS, à l'insertion. */
+            /* Entrée des rangées : opacité et translation seules — les deux propriétés
+               que le compositeur traite sans repasser par la mise en page, donc les
+               seules tenables sur le processeur d'un téléviseur. */
             '@keyframes mc-rise{from{opacity:0;transform:translate3d(0,16px,0);}',
             'to{opacity:1;transform:translate3d(0,0,0);}}',
-            '.verticalSection.mc-row{margin:0 0 2.9em;',
-            'animation:mc-rise .45s var(--mc-ease) both;}',
-            /* L'espacement passe par des marges, jamais par `gap` : la propriété n'arrive
-               qu'avec Chromium 84 en flexbox, et les téléviseurs Tizen jusqu'à la 6.0
-               tournent en Chromium 76 — les cartes s'y colleraient les unes aux autres. */
-            '.mc-row .mc-row-header{display:flex;align-items:center;flex-wrap:wrap;}',
-            '.mc-row .mc-row-header>*{margin-right:.6em;}',
-            '.mc-row .mc-row-header>*:last-child{margin-right:0;}',
-            '.mc-row .mc-row-header .mc-row-title{margin:0;}',
+            '.verticalSection.mc-row{animation:mc-rise .45s var(--mc-ease) both;}',
 
             '.mc-row .mc-strip-wrap{position:relative;}',
-            /* Le padding est répété ici : ElegantFin impose son propre padding-left
-               à `.scrollX`, que notre bande porte pour neutraliser le swipe d'onglet. */
-            /* proximity plutot que mandatory : l'accroche aide en fin de geste sans
-               confisquer un defilement libre a la molette ou au doigt. */
-            '.mc-row .mc-strip{display:flex;overflow-x:auto;overflow-y:hidden;',
-            'padding:var(--mc-strip-pad-y) var(--mc-side-padding);scrollbar-width:none;-ms-overflow-style:none;',
-            'scroll-snap-type:x proximity;scroll-padding-left:var(--mc-side-padding);}',
+            /* La bande porte `scrollX` — la classe que `allowSwipe()` de jellyfin-web
+               cherche pour ne pas prendre un défilement horizontal pour un changement
+               d'onglet — et `itemsContainer`, pour hériter du `column-gap` du thème.
+               Le retrait de .375em compense le padding que `.card` porte lui-même,
+               exactement comme le fait `.emby-scroller` de Jellyfin. */
+            '.mc-row .mc-strip{display:flex;flex-wrap:nowrap;align-items:flex-start;',
+            'overflow-x:auto;overflow-y:hidden;scrollbar-width:none;-ms-overflow-style:none;',
+            'padding-left:calc(var(--mc-side-padding) - .375em);',
+            'padding-right:var(--mc-side-padding);',
+            'scroll-snap-type:x proximity;',
+            'scroll-padding-left:calc(var(--mc-side-padding) - .375em);}',
             '.mc-row .mc-strip>*{scroll-snap-align:start;}',
             '.mc-row .mc-strip::-webkit-scrollbar{display:none;}',
-            '.mc-row .mc-strip>*{margin-right:var(--mc-gap);}',
-            '.mc-row .mc-strip>.mc-plain,.mc-row .mc-strip>.mc-tile{',
-            'margin-right:var(--mc-gap-wide);}',
-            /* À spécificité égale, c'est la dernière règle qui gagne : celle-ci doit
-               rester après la gouttière large. */
-            '.mc-row .mc-strip>*:last-child{margin-right:0;}',
+            /* Une carte native a une largeur fixe ; sans cela, flexbox la comprime dès
+               que la bande déborde. */
+            '.mc-row .mc-strip>.card{flex:0 0 auto;}',
 
-            /* Carte classée : le chiffre géant est en retrait derrière l'affiche. */
-            '.mc-row .mc-card{position:relative;display:flex;align-items:flex-end;flex:0 0 auto;',
-            'text-decoration:none;color:inherit;transform-origin:center bottom;',
-            'transition:transform var(--mc-dur) var(--mc-ease);}',
-            '.mc-row .mc-card:hover{transform:scale(1.045);z-index:2;}',
+            /* ------------------------------------------------------------------
+               Chiffre du rang.
 
-            /* La couleur pleine sert de repli : sans -webkit-text-stroke, le chiffre reste lisible. */
-            /* Le chiffre passe DEVANT l'affiche. Sans `position`, il reste un élément
-               statique là où `.mc-poster` est positionné : l'affiche peindrait par-dessus
-               et la marge négative avalerait le glyphe — presque entièrement sur un « 1 »,
-               qui est le plus étroit des chiffres. */
-            '.mc-row .mc-rank{position:relative;z-index:1;',
-            'font-size:var(--mc-rank-size);line-height:.72;font-weight:900;font-style:italic;',
-            'color:var(--mc-rank-fill);-webkit-text-stroke:var(--mc-rank-stroke) var(--mc-rank-outline);',
-            /* Chiffres à chasse fixe : le « 1 » occupe la même largeur que le « 8 »,
-               sinon le recouvrement, constant, en mange une bien plus grande part. */
-            'font-variant-numeric:tabular-nums;font-feature-settings:"tnum";',
-            'text-shadow:0 0 .05em var(--mc-rank-halo),0 0 .13em var(--mc-rank-halo);',
-            'margin:0 -.24em 0 0;user-select:none;pointer-events:none;flex:0 0 auto;',
-            'transition:-webkit-text-stroke-color var(--mc-dur) var(--mc-ease);}',
-            '.mc-row .mc-card:hover .mc-rank,.mc-row .mc-card:focus .mc-rank{',
-            '-webkit-text-stroke-color:var(--mc-accent);}',
-            '.mc-row .mc-rank-10{letter-spacing:-.06em;}',
+               En SVG, et non en `-webkit-text-stroke` sur du texte HTML : ce dernier
+               donne un contour d'épaisseur FIXE en pixels, qui mangeait la hampe du
+               « 1 » et resserrait le « 10 », et qui ne suivait pas la taille de la
+               carte. Le SVG porte son propre repère — le glyphe et son contour
+               grandissent ensemble avec l'affiche, du téléphone au téléviseur, sans un
+               seul point de rupture.
+               ------------------------------------------------------------------ */
+            /* `contain:layout style` sur `.cardScalable` n'inclut pas la peinture : le
+               chiffre peut donc déborder de l'affiche. Posé après `.cardImageContainer`
+               dans le DOM, il peint par-dessus sans empiler de z-index. */
+            '.mc-row .mc-rank{position:absolute;left:-3.5%;bottom:-2%;height:45%;width:auto;',
+            'overflow:visible;pointer-events:none;user-select:none;}',
+            '.mc-row .mc-rank text{font-size:108px;font-weight:900;font-style:italic;',
+            'font-variant-numeric:tabular-nums;font-feature-settings:"tnum";}',
+            '.mc-row .mc-rank-halo{fill:none;stroke:var(--mc-rank-halo);stroke-width:13;',
+            'stroke-linejoin:round;}',
+            /* `paint-order` place le contour DERRIÈRE le remplissage ; par défaut il est
+               peint par-dessus et rogne le glyphe de la moitié de son épaisseur. */
+            '.mc-row .mc-rank-glyph{fill:var(--mc-rank-fill);stroke:var(--mc-rank-outline);',
+            'stroke-width:4.5;stroke-linejoin:round;paint-order:stroke fill;',
+            'transition:stroke var(--mc-dur) var(--mc-ease);}',
+            '.mc-row .card:hover .mc-rank-glyph,.mc-row .card:focus .mc-rank-glyph{',
+            'stroke:var(--mc-accent);}',
 
-            /* display:block est indispensable : hors conteneur flex, un span reste inline
-               et ignore width/height, ce qui aplatit les cartes des rangées de genre. */
-            '.mc-row .mc-poster{position:relative;display:block;overflow:hidden;flex:0 0 auto;',
-            'width:var(--mc-poster-width);height:var(--mc-poster-height);',
-            'border-radius:var(--mc-radius);background:var(--mc-surface);box-shadow:var(--mc-shadow);}',
-            /* L'affiche est légèrement agrandie dans son cadre : deux échelles superposées
-               donnent de la profondeur là où une seule paraît plate. */
-            /* L'image nait transparente et se fond une fois chargee : le cadre colore
-               tient la place, rien ne surgit. */
-            '.mc-row .mc-poster img{width:100%;height:100%;object-fit:cover;display:block;',
-            'opacity:0;transition:transform .45s var(--mc-ease),opacity .35s var(--mc-ease);}',
-            '.mc-row .mc-poster img.mc-ready{opacity:1;}',
-            '.mc-row .mc-card:hover .mc-poster img,.mc-row .mc-card:focus .mc-poster img,',
-            '.mc-row .mc-plain:hover .mc-poster img,.mc-row .mc-plain:focus .mc-poster img{',
-            'transform:scale(1.07);}',
-            '.mc-row .mc-poster{transition:box-shadow var(--mc-dur) var(--mc-ease);}',
-            '.mc-row .mc-card:hover .mc-poster,.mc-row .mc-card:focus .mc-poster{',
-            'box-shadow:var(--mc-shadow-hover);}',
+            /* Titre présent chez la source externe mais absent du serveur : la carte
+               n'est pas cliquable, l'affiche est atténuée, la seconde ligne le dit. */
+            '.mc-row .mc-unavailable .cardImageContainer{opacity:.55;}',
 
-            '.mc-row .mc-fallback{display:flex;align-items:center;justify-content:center;height:100%;',
-            'padding:.6em;text-align:center;font-size:var(--mc-label-size);line-height:1.25;opacity:.85;}',
+            /* Logo de studio : contenu dans la vignette, jamais recadré. */
+            '.mc-row .mc-tile-logo{max-width:82%;max-height:74%;object-fit:contain;',
+            'display:block;opacity:0;transition:opacity .35s var(--mc-ease);}',
+            '.mc-row .mc-tile-logo.mc-ready{opacity:1;}',
 
-            '.mc-row .mc-unavailable .mc-poster{opacity:.55;}',
-            '.mc-row .mc-unavailable .mc-poster::after{content:attr(data-label);position:absolute;left:0;right:0;bottom:0;',
-            'padding:.3em;font-size:.62em;text-align:center;background:rgba(0,0,0,.72);}',
-
-            /* Carte de studio : vignette large centrée sur le logo. */
-            '.mc-row .mc-tile{flex:0 0 auto;position:relative;overflow:hidden;',
-            'width:var(--mc-tile-width);height:var(--mc-tile-height);border-radius:var(--mc-radius);',
-            'display:flex;align-items:center;justify-content:center;padding:.9em;text-align:center;',
-            'background:var(--mc-surface);text-decoration:none;color:inherit;',
-            'box-shadow:var(--mc-shadow);',
-            'transition:transform var(--mc-dur) var(--mc-ease),background var(--mc-dur) var(--mc-ease),',
-            'box-shadow var(--mc-dur) var(--mc-ease);}',
-            '.mc-row .mc-tile:hover{transform:scale(1.05);background:var(--mc-surface-hover);',
-            'box-shadow:var(--mc-shadow-hover);z-index:2;}',
-            '.mc-row .mc-tile img{max-width:100%;max-height:100%;object-fit:contain;display:block;',
-            'opacity:0;transition:opacity .35s var(--mc-ease);}',
-            '.mc-row .mc-tile img.mc-ready{opacity:1;}',
-            '.mc-row .mc-tile-name{font-size:var(--mc-label-size);font-weight:600;line-height:1.2;',
-            'white-space:normal;word-break:break-word;}',
-
-            /* Carte simple, utilisée par les rangées de genre. */
-            '.mc-row .mc-plain{flex:0 0 auto;width:var(--mc-poster-width);text-decoration:none;',
-            'color:inherit;transition:transform var(--mc-dur) var(--mc-ease);}',
-            '.mc-row .mc-plain:hover{transform:scale(1.045);z-index:2;}',
-            '.mc-row .mc-plain:hover .mc-poster,.mc-row .mc-plain:focus .mc-poster{',
-            'box-shadow:var(--mc-shadow-hover);}',
-            /* `min-height` vaut deux lignes : sans elle, un titre court et un titre
-               long ne finissent pas à la même hauteur et la rangée paraît de travers.
-               La marge de droite empêche deux libellés voisins de se rejoindre. */
-            /* `white-space` et `word-break` sont posés explicitement : un thème qui met
-               ses liens en `nowrap` faisait tenir le titre sur une seule ligne, rognée net
-               au milieu d'un mot au bord de la carte au lieu de se replier sur deux. */
-            '.mc-row .mc-plain-name{margin-top:.55em;padding-right:.4em;font-weight:500;',
-            'font-size:var(--mc-label-size);line-height:1.3;min-height:2.6em;opacity:.92;',
-            'white-space:normal;word-break:break-word;',
-            'display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}',
-
-            /* Focus : `:focus` d'abord, car `:focus-visible` n'arrive qu'avec Chromium 86 et
-               qu'aucun téléviseur Tizen ne l'a — jusqu'à la 6.5, qui est en Chromium 85.
-               Sans ce repli, la télécommande déplace un focus invisible. La règle suivante
-               retire le contour au clic souris ; les moteurs qui ignorent `:focus-visible`
-               la jugent invalide et l'écartent entièrement, ce qui est le comportement
-               recherché. */
-            '.mc-row .mc-card:focus,.mc-row .mc-tile:focus,.mc-row .mc-plain:focus{',
-            'outline:3px solid var(--mc-accent);outline-offset:3px;border-radius:6px;z-index:2;}',
-            '.mc-row .mc-card:focus,.mc-row .mc-plain:focus{transform:scale(1.045);}',
-            '.mc-row .mc-tile:focus{transform:scale(1.05);background:var(--mc-surface-hover);}',
-            '.mc-row .mc-card:focus:not(:focus-visible),',
-            '.mc-row .mc-tile:focus:not(:focus-visible),',
-            '.mc-row .mc-plain:focus:not(:focus-visible){outline:none;transform:none;}',
-
-            /* Silhouettes d'attente des rangees differees : la pulsation ne touche que
-               l'opacite, seule animation qu'un televiseur encaisse sans broncher. */
+            /* Silhouettes d attente : la pulsation ne touche que l opacité, seule
+               animation qu un téléviseur encaisse sans broncher. */
             '@keyframes mc-pulse{0%,100%{opacity:.45;}50%{opacity:.9;}}',
-            '.mc-row .mc-skeleton .mc-poster{animation:mc-pulse 1.4s ease-in-out infinite;box-shadow:none;}',
+            '.mc-row .mc-skeleton .cardPadder{animation:mc-pulse 1.4s ease-in-out infinite;}',
 
             '.mc-row .mc-empty{padding:0 var(--mc-side-padding) 1em;opacity:.6;font-size:.85em;}',
 
-            /* Seule règle hors de notre arbre : elle s'applique aux sections de Jellyfin,
-               et doit l'emporter sur le display d'un thème. */
+            /* Seule règle hors de notre arbre : elle vise les sections de Jellyfin et
+               doit primer sur le `display` du thème. */
             '.mc-hidden-native{display:none!important;}',
 
             /* Flèches de défilement : confort souris, masquées au clavier et au tactile. */
@@ -376,100 +330,31 @@
             '.mc-row .mc-strip-wrap:hover .mc-arrow{opacity:1;transform:translate3d(0,0,0);}',
             '.mc-row .mc-arrow:disabled{opacity:0!important;pointer-events:none;}',
 
-            /* ------------------------------------------------------------------
-               Dimensionnement adaptatif.
+            /* Repli clavier : jellyfin-web ne stylise le focus que sur les cartes
+               marquées `show-focus`, posées uniquement en mode téléviseur. */
+            '.mc-row .card:focus{outline:none;}',
+            '.mc-row .card:focus .cardScalable{outline:3px solid var(--mc-accent);outline-offset:3px;}',
+            '.mc-row .card:focus:not(:focus-visible) .cardScalable{outline:none;}',
 
-               Uniquement des points de rupture sur les jetons : `clamp()` serait plus
-               concis mais demande Chromium 79, que les téléviseurs Tizen n'ont pas.
-               ------------------------------------------------------------------ */
-
-            /* Téléphone en portrait. */
-            '@media (max-width:479px){',
-            '.mc-row{--mc-poster-width:92px;--mc-poster-height:138px;',
-            '--mc-tile-width:128px;--mc-tile-height:78px;',
-            '--mc-rank-size:4.6rem;--mc-rank-stroke:2px;',
-            '--mc-label-size:.72em;--mc-strip-pad-y:1em;}',
-            '}',
-
-            /* Téléphone en paysage, petite tablette. */
-            '@media (min-width:480px) and (max-width:799px){',
-            '.mc-row{--mc-poster-width:104px;--mc-poster-height:156px;',
-            '--mc-tile-width:144px;--mc-tile-height:88px;',
-            '--mc-rank-size:5.6rem;--mc-rank-stroke:2px;',
-            '--mc-label-size:.75em;--mc-strip-pad-y:1.1em;}',
-            '}',
-
-            /* Grand écran de bureau. */
-            '@media (min-width:1280px){',
-            '.mc-row{--mc-poster-width:142px;--mc-poster-height:213px;',
-            '--mc-tile-width:196px;--mc-tile-height:118px;',
-            '--mc-rank-size:8.5rem;--mc-label-size:.8em;}',
-            '}',
-
-            '@media (min-width:1600px){',
-            '.mc-row{--mc-poster-width:158px;--mc-poster-height:237px;',
-            '--mc-tile-width:216px;--mc-tile-height:130px;',
-            '--mc-rank-size:9.5rem;--mc-rank-stroke:4px;',
-            '--mc-label-size:.84em;--mc-strip-pad-y:1.8em;}',
-            '}',
-
-            /* Téléviseur 1080p et grands moniteurs. Un téléviseur 4K sous Tizen déclare
-               lui aussi 1920 pixels CSS : c'est ce palier qui le sert. Les libellés
-               grossissent plus vite que les affiches — ils se lisent de loin. */
-            '@media (min-width:1920px){',
-            '.mc-row{--mc-poster-width:178px;--mc-poster-height:267px;',
-            '--mc-tile-width:244px;--mc-tile-height:146px;',
-            '--mc-rank-size:11rem;--mc-rank-stroke:5px;',
-            '--mc-label-size:.95em;--mc-strip-pad-y:2.1em;}',
-            '.verticalSection.mc-row{margin:0 0 3em;}',
-            '}',
-
-            '@media (min-width:2560px){',
-            '.mc-row{--mc-poster-width:208px;--mc-poster-height:312px;',
-            '--mc-tile-width:284px;--mc-tile-height:170px;',
-            '--mc-rank-size:13rem;--mc-rank-stroke:6px;',
-            '--mc-label-size:1.05em;--mc-strip-pad-y:2.4em;}',
-            '}',
-
-            /* Écran bas mais large : un téléviseur en 720p, ou une fenêtre aplatie.
-               Les affiches sont ramenées à ce que la hauteur permet. */
-            '@media (max-height:620px) and (min-width:800px){',
-            '.mc-row{--mc-poster-width:112px;--mc-poster-height:168px;',
-            '--mc-rank-size:6rem;--mc-strip-pad-y:1em;}',
-            '.verticalSection.mc-row{margin:0 0 1.6em;}',
-            '}',
-
-            /* Fond clair, detecte en JS sur la couleur reelle de la page : les blancs
-               translucides des chiffres y sont invisibles, tout passe en sombre. */
+            /* Fond clair, détecté en JS sur la couleur réelle de la page : les blancs
+               translucides du chiffre y sont invisibles, tout passe en sombre. */
             '.mc-row.mc-on-light{',
             '--mc-rank-fill:rgba(0,0,0,.14);',
-            '--mc-rank-outline:rgba(0,0,0,.7);',
-            '--mc-rank-halo:rgba(255,255,255,.85);',
-            '--mc-surface:rgba(0,0,0,.06);',
-            '--mc-surface-hover:rgba(0,0,0,.11);',
+            '--mc-rank-outline:rgba(0,0,0,.72);',
+            '--mc-rank-halo:rgba(255,255,255,.88);',
             '--mc-scrim:rgba(0,0,0,.55);',
-            '--mc-shadow:0 3px 10px rgba(0,0,0,.18);',
-            '--mc-shadow-hover:0 6px 16px rgba(0,0,0,.25);',
             '}',
 
-            '@media (hover:none){.mc-row .mc-arrow{display:none;}',
-            '.mc-row .mc-card:hover,.mc-row .mc-tile:hover,.mc-row .mc-plain:hover{transform:none;}}',
+            '@media (hover:none){.mc-row .mc-arrow{display:none;}}',
 
-            /* Rien ne bouge quand le système le demande : ni entrée, ni survol, ni
-               défilement animé. `animation:none` doit aussi retirer l'entrée des rangées,
-               sans quoi elles resteraient figées sur l'image de départ, invisibles. */
             '@media (prefers-reduced-motion:reduce){',
-            '.mc-row .mc-card,.mc-row .mc-tile,.mc-row .mc-plain,',
-            '.mc-row .mc-poster,.mc-row .mc-poster img,.mc-row .mc-tile img,.mc-row .mc-arrow{transition:none;}',
-            '.verticalSection.mc-row,.mc-row .mc-skeleton .mc-poster{animation:none;}',
-            '.mc-row .mc-card:hover,.mc-row .mc-tile:hover,.mc-row .mc-plain:hover,',
-            '.mc-row .mc-card:focus,.mc-row .mc-plain:focus{transform:none;}',
-            '.mc-row .mc-card:hover .mc-poster img,.mc-row .mc-plain:hover .mc-poster img{transform:none;}',
+            '.verticalSection.mc-row,.mc-row .mc-skeleton .cardPadder{animation:none;}',
+            '.mc-row .mc-rank-glyph,.mc-row .mc-tile-logo{transition:none;}',
             '.mc-row .mc-strip{scroll-behavior:auto;}',
             '}',
 
             '@media (prefers-contrast:more){',
-            '.mc-row{--mc-rank-fill:rgba(255,255,255,.5);--mc-surface:rgba(255,255,255,.2);}',
+            '.mc-row{--mc-rank-fill:rgba(255,255,255,.5);}',
             '}'
         ].join('');
     }
@@ -478,68 +363,176 @@
     // Cartes
     // ------------------------------------------------------------------
 
+    /**
+     * Classes que jellyfin-web pose sur ses propres cartes selon la plateforme.
+     *
+     * `card-hoverable` porte l'effet de survol du bureau, `show-focus` le cadre de
+     * focus du mode téléviseur. Les reprendre telles quelles est ce qui fait que nos
+     * cartes réagissent exactement comme leurs voisines — y compris sous un thème,
+     * ElegantFin stylant `.card-hoverable:hover .cardScalable`.
+     */
+    function layoutCardClass() {
+        var flags = document.documentElement.className + ' ' + (document.body ? document.body.className : '');
+
+        if (flags.indexOf('layout-tv') !== -1) {
+            return ' show-focus';
+        }
+
+        return flags.indexOf('layout-mobile') !== -1 ? '' : ' card-hoverable';
+    }
+
+    /**
+     * Prépare une URL destinée à `url('…')` dans un attribut `style` : guillemets et
+     * parenthèses y refermeraient la fonction CSS.
+     */
+    function cssUrl(value) {
+        return String(value == null ? '' : value).replace(/["'()\\]/g, encodeURIComponent);
+    }
+
+    /**
+     * Carte au format natif de Jellyfin.
+     *
+     * Le balisage reproduit celui de `cardBuilder.buildCard` : mêmes classes, même
+     * imbrication. C'est la seule façon d'obtenir exactement la taille, les marges et
+     * la typographie des rangées natives — elles sont pilotées par `.card`,
+     * `.overflowPortraitCard` et `.cardText`, que jellyfin-web dimensionne et que les
+     * thèmes redéfinissent. Une géométrie réinventée ici finirait par diverger.
+     *
+     * L'affiche est un fond CSS et non une balise `img`, comme chez Jellyfin :
+     * `.cardImageContainer` est déjà en `background-size:cover`, et le rapport
+     * hauteur/largeur vient de `.cardPadder`, pas de l'image.
+     */
+    function nativeCard(opts) {
+        var shape = opts.shape || 'overflowPortrait';
+        var label = opts.ariaLabel || opts.name || '';
+        var imageClasses = 'cardImageContainer cardContent' + (opts.contain ? '' : ' coveredImage');
+        var style = opts.imageUrl
+            ? ' style="background-image:url(&#39;' + escapeHtml(cssUrl(opts.imageUrl)) + '&#39;)"'
+            : '';
+
+        var inner = opts.inner || '';
+        if (!inner && !opts.imageUrl && opts.name) {
+            inner = '<div class="cardText cardDefaultText">' + escapeHtml(opts.name) + '</div>';
+        }
+
+        var body = opts.href
+            ? '<a href="' + escapeHtml(opts.href) + '" data-action="link" class="' + imageClasses
+                + ' itemAction"' + style + ' aria-label="' + escapeHtml(label) + '">' + inner + '</a>'
+            : '<div class="' + imageClasses + '"' + style + '>' + inner + '</div>';
+
+        // Une seconde ligne vide plutôt qu'absente : deux cartes voisines dont l'une
+        // porte une année et l'autre non finiraient sinon à des hauteurs différentes.
+        var footer = opts.showText === false
+            ? ''
+            : '<div class="cardFooter cardFooter-transparent">'
+                + '<div class="cardText cardTextCentered cardText-first"><bdi>'
+                + escapeHtml(opts.name || '') + '</bdi></div>'
+                + '<div class="cardText cardTextCentered cardText-secondary"><bdi>'
+                + (opts.secondary ? escapeHtml(opts.secondary) : '&#160;') + '</bdi></div>'
+                + '</div>';
+
+        return '<div class="card ' + shape + 'Card' + layoutCardClass() + ' card-withuserdata'
+            + (opts.cardClass ? ' ' + opts.cardClass : '') + '"'
+            + (opts.ariaHidden ? ' aria-hidden="true"' : ' role="listitem"')
+            + (opts.itemId ? ' data-id="' + escapeHtml(opts.itemId) + '"' : '')
+            + (opts.serverId ? ' data-serverid="' + escapeHtml(opts.serverId) + '"' : '')
+            + (opts.itemType ? ' data-type="' + escapeHtml(opts.itemType) + '"' : '')
+            + ' data-isfolder="' + (opts.isFolder ? 'true' : 'false') + '">'
+            + '<div class="cardBox' + (footer ? ' cardBox-bottompadded' : '') + '">'
+            + '<div class="cardScalable">'
+            + '<div class="cardPadder cardPadder-' + shape + '"></div>'
+            + body
+            + (opts.overlay || '')
+            + '</div>'
+            + footer
+            + '</div></div>';
+    }
+
+    /**
+     * Chiffre du rang, dessiné en SVG.
+     *
+     * Un `-webkit-text-stroke` sur du texte HTML donnait un contour d'épaisseur fixe en
+     * pixels : il rongeait la hampe du « 1 », resserrait le « 10 », et ne suivait pas
+     * la taille de la carte, qui varie d'un facteur quatre entre un téléphone et un
+     * téléviseur. Le SVG porte son propre repère : une seule règle CSS et le glyphe
+     * garde exactement les mêmes proportions partout.
+     *
+     * La largeur du repère suit le nombre de chiffres, pour que « 1 » et « 10 »
+     * occupent la même hauteur sans que le second soit comprimé.
+     */
+    function rankBadge(rank) {
+        var text = String(rank);
+        var width = 24 + (text.length * 64);
+        var middle = width / 2;
+
+        return '<svg class="mc-rank" viewBox="0 0 ' + width + ' 128" aria-hidden="true" focusable="false">'
+            + '<text class="mc-rank-halo" x="' + middle + '" y="115" text-anchor="middle">' + text + '</text>'
+            + '<text class="mc-rank-glyph" x="' + middle + '" y="115" text-anchor="middle">' + text + '</text>'
+            + '</svg>';
+    }
+
     function buildRankedCard(entry) {
         var item = entry.Item;
         var inLibrary = !!item;
-        var name = inLibrary ? item.Name : entry.Name;
-        var label = name + (entry.ProductionYear ? ' (' + entry.ProductionYear + ')' : '');
-        var poster;
+        var name = (inLibrary ? item.Name : entry.Name) || '';
+        var year = (inLibrary ? item.ProductionYear : entry.ProductionYear) || entry.ProductionYear;
 
-        if (inLibrary) {
-            var url = imageUrl(item, 'Primary', 300);
-            poster = url
-                ? '<img loading="lazy" alt="" src="' + escapeHtml(url) + '">'
-                : '<div class="mc-fallback">' + escapeHtml(name) + '</div>';
-        } else if (entry.PosterUrl) {
-            poster = '<img loading="lazy" alt="" src="' + escapeHtml(entry.PosterUrl) + '">';
-        } else {
-            poster = '<div class="mc-fallback">' + escapeHtml(name) + '</div>';
-        }
-
-        var inner = '<span class="mc-rank' + (entry.Rank >= 10 ? ' mc-rank-10' : '') + '" aria-hidden="true">' + entry.Rank + '</span>'
-            + '<span class="mc-poster"' + (inLibrary ? '' : ' data-label="Absent"') + '>' + poster + '</span>';
-
-        var aria = escapeHtml('Numéro ' + entry.Rank + ' : ' + label);
-
-        if (inLibrary) {
-            return '<a role="listitem" class="mc-card" href="' + escapeHtml(routeUrl(item)) + '"'
-                + ' aria-label="' + aria + '">' + inner + '</a>';
-        }
-
-        // Titre absent de la bibliothèque : carte non cliquable plutôt qu'un lien mort.
-        return '<span role="listitem" class="mc-card mc-unavailable" aria-label="' + aria
-            + escapeHtml(' — absent de la bibliothèque') + '">' + inner + '</span>';
+        return nativeCard({
+            name: name,
+            // Un titre que la source externe classe mais que le serveur n'a pas : la
+            // seconde ligne le dit, plutôt qu'un lien mort ou une carte muette.
+            secondary: inLibrary ? (year ? String(year) : '') : 'Absent de la bibliothèque',
+            imageUrl: inLibrary ? imageUrl(item, 'Primary', 400) : posterUrl(entry.PosterUrl),
+            href: inLibrary ? routeUrl(item) : null,
+            itemId: inLibrary ? item.Id : null,
+            serverId: inLibrary ? (item.ServerId || serverId()) : null,
+            itemType: inLibrary ? item.Type : null,
+            isFolder: inLibrary && item.IsFolder,
+            ariaLabel: 'Numéro ' + entry.Rank + ' : ' + name + (year ? ' (' + year + ')' : '')
+                + (inLibrary ? '' : ' — absent de la bibliothèque'),
+            cardClass: 'mc-ranked' + (inLibrary ? '' : ' mc-unavailable'),
+            overlay: rankBadge(entry.Rank)
+        });
     }
 
+    /**
+     * Carte de studio : format paysage, logo contenu et non recadré — c'est ce que
+     * fait Jellyfin pour ses propres vignettes de chaîne.
+     */
     function buildTileCard(entry) {
         var item = entry.Item;
         var name = entry.Name || (item && item.Name) || '';
-        var logo = item ? (imageUrl(item, 'Logo', 300) || imageUrl(item, 'Thumb', 300)) : null;
+        var logo = item ? (imageUrl(item, 'Logo', 400) || imageUrl(item, 'Thumb', 400)) : null;
 
-        var content = logo
-            ? '<img loading="lazy" alt="" src="' + escapeHtml(logo) + '">'
-            : '<span class="mc-tile-name">' + escapeHtml(name) + '</span>';
-
-        // Le décompte n'est pas affiché : il agrège toutes les variantes du studio, alors
-        // que le lien mène à une seule d'entre elles. Il sert au classement, pas au rendu.
-        var aria = escapeHtml(name);
-        var href = item ? routeUrl(item) : '#';
-
-        return '<a role="listitem" class="mc-tile" href="' + escapeHtml(href) + '"'
-            + ' aria-label="' + aria + '">' + content + '</a>';
+        // Le décompte n'est pas affiché : il agrège toutes les variantes du studio,
+        // alors que le lien ne mène qu'à l'une d'elles. Il sert au classement.
+        return nativeCard({
+            shape: 'overflowBackdrop',
+            name: name,
+            contain: true,
+            inner: logo
+                ? '<img class="mc-tile-logo" loading="lazy" alt="" src="' + escapeHtml(logo) + '">'
+                : '<div class="cardText cardDefaultText">' + escapeHtml(name) + '</div>',
+            href: item ? routeUrl(item) : null,
+            itemId: item ? item.Id : null,
+            serverId: item ? (item.ServerId || serverId()) : null,
+            itemType: item ? item.Type : null,
+            isFolder: !!(item && item.IsFolder),
+            cardClass: 'mc-tile'
+        });
     }
 
     function buildPlainCard(item) {
-        var url = imageUrl(item, 'Primary', 300);
-        var poster = url
-            ? '<img loading="lazy" alt="" src="' + escapeHtml(url) + '">'
-            : '<div class="mc-fallback">' + escapeHtml(item.Name) + '</div>';
-
-        return '<a role="listitem" class="mc-plain" href="' + escapeHtml(routeUrl(item)) + '"'
-            + ' aria-label="' + escapeHtml(item.Name) + '">'
-            + '<span class="mc-poster">' + poster + '</span>'
-            + '<span class="mc-plain-name">' + escapeHtml(item.Name) + '</span>'
-            + '</a>';
+        return nativeCard({
+            name: item.Name || '',
+            secondary: item.ProductionYear ? String(item.ProductionYear) : '',
+            imageUrl: imageUrl(item, 'Primary', 400),
+            href: routeUrl(item),
+            itemId: item.Id,
+            serverId: item.ServerId || serverId(),
+            itemType: item.Type,
+            isFolder: item.IsFolder
+        });
     }
 
     // ------------------------------------------------------------------
@@ -554,14 +547,18 @@
         section.setAttribute('aria-labelledby', headingId);
 
         section.innerHTML =
-            '<div class="mc-row-header padded-left">'
-            + '<h2 id="' + headingId + '" class="sectionTitle sectionTitle-cards mc-row-title">' + escapeHtml(title) + '</h2>'
+            // En-tête au format natif : le thème stylise `.sectionTitleContainer` et
+            // `.sectionTitle-cards`, pas un conteneur inventé pour l'occasion.
+            '<div class="sectionTitleContainer sectionTitleContainer-cards padded-left mc-row-header">'
+            + '<h2 id="' + headingId + '" class="sectionTitle sectionTitle-cards">' + escapeHtml(title) + '</h2>'
             + '</div>'
             + '<div class="mc-strip-wrap">'
             + '<button type="button" class="mc-arrow mc-arrow-prev" tabindex="-1" aria-hidden="true">&#10094;</button>'
-            // scrollX est la classe que allowSwipe() de Jellyfin recherche pour ne pas
-            // interpréter un défilement horizontal comme un changement d'onglet.
-            + '<div class="mc-strip scrollX hiddenScrollX smoothScrollX" role="list">' + (cardsHtml || '') + '</div>'
+            // `scrollX` est la classe que `allowSwipe()` de Jellyfin cherche pour ne pas
+            // interpréter un défilement horizontal comme un changement d'onglet ;
+            // `itemsContainer` apporte la gouttière entre cartes définie par le thème.
+            + '<div class="mc-strip itemsContainer scrollSlider focuscontainer-x scrollX hiddenScrollX smoothScrollX"'
+            + ' role="list">' + (cardsHtml || '') + '</div>'
             + '<button type="button" class="mc-arrow mc-arrow-next" tabindex="-1" aria-hidden="true">&#10095;</button>'
             + '</div>';
 
@@ -1004,11 +1001,11 @@
         return pattern.indexOf('{0}') === -1 ? pattern : pattern.replace('{0}', name);
     }
 
-    /** Silhouettes d'attente, aux dimensions exactes des cartes qu'elles precedent. */
+    /** Silhouettes d'attente, aux dimensions exactes des cartes qu'elles précèdent. */
     function skeletonCards(count) {
         var html = '';
         for (var i = 0; i < count; i++) {
-            html += '<span class="mc-plain mc-skeleton" aria-hidden="true"><span class="mc-poster"></span></span>';
+            html += nativeCard({ name: '', cardClass: 'mc-skeleton', ariaHidden: true });
         }
         return html;
     }
@@ -1249,6 +1246,15 @@
 
                 for (var i = 0; i < NATIVE_SECTION_COUNT; i++) {
                     var type = custom['homesection' + i] || NATIVE_DEFAULT_LAYOUT[i] || '';
+
+                    // Valeur héritée d'anciennes versions de Jellyfin. `homesections.js` la
+                    // traduit en la section 0 par défaut avant de rendre quoi que ce soit ;
+                    // sans la même traduction ici, l'entrée `native:smalllibrarytiles` de
+                    // l'ordre ne désigne aucune section et les bibliothèques ne sont pas
+                    // placées — pour ce compte-là seulement, donc sans rien de reproductible.
+                    if (type === 'folders') {
+                        type = NATIVE_DEFAULT_LAYOUT[0];
+                    }
 
                     // Un type répété ne peut désigner qu'une section : la première gagne.
                     if (type && type !== 'none' && !Object.prototype.hasOwnProperty.call(map, type)) {

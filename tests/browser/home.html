@@ -1,4 +1,17 @@
-<!DOCTYPE html><html><head><meta charset="utf-8"><title>Home</title></head><body>
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>Home</title>
+<!-- Les regles de carte de jellyfin-web 10.11.9, compilees depuis
+     src/components/cardbuilder/card.scss. Nos cartes portent le balisage natif :
+     sans cette feuille, elles n'ont plus aucune dimension, exactement comme dans
+     un client ou elle manquerait. -->
+<link rel="stylesheet" href="jellyfin-card.css">
+<style>
+  /* Le peu de librarybrowser.scss dont depend la mise en page des rangees. */
+  .padded-left { padding-left: 3.3%; }
+  .padded-right { padding-right: 3.3%; }
+  .sectionTitleContainer-cards { margin: 0; padding-top: 1.25em; }
+  .itemsContainer { margin: 0 auto; }
+  body { margin: 0; font-size: 16px; font-family: sans-serif; }
+</style></head><body>
 <div id="indexPage" class="page homePage">
   <div class="tabContent" id="homeTab" data-index="0">
     <div class="sections homeSectionsContainer">
@@ -12,6 +25,12 @@
       <div class="verticalSection section1"><h2 class="sectionTitle">Continuer à regarder</h2></div>
       <div class="verticalSection section2"><h2 class="sectionTitle">Derniers films</h2></div>
       <div class="verticalSection section3"></div>
+    </div>
+    <!-- Hors du conteneur des sections : rangee NATIVE de reference, jamais touchee
+         par le script, servant d etalon de dimension aux tests. -->
+    <div class="verticalSection" id="nativeReference">
+      <div class="sectionTitleContainer sectionTitleContainer-cards padded-left"><h2 class="sectionTitle sectionTitle-cards">Reference native</h2></div>
+      <div class="itemsContainer scrollSlider focuscontainer-x" style="display:flex;flex-wrap:nowrap;overflow:hidden;"><div data-index="0" data-isfolder="false" data-serverid="server-1" data-id="ref0" data-type="Movie" class="card overflowPortraitCard card-hoverable card-withuserdata"><div class="cardBox cardBox-bottompadded"><div class="cardScalable"><div class="cardPadder cardPadder-overflowPortrait"></div><a href="#" data-action="link" class="cardImageContainer coveredImage cardContent itemAction" aria-label="Reference 0"></a></div><div class="cardFooter cardFooter-transparent"><div class="cardText cardTextCentered cardText-first"><bdi>Reference 0</bdi></div><div class="cardText cardTextCentered cardText-secondary"><bdi>2024</bdi></div></div></div></div><div data-index="1" data-isfolder="false" data-serverid="server-1" data-id="ref1" data-type="Movie" class="card overflowPortraitCard card-hoverable card-withuserdata"><div class="cardBox cardBox-bottompadded"><div class="cardScalable"><div class="cardPadder cardPadder-overflowPortrait"></div><a href="#" data-action="link" class="cardImageContainer coveredImage cardContent itemAction" aria-label="Reference 1"></a></div><div class="cardFooter cardFooter-transparent"><div class="cardText cardTextCentered cardText-first"><bdi>Reference 1</bdi></div><div class="cardText cardTextCentered cardText-secondary"><bdi>2024</bdi></div></div></div></div><div data-index="2" data-isfolder="false" data-serverid="server-1" data-id="ref2" data-type="Movie" class="card overflowPortraitCard card-hoverable card-withuserdata"><div class="cardBox cardBox-bottompadded"><div class="cardScalable"><div class="cardPadder cardPadder-overflowPortrait"></div><a href="#" data-action="link" class="cardImageContainer coveredImage cardContent itemAction" aria-label="Reference 2"></a></div><div class="cardFooter cardFooter-transparent"><div class="cardText cardTextCentered cardText-first"><bdi>Reference 2</bdi></div><div class="cardText cardTextCentered cardText-secondary"><bdi>2024</bdi></div></div></div></div><div data-index="3" data-isfolder="false" data-serverid="server-1" data-id="ref3" data-type="Movie" class="card overflowPortraitCard card-hoverable card-withuserdata"><div class="cardBox cardBox-bottompadded"><div class="cardScalable"><div class="cardPadder cardPadder-overflowPortrait"></div><a href="#" data-action="link" class="cardImageContainer coveredImage cardContent itemAction" aria-label="Reference 3"></a></div><div class="cardFooter cardFooter-transparent"><div class="cardText cardTextCentered cardText-first"><bdi>Reference 3</bdi></div><div class="cardText cardTextCentered cardText-secondary"><bdi>2024</bdi></div></div></div></div><div data-index="4" data-isfolder="false" data-serverid="server-1" data-id="ref4" data-type="Movie" class="card overflowPortraitCard card-hoverable card-withuserdata"><div class="cardBox cardBox-bottompadded"><div class="cardScalable"><div class="cardPadder cardPadder-overflowPortrait"></div><a href="#" data-action="link" class="cardImageContainer coveredImage cardContent itemAction" aria-label="Reference 4"></a></div><div class="cardFooter cardFooter-transparent"><div class="cardText cardTextCentered cardText-first"><bdi>Reference 4</bdi></div><div class="cardText cardTextCentered cardText-secondary"><bdi>2024</bdi></div></div></div></div><div data-index="5" data-isfolder="false" data-serverid="server-1" data-id="ref5" data-type="Movie" class="card overflowPortraitCard card-hoverable card-withuserdata"><div class="cardBox cardBox-bottompadded"><div class="cardScalable"><div class="cardPadder cardPadder-overflowPortrait"></div><a href="#" data-action="link" class="cardImageContainer coveredImage cardContent itemAction" aria-label="Reference 5"></a></div><div class="cardFooter cardFooter-transparent"><div class="cardText cardTextCentered cardText-first"><bdi>Reference 5</bdi></div><div class="cardText cardTextCentered cardText-secondary"><bdi>2024</bdi></div></div></div></div></div>
     </div>
   </div>
   <div class="tabContent" id="favoritesTab" data-index="1"><div class="sections"></div></div>

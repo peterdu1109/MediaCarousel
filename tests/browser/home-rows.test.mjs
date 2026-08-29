@@ -23,7 +23,7 @@ const stub = () => {
   window.__calls = [];
   const ranked = (n) => Array.from({ length: n }, (_, i) => ({
     Rank: i + 1, Score: 30 - i, Name: 'Film <' + (i + 1) + '>', ProductionYear: 2020,
-    Item: { Id: 'id' + (i + 1), Name: 'Film <' + (i + 1) + '>', ServerId: 'server-1', IsFolder: false, ImageTags: { Primary: 'tag' } }
+    Item: { Id: 'id' + (i + 1), Name: 'Film <' + (i + 1) + '>', ServerId: 'server-1', Type: 'Movie', IsFolder: false, ImageTags: { Primary: 'tag' } }
   }));
 
   window.ApiClient = {
@@ -66,7 +66,8 @@ const stub = () => {
         });
       }
       if (url.includes('Top/AllTime')) return Promise.resolve({ Items: ranked(3) });
-      if (url.includes('Top/Local')) return Promise.resolve({ Items: ranked(4) });
+      // Dix entrees, pour que le rang « 10 » — le cas ou le chiffre change de largeur — soit couvert.
+      if (url.includes('Top/Local')) return Promise.resolve({ Items: ranked(10) });
       if (url.includes('Top/Global')) return Promise.resolve({
         Items: [
           { Rank: 1, Name: 'Absent & "cité"', ProductionYear: 2024, PosterUrl: 'https://img/x.jpg', Item: null },
@@ -76,7 +77,12 @@ const stub = () => {
       if (url.includes('Rows/Returning')) return Promise.resolve({
         Items: [1, 2].map(i => ({
           Rank: i, Name: 'Serie ' + i,
-          Item: { Id: 'r' + i, Name: 'Serie ' + i, ServerId: 'server-1', IsFolder: false, ImageTags: { Primary: 'p' } }
+          // Une serie est un DOSSIER qui s'ouvre pourtant sur sa fiche : c'est cette
+          // combinaison, absente du banc jusqu'ici, qui revelait le mauvais routage.
+          Item: {
+            Id: 'r' + i, Name: 'Serie ' + i, ServerId: 'server-1',
+            Type: 'Series', IsFolder: true, ImageTags: { Primary: 'p' }
+          }
         }))
       });
       if (url.includes('Rows/NeverPlayed')) return Promise.resolve({
@@ -87,8 +93,8 @@ const stub = () => {
       });
       if (url.includes('MediaCarousel/Studios')) return Promise.resolve({
         Items: [
-          { Id: 's1', Name: 'A24', ItemCount: 12, Item: { Id: 's1', Name: 'A24', ServerId: 'server-1', IsFolder: false, ImageTags: { Logo: 'lg' } } },
-          { Id: 's2', Name: 'Studio <sans logo>', ItemCount: 5, Item: { Id: 's2', Name: 'Studio <sans logo>', ServerId: 'server-1', IsFolder: false, ImageTags: {} } }
+          { Id: 's1', Name: 'A24', ItemCount: 12, Item: { Id: 's1', Name: 'A24', ServerId: 'server-1', Type: 'Studio', IsFolder: false, ImageTags: { Logo: 'lg' } } },
+          { Id: 's2', Name: 'Studio <sans logo>', ItemCount: 5, Item: { Id: 's2', Name: 'Studio <sans logo>', ServerId: 'server-1', Type: 'Studio', IsFolder: false, ImageTags: {} } }
         ]
       });
       if (url.includes('MediaCarousel/Genres')) return Promise.resolve({
@@ -151,7 +157,7 @@ const beforeScroll = await page.evaluate(() => {
 // Les rangees de genre se remplissent au defilement : on parcourt la page.
 await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
 await page.waitForFunction(
-  () => document.querySelectorAll('.mc-row .mc-plain').length >= 12
+  () => document.querySelectorAll('.mc-row .card').length >= 12
      || document.querySelectorAll('.mc-empty').length >= 1,
   { timeout: 8000 });
 await page.waitForTimeout(600);
@@ -171,30 +177,35 @@ const result = await page.evaluate(() => {
     return true;
   }
 
-  const card = rows[0].querySelector('.mc-card');
+  const card = rows[0].querySelector('.mc-ranked');
+
+  const measure = (el) => {
+    const r = el.getBoundingClientRect();
+    return [Math.round(r.width * 10) / 10, Math.round(r.height * 10) / 10];
+  };
 
   return {
     order: Array.from(container.children).map(k =>
       k.className.split(' ').filter(c => c.startsWith('section') || c === 'mc-row').join('')),
-    titles: rows.map(r => r.querySelector('.mc-row-title').textContent),
+    titles: rows.map(r => r.querySelector('.sectionTitle-cards').textContent),
     swipeBlocked: allowSwipe(card) === false,
     stripClasses: rows[0].querySelector('.mc-strip').className,
     noBadges: document.querySelectorAll('.mc-row-badge').length,
     noTileCounts: document.querySelectorAll('.mc-tile-count').length,
-    allTimeCards: rows[1].querySelectorAll('.mc-card').length,
-    returningCards: rows[3].querySelectorAll('.mc-plain').length,
-    neverPlayedCards: rows[4].querySelectorAll('.mc-plain').length,
-    becauseTitle: rows[5].querySelector('.mc-row-title').textContent,
-    becauseCards: rows[5].querySelectorAll('.mc-plain').length,
+    allTimeCards: rows[1].querySelectorAll('.mc-ranked').length,
+    returningCards: rows[3].querySelectorAll('.card').length,
+    neverPlayedCards: rows[4].querySelectorAll('.card').length,
+    becauseTitle: rows[5].querySelector('.sectionTitle-cards').textContent,
+    becauseCards: rows[5].querySelectorAll('.card').length,
     becauseExcludesSeed: window.__calls.some(c => c.startsWith('Items?') && c.includes('ExcludeItemIds=seed1')),
     becauseGenreCount: (() => {
       const call = window.__calls.find(c => c.startsWith('Items?') && c.includes('Genres='));
       return call ? new URLSearchParams(call.split('?')[1]).get('Genres').split('|').length : 0;
     })(),
-    studioLogo: !!rows[6].querySelector('.mc-tile img'),
-    studioFallbackName: rows[6].querySelectorAll('.mc-tile-name').length,
-    studioEscaped: rows[6].querySelector('.mc-tile-name')?.textContent,
-    genreCards: rows[7].querySelectorAll('.mc-plain').length,
+    studioLogo: !!rows[6].querySelector('.mc-tile-logo'),
+    studioFallbackName: rows[6].querySelectorAll('.mc-tile .cardDefaultText').length,
+    studioEscaped: rows[6].querySelector('.mc-tile .cardDefaultText')?.textContent,
+    genreCards: rows[7].querySelectorAll('.card').length,
     genreEmptyMessage: rows[9].querySelector('.mc-empty')?.textContent,
     nativeVisible: Array.from(container.children)
       .filter(c => !c.classList.contains('mc-row') && !c.classList.contains('mc-hidden-native')).length,
@@ -202,19 +213,32 @@ const result = await page.evaluate(() => {
       const id = r.getAttribute('aria-labelledby');
       return id && r.querySelector('#' + id);
     }),
-    cardAria: card.getAttribute('aria-label'),
+    cardAria: card.querySelector('[aria-label]').getAttribute('aria-label'),
+    // Routage : `appRouter.getRouteUrl` ouvre une serie sur sa FICHE bien qu'elle soit un
+    // dossier, et un studio sur une liste filtree par `studioId`, jamais par `parentId`.
+    movieHref: card.querySelector('a').getAttribute('href'),
+    seriesHref: rows[3].querySelector('.card a').getAttribute('href'),
+    studioHref: rows[6].querySelector('.mc-tile a').getAttribute('href'),
     arrowsHidden: Array.from(rows[0].querySelectorAll('.mc-arrow'))
       .every(a => a.getAttribute('tabindex') === '-1' && a.getAttribute('aria-hidden') === 'true'),
     listRoles: rows[0].querySelector('.mc-strip').getAttribute('role') === 'list'
       && card.getAttribute('role') === 'listitem',
-    unavailableIsLink: rows[2].querySelector('.mc-unavailable').tagName === 'A',
+    unavailableIsLink: !!rows[2].querySelector('.mc-unavailable a'),
     skeletonsLeft: document.querySelectorAll('.mc-row .mc-skeleton').length,
-    posterHeight: Math.round(rows[0].querySelector('.mc-poster').getBoundingClientRect().height),
+    // Parite avec une carte NATIVE presente sur la page. C'est le seul invariant
+    // de dimension qui vaille desormais : la geometrie vient entierement de
+    // jellyfin-web et du theme, plus d'un jeu de pixels que nous inventions.
+    box: measure(rows[0].querySelector('.card')),
+    nativeBox: measure(document.querySelector('#nativeReference .card')),
+    textBox: measure(rows[0].querySelector('.cardText-first')),
+    nativeTextBox: measure(document.querySelector('#nativeReference .cardText-first')),
     rankFill: getComputedStyle(rows[0]).getPropertyValue('--mc-rank-fill').trim(),
     rankOutline: getComputedStyle(rows[0]).getPropertyValue('--mc-rank-outline').trim(),
     accentDefault: getComputedStyle(rows[0]).getPropertyValue('--mc-accent').trim(),
-    genrePosterHeight: Math.round(rows[7].querySelector('.mc-plain .mc-poster').getBoundingClientRect().height),
-    tileHeight: Math.round(rows[6].querySelector('.mc-tile').getBoundingClientRect().height)
+    genreBox: measure(rows[7].querySelector('.card')),
+    // Les vignettes de studio prennent la forme paysage native, pas un format maison.
+    tileIsBackdrop: rows[6].querySelector('.mc-tile').classList.contains('overflowBackdropCard'),
+    shapeClasses: rows[0].querySelector('.card').className.indexOf('overflowPortraitCard') !== -1
   };
 });
 
@@ -282,22 +306,26 @@ await themed.waitForTimeout(300);
 const theme = await themed.evaluate(() => {
   const row = document.querySelector('.mc-row');
   const strip = row.querySelector('.mc-strip');
-  const poster = row.querySelector('.mc-poster');
+  const poster = row.querySelector('.cardScalable');
   const styleTag = document.getElementById('mc-styles');
   const themeTag = document.querySelector('style:last-of-type');
   return {
     themeLoadedAfter: styleTag.compareDocumentPosition(themeTag) & Node.DOCUMENT_POSITION_FOLLOWING ? true : false,
     // Le jeton du theme doit etre adopte : 10 % de la largeur de la bande.
     stripPadding: getComputedStyle(strip).paddingLeft,
-    expectedPadding: (strip.clientWidth * 0.10).toFixed(0),
-    // Notre marge doit resister a la regle .verticalSection du theme.
+    // Le retrait de .375em (6 px) compense le padding porte par `.card`.
+    expectedPadding: (strip.clientWidth * 0.10 - 6).toFixed(0),
+    // Notre rangee SUIT desormais la regle .verticalSection du theme, comme les
+    // sections natives : c'est ce qui la fait respirer au meme rythme qu'elles.
     rowMarginBottom: getComputedStyle(row).marginBottom,
-    // Le rayon du theme doit etre repris.
-    posterRadius: getComputedStyle(poster).borderTopLeftRadius,
-    posterHeight: Math.round(poster.getBoundingClientRect().height),
-    // La gouttiere passe par la marge des cartes, `gap` n'existant pas en flexbox
-    // avant Chromium 84. Elle ne suit PLUS le jeton du theme : voir plus bas.
-    cardGutter: getComputedStyle(strip.querySelector('.mc-card')).marginRight
+    // Sous un theme aussi, nos cartes restent identiques aux cartes natives.
+    cardWidth: Math.round(row.querySelector('.card').getBoundingClientRect().width * 10) / 10,
+    nativeCardWidth: Math.round(
+      document.querySelector('#nativeReference .card').getBoundingClientRect().width * 10) / 10,
+    cardRadius: getComputedStyle(poster.querySelector('.cardImageContainer')).borderTopLeftRadius,
+    nativeCardRadius: getComputedStyle(
+      document.querySelector('#nativeReference .cardImageContainer')).borderTopLeftRadius,
+    nativeRowMargin: getComputedStyle(document.getElementById('nativeReference')).marginBottom
   };
 });
 await themed.close();
@@ -314,8 +342,11 @@ await zeroGapPage.waitForFunction(() => document.querySelectorAll('.mc-row').len
 await zeroGapPage.addStyleTag({ content: ':root{--itemColumnGap:0;--sidePadding:0}' });
 await zeroGapPage.waitForTimeout(200);
 const zeroGap = await zeroGapPage.evaluate(() => ({
-  ranked: parseFloat(getComputedStyle(document.querySelector('.mc-row .mc-card')).marginRight),
-  plain: parseFloat(getComputedStyle(document.querySelector('.mc-row .mc-plain')).marginRight)
+  // Plus aucune de nos regles ne lit `--itemColumnGap` : un theme qui le declare
+  // « 0 », sans unite, ne peut plus rendre un `calc()` invalide chez nous.
+  readsColumnGapToken: document.getElementById('mc-styles').textContent.indexOf('--itemColumnGap') !== -1,
+  cardWidth: document.querySelector('.mc-row .card').getBoundingClientRect().width,
+  stripPadding: parseFloat(getComputedStyle(document.querySelector('.mc-row .mc-strip')).paddingLeft)
 }));
 await zeroGapPage.close();
 
@@ -330,10 +361,10 @@ await fresh.evaluate(script);
 await fresh.waitForFunction(() => document.querySelectorAll('.mc-row').length === 9, { timeout: 8000 });
 
 const freshRows = await fresh.evaluate(() => ({
-  titles: Array.from(document.querySelectorAll('.mc-row-title')).map(t => t.textContent),
+  titles: Array.from(document.querySelectorAll('.mc-row .sectionTitle-cards')).map(t => t.textContent),
   // Les rangees de genre sont volontairement vides tant qu'elles n'ont pas defile ;
   // ce qui compte ici est qu'aucune rangee ne porte un titre vide ou tronque.
-  blankTitles: Array.from(document.querySelectorAll('.mc-row-title'))
+  blankTitles: Array.from(document.querySelectorAll('.mc-row .sectionTitle-cards'))
     .filter(t => !t.textContent.trim()).length
 }));
 await fresh.close();
@@ -350,7 +381,7 @@ await ordered.evaluate(stub);
 await ordered.evaluate(script);
 await ordered.waitForFunction(() => document.querySelectorAll('.mc-row').length === 10, { timeout: 8000 });
 const orderedTitles = await ordered.evaluate(
-  () => Array.from(document.querySelectorAll('.mc-row-title')).map(t => t.textContent));
+  () => Array.from(document.querySelectorAll('.mc-row .sectionTitle-cards')).map(t => t.textContent));
 // Sans gestion des natives, celles-ci gardent leur place et nos rangees restent groupees.
 const orderedNative = await ordered.evaluate(() => {
   const kids = Array.from(document.querySelector('#homeTab .homeSectionsContainer').children);
@@ -455,6 +486,39 @@ await deepPage.waitForFunction(() => document.querySelectorAll('.mc-row').length
 const deepFirst = await deepPage.evaluate(() =>
   document.querySelector('#homeTab .homeSectionsContainer').firstElementChild.className);
 await deepPage.close();
+
+// Valeur heritee : un compte ancien peut porter `folders` la ou Jellyfin ecrit
+// aujourd'hui `smalllibrarytiles`. jellyfin-web la traduit avant de rendre
+// (`homesections.js`) ; nous devons faire de meme, sinon `native:smalllibrarytiles`
+// ne designe aucune section et les bibliotheques ne sont jamais placees.
+// L'ordre place les bibliotheques APRES deux de nos rangees : il faut donc que la
+// section soit reellement DEPLACEE. Un ordre qui la laisserait en tete passerait
+// aussi bien avec qu'sans la traduction, et ne prouverait rien.
+const legacyOrder = 'local,alltime,native:smalllibrarytiles,global,returning,'
+  + 'neverplayed,because,studios,genres';
+
+async function nativeOrderWith(section0) {
+  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  page.on('pageerror', e => errors.push('pageerror(legacy): ' + e.message));
+  await page.addInitScript(([first, order]) => {
+    window.__manageNatives = true;
+    window.__customPrefs = { homesection0: first, homesection1: 'resume', homesection2: 'latestmedia' };
+    window.__rowOrder = order;
+  }, [section0, legacyOrder]);
+  await page.goto('file://' + path.join(here, 'home.html'));
+  await page.evaluate(stub);
+  await page.evaluate(script);
+  await page.waitForFunction(() => document.querySelectorAll('.mc-row').length === 10, { timeout: 8000 });
+  const shape = await page.evaluate(() =>
+    Array.from(document.querySelector('#homeTab .homeSectionsContainer').children)
+      .map(k => k.classList.contains('mc-row') ? 'mc-row' : (k.className.match(/section\d+/) || ['?'])[0])
+      .join(','));
+  await page.close();
+  return shape;
+}
+
+const modernFolders = await nativeOrderWith('smalllibrarytiles');
+const legacyFolders = await nativeOrderWith('folders');
 
 // Interface televiseur : getAllSectionsToShow prepend une section de bibliotheques
 // quand l'ordre du compte n'en contient aucune, et tout glisse d'un cran. Onze
@@ -569,15 +633,19 @@ for (const [label, size] of [
 ]) {
   await sizing.setViewportSize(size);
   await sizing.waitForTimeout(120);
-  widths[label] = await sizing.evaluate(
-    () => document.querySelector('.mc-row .mc-poster').getBoundingClientRect().width);
+  widths[label] = await sizing.evaluate(() => [
+    document.querySelector('.mc-row .card').getBoundingClientRect().width,
+    document.querySelector('#nativeReference .card').getBoundingClientRect().width
+  ]);
 }
 
 // Ecran large mais bas : un televiseur 720p, ou une fenetre aplatie.
 await sizing.setViewportSize({ width: 1280, height: 560 });
 await sizing.waitForTimeout(120);
-widths.shortScreen = await sizing.evaluate(
-  () => document.querySelector('.mc-row .mc-poster').getBoundingClientRect().width);
+widths.shortScreen = await sizing.evaluate(() => [
+  document.querySelector('.mc-row .card').getBoundingClientRect().width,
+  document.querySelector('#nativeReference .card').getBoundingClientRect().width
+]);
 
 await sizing.setViewportSize({ width: 1280, height: 900 });
 await sizing.waitForTimeout(120);
@@ -586,8 +654,8 @@ const styling = await sizing.evaluate(() => {
   const sheet = document.getElementById('mc-styles');
   const css = sheet.textContent;
   const strip = document.querySelector('.mc-row .mc-strip');
-  const cards = strip.querySelectorAll('.mc-card');
-  const poster = document.querySelector('.mc-row .mc-poster');
+  const cards = strip.querySelectorAll('.mc-ranked');
+  const poster = document.querySelector('.mc-row .cardScalable');
 
   return {
     // Une accolade manquante ferait chuter ce nombre sans rien signaler.
@@ -599,32 +667,28 @@ const styling = await sizing.evaluate(() => {
 
     // Tizen <= 6.0 est en Chromium 76 : `gap` en flexbox n'y existe pas.
     stripUsesGapProperty: /\.mc-strip\{[^}]*gap:/.test(css),
-    firstCardMargin: cards.length > 1
-      ? parseFloat(getComputedStyle(cards[0]).marginRight) : 0,
-    lastCardMargin: parseFloat(getComputedStyle(cards[cards.length - 1]).marginRight),
-
-    // Les rangees sans rang n'ont pas le chiffre geant pour ecarter leurs affiches :
-    // elles prennent une gouttiere plus large, sinon les libelles se rejoignent.
-    plainMargin: parseFloat(getComputedStyle(document.querySelector('.mc-row .mc-plain')).marginRight),
-    tileMargin: parseFloat(getComputedStyle(document.querySelector('.mc-row .mc-tile')).marginRight),
-    plainNameMinHeight: parseFloat(getComputedStyle(document.querySelector('.mc-row .mc-plain-name')).minHeight),
-    lastPlainMargin: (() => {
-      const plains = document.querySelectorAll('.mc-row .mc-strip > .mc-plain');
-      const last = plains[plains.length - 1];
-      return last.nextElementSibling ? -1 : parseFloat(getComputedStyle(last).marginRight);
-    })(),
+    // L'espacement entre cartes vient du padding que `.card` porte lui-meme, chez
+    // Jellyfin comme chez nous : rien a mesurer de notre cote.
+    cardPadding: parseFloat(getComputedStyle(cards[0]).paddingRight),
+    nativeCardPadding: parseFloat(
+      getComputedStyle(document.querySelector('#nativeReference .card')).paddingRight),
 
     // Tizen n'a pas `:focus-visible` : le contour doit tenir sur `:focus` seul.
-    hasPlainFocusRule: /\.mc-card:focus,[^{]*\{[^}]*outline:/.test(css),
+    hasPlainFocusRule: /\.mc-row \.card:focus[^{]*\{[^}]*outline:/.test(css),
     focusVisibleOnlyGuard: css.indexOf(':focus:not(:focus-visible)') !== -1,
 
     posterRatio: poster.getBoundingClientRect().height / poster.getBoundingClientRect().width,
 
     // Fondu des images : meme en erreur (les src de ce banc sont factices), chaque
     // image doit etre marquee prete, sinon elle resterait transparente a jamais.
+    // Les affiches sont des fonds CSS, comme chez Jellyfin ; seuls les logos de
+    // studio restent des balises `img`, et ce sont eux qui se fondent.
     imagesTotal: document.querySelectorAll('.mc-row img').length,
     imagesReady: document.querySelectorAll('.mc-row img.mc-ready').length,
     readyOpacity: getComputedStyle(document.querySelector('.mc-row img.mc-ready')).opacity,
+    postersAreBackgrounds: Array.prototype.every.call(
+      document.querySelectorAll('.mc-row .mc-ranked .cardImageContainer'),
+      el => getComputedStyle(el).backgroundImage !== 'none'),
 
     snapType: getComputedStyle(document.querySelector('.mc-row .mc-strip')).scrollSnapType,
 
@@ -635,23 +699,38 @@ const styling = await sizing.evaluate(() => {
 
 // Le chiffre du rang doit rester entierement visible, « 1 » compris.
 const rank = await sizing.evaluate(() => {
-  const cards = document.querySelectorAll('.mc-row .mc-card');
+  const cards = document.querySelectorAll('.mc-row .mc-ranked');
   const one = cards[0].querySelector('.mc-rank');
   const two = cards[1].querySelector('.mc-rank');
+  const ten = (function () {
+    const glyphs = document.querySelectorAll('.mc-row .mc-rank-glyph');
+    for (let i = 0; i < glyphs.length; i++) {
+      if (glyphs[i].textContent === '10') return glyphs[i].parentNode;
+    }
+    return null;
+  })();
   const oneBox = one.getBoundingClientRect();
-  const posterBox = cards[0].querySelector('.mc-poster').getBoundingClientRect();
-  const style = getComputedStyle(one);
+  const twoBox = two.getBoundingClientRect();
+  const tenBox = ten && ten.getBoundingClientRect();
+  const cardBox = cards[0].getBoundingClientRect();
+  const posterBox = cards[0].querySelector('.cardScalable').getBoundingClientRect();
 
   return {
-    text: one.textContent,
-    position: style.position,
-    zIndex: style.zIndex,
-    // A chasse fixe, le « 1 » occupe exactement la meme largeur que le « 2 ».
-    oneWidth: Math.round(oneBox.width * 100) / 100,
-    twoWidth: Math.round(two.getBoundingClientRect().width * 100) / 100,
-    // L'affiche mord volontairement sur le chiffre, mais ne doit pas l'avaler.
-    overlap: oneBox.right - posterBox.left,
-    posterPosition: getComputedStyle(cards[0].querySelector('.mc-poster')).position
+    text: one.querySelector('.mc-rank-glyph').textContent,
+    tenText: ten ? ten.querySelector('.mc-rank-glyph').textContent : null,
+    isSvg: one.tagName.toLowerCase() === 'svg',
+    // Le repere SVG ne depend que du nombre de chiffres : « 1 » et « 2 » ont donc
+    // exactement la meme boite, ce que `-webkit-text-stroke` ne garantissait pas.
+    sameWidth: Math.abs(oneBox.width - twoBox.width) < 0.5,
+    // « 10 » est plus large, mais exactement aussi haut : il n'est pas comprime.
+    tenWider: tenBox ? tenBox.width > oneBox.width + 8 : false,
+    tenSameHeight: tenBox ? Math.abs(tenBox.height - oneBox.height) < 0.5 : false,
+    // Le chiffre ne deborde pas sur la carte voisine.
+    withinCard: oneBox.left >= cardBox.left - 1 && oneBox.right <= cardBox.right + 1,
+    // Il couvre le bas de l'affiche sans l'avaler.
+    coverage: Math.round((oneBox.height / posterBox.height) * 100) / 100,
+    // Le contour doit etre peint DERRIERE le remplissage.
+    paintOrder: getComputedStyle(one.querySelector('.mc-rank-glyph')).paintOrder
   };
 });
 
@@ -661,7 +740,7 @@ const motion = await sizing.evaluate(() => {
   return {
     name: getComputedStyle(rows[0]).animationName,
     delays: rows.slice(0, 4).map(r => r.style.animationDelay),
-    cardTransition: getComputedStyle(document.querySelector('.mc-row .mc-card')).transitionProperty
+    glyphTransition: getComputedStyle(document.querySelector('.mc-row .mc-rank-glyph')).transitionProperty
   };
 });
 await sizing.close();
@@ -676,7 +755,7 @@ const reduced = await calm.evaluate(() => {
   const row = document.querySelector('.mc-row');
   return {
     animationName: getComputedStyle(row).animationName,
-    cardTransition: getComputedStyle(row.querySelector('.mc-card')).transitionProperty,
+    glyphTransition: getComputedStyle(row.querySelector('.mc-rank-glyph')).transitionProperty,
     // Une rangee figee sur l'image de depart de l'animation serait invisible.
     rowOpacity: getComputedStyle(row).opacity,
     rowVisible: row.getBoundingClientRect().height > 0
@@ -726,9 +805,25 @@ check('a11y: libelle de carte explicite', result.cardAria === 'Numéro 1 : Film 
 check('a11y: fleches hors du parcours clavier', result.arrowsHidden === true, result.arrowsHidden);
 check('a11y: roles list/listitem', result.listRoles === true, result.listRoles);
 check('titre absent non cliquable', result.unavailableIsLink === false, result.unavailableIsLink);
-check('affiche dimensionnee (1280 px : 142x213)', result.posterHeight === 213, result.posterHeight);
-check('affiche de genre dimensionnee (1280 px)', result.genrePosterHeight === 213, result.genrePosterHeight);
-check('vignette de studio dimensionnee (1280 px)', result.tileHeight === 118, result.tileHeight);
+
+check('ROUTAGE: un film ouvre sa fiche',
+  result.movieHref === '#/details?id=id1&serverId=server-1', result.movieHref);
+// Regression : une serie est un dossier, mais `#/list?parentId=` n'affichait que la liste
+// nue de ses saisons — sans synopsis, sans distribution, sans bouton de lecture.
+check('ROUTAGE: une serie ouvre sa fiche, pas la liste de ses saisons',
+  result.seriesHref === '#/details?id=r1&serverId=server-1', result.seriesHref);
+// Un studio n'est le parent de rien : `parentId` donnait une page vide.
+check('ROUTAGE: un studio ouvre une liste filtree par studioId',
+  result.studioHref === '#/list?studioId=s1&serverId=server-1', result.studioHref);
+check('PARITE: nos cartes ont la taille exacte d une carte native',
+  JSON.stringify(result.box) === JSON.stringify(result.nativeBox), [result.box, result.nativeBox]);
+check('PARITE: le libelle a la taille exacte du libelle natif',
+  JSON.stringify(result.textBox) === JSON.stringify(result.nativeTextBox), [result.textBox, result.nativeTextBox]);
+check('PARITE: les rangees de genre suivent la meme taille',
+  JSON.stringify(result.genreBox) === JSON.stringify(result.nativeBox), [result.genreBox, result.nativeBox]);
+check('PARITE: la forme native est bien celle des rangees d accueil',
+  result.shapeClasses === true, result.shapeClasses);
+check('STUDIO: vignette au format paysage natif', result.tileIsBackdrop === true, result.tileIsBackdrop);
 check('pas de duplication sur mutation', afterMutation === 10, afterMutation);
 check('reinjection apres reconstruction', afterRebuild === 10, afterRebuild);
 const extraCalls = callsAfterRebuild.slice(callsBeforeRebuild.length);
@@ -742,19 +837,21 @@ check('MASQUAGE: nos 10 rangees restent visibles', hidden.ourRowsVisible === 10,
 check('MASQUAGE: la rangee d un autre plugin est epargnee', hidden.foreignVisible === true, hidden);
 
 check('THEME: la feuille du theme est bien chargee apres la notre', theme.themeLoadedAfter === true, theme);
+check('THEME: sous un theme aussi, nos cartes gardent la taille native',
+  theme.cardWidth === theme.nativeCardWidth, [theme.cardWidth, theme.nativeCardWidth]);
+check('THEME: meme arrondi que les cartes natives',
+  theme.cardRadius === theme.nativeCardRadius, [theme.cardRadius, theme.nativeCardRadius]);
 check('THEME: le jeton --sidePadding du theme est adopte',
   Math.abs(parseFloat(theme.stripPadding) - Number(theme.expectedPadding)) < 2, theme);
-check('THEME: notre marge de rangee resiste a .verticalSection',
-  theme.rowMarginBottom !== '16px' && parseFloat(theme.rowMarginBottom) > 20, theme.rowMarginBottom);
-check('THEME: le rayon du theme est repris', theme.posterRadius === '16px', theme.posterRadius);
-check('THEME: la gouttiere ne suit PAS le jeton du theme (0.5em = 8px)',
-  theme.cardGutter !== '8px' && parseFloat(theme.cardGutter) > 8, theme.cardGutter);
-check('THEME: un --itemColumnGap sans unite ne colle plus les cartes',
-  zeroGap.ranked > 0 && zeroGap.plain > zeroGap.ranked, zeroGap);
-check('THEME: les affiches gardent leur hauteur', theme.posterHeight === 213, theme.posterHeight);
+check('THEME: notre rangee s espace comme une section native',
+  theme.rowMarginBottom === theme.nativeRowMargin, [theme.rowMarginBottom, theme.nativeRowMargin]);
+check('THEME: aucune de nos regles ne depend de --itemColumnGap',
+  zeroGap.readsColumnGapToken === false, zeroGap);
+check('THEME: un --sidePadding a zero ne casse pas la bande',
+  zeroGap.cardWidth > 0 && zeroGap.stripPadding >= 0, zeroGap);
 
 check('C1: chiffres evides, contour clair',
-  result.rankFill === 'rgba(255,255,255,.25)' && result.rankOutline === 'rgba(255,255,255,.9)', result);
+  result.rankFill === 'rgba(255,255,255,.2)' && result.rankOutline === 'rgba(255,255,255,.94)', result);
 check('C2: accent violet par defaut', result.accentDefault === '#775BF4', result.accentDefault);
 check('D1: une couleur invalide retombe sur le defaut',
   accent.applied === '#775BF4', accent.applied);
@@ -762,22 +859,24 @@ check('D1: aucune declaration injectee dans la feuille',
   !accent.css.includes('body{display:none}') && accent.bodyVisible, accent.css.slice(0, 120));
 
 check('RANG: le chiffre est bien un « 1 »', rank.text === '1', rank.text);
-check('RANG: il est peint devant l affiche', rank.position === 'relative' && rank.zIndex === '1', rank);
-check('RANG: l affiche est positionnee, donc le chiffre doit lui passer devant',
-  rank.posterPosition === 'relative', rank.posterPosition);
-check('RANG: le « 1 » a la meme largeur que le « 2 » (chasse fixe)',
-  rank.oneWidth === rank.twoWidth, rank);
-check('RANG: l affiche mord sur le chiffre', rank.overlap > 0, rank.overlap);
-check('RANG: mais sans l avaler', rank.overlap < rank.oneWidth, rank);
+check('RANG: il est dessine en SVG, donc il suit la taille de la carte', rank.isSvg === true, rank);
+check('RANG: « 1 » et « 2 » occupent exactement la meme boite', rank.sameWidth === true, rank);
+check('RANG: « 10 » est plus large sans etre plus petit',
+  rank.tenText === '10' && rank.tenWider && rank.tenSameHeight, rank);
+check('RANG: le chiffre reste dans sa carte', rank.withinCard === true, rank);
+check('RANG: il couvre entre le tiers et la moitie de l affiche',
+  rank.coverage > 0.3 && rank.coverage < 0.55, rank.coverage);
+check('RANG: le contour est peint derriere le remplissage',
+  rank.paintOrder.indexOf('stroke') === 0, rank.paintOrder);
 
 check('ANIM: les rangees entrent en animation', motion.name === 'mc-rise', motion.name);
 check('ANIM: chaque rangee entre apres la precedente',
   JSON.stringify(motion.delays) === JSON.stringify(['0ms', '55ms', '110ms', '165ms']), motion.delays);
-check('ANIM: les cartes ne transitionnent que sur transform',
-  motion.cardTransition === 'transform', motion.cardTransition);
+check('ANIM: seul le chiffre transitionne, et seulement sur sa couleur',
+  motion.glyphTransition === 'stroke', motion.glyphTransition);
 check('ANIM: prefers-reduced-motion coupe l entree', reduced.animationName === 'none', reduced.animationName);
 check('ANIM: prefers-reduced-motion coupe les transitions',
-  reduced.cardTransition === 'none', reduced.cardTransition);
+  reduced.glyphTransition === 'none', reduced.glyphTransition);
 check('ANIM: sans animation, la rangee reste visible',
   reduced.rowOpacity === '1' && reduced.rowVisible === true, reduced);
 
@@ -805,6 +904,8 @@ check('VOISIN: la section des bibliotheques n est jamais re-ajoutee',
 
 check('NATIF: une section en neuvieme position est trouvee',
   deepFirst.indexOf('section8') !== -1, deepFirst);
+check('NATIF: la valeur heritee « folders » vaut la section des bibliotheques',
+  legacyFolders === modernFolders, [legacyFolders, modernFolders]);
 check('NATIF: le decalage des interfaces televiseur est rattrape',
   tvLayout.indexOf('section2') < tvLayout.indexOf('mc-row')
     && tvLayout.indexOf('section1') > tvLayout.lastIndexOf('mc-row'),
@@ -823,41 +924,30 @@ check('CLAIR: fond clair detecte sur les 10 rangees', lightMode.flagged === 10, 
 check('CLAIR: le contour des chiffres devient sombre', lightMode.outlineIsDark === true, lightMode);
 check('CLAIR: et le halo qui le detache devient clair', lightMode.haloIsLight === true, lightMode);
 
-check('CSS: la feuille produit bien des regles', styling.ruleCount > 30, styling.ruleCount);
+check('CSS: la feuille produit bien des regles', styling.ruleCount > 25, styling.ruleCount);
 check('CSS: accolades equilibrees', styling.bracesBalanced === true, styling.bracesBalanced);
-check('CSS: les 10 points de rupture sont presents', styling.mediaCount === 10, styling.mediaCount);
+check('CSS: seuls les points de rupture de comportement subsistent (plus aucun de taille)',
+  styling.mediaCount === 3, styling.mediaCount);
 
-check('TAILLE: telephone portrait plus petit que paysage',
-  widths.phonePortrait < widths.phoneLandscape, widths);
-check('TAILLE: paysage plus petit que bureau',
-  widths.phoneLandscape < widths.desktop, widths);
-check('TAILLE: bureau plus petit que grand ecran',
-  widths.desktop < widths.wide, widths);
-check('TAILLE: grand ecran plus petit qu un televiseur 1080p',
-  widths.wide < widths.tv1080, widths);
-check('TAILLE: televiseur 1080p plus petit qu un 4K',
-  widths.tv1080 < widths.tv4k, widths);
-check('TAILLE: l affiche double entre le telephone et le televiseur 4K',
-  widths.tv4k >= widths.phonePortrait * 2, widths);
-check('TAILLE: un ecran bas reduit les affiches', widths.shortScreen < widths.desktop, widths);
+// Jellyfin RETRECIT ses cartes a certains paliers pour en montrer davantage :
+// une echelle strictement croissante n'a plus de sens. Ce qui doit tenir, a chaque
+// palier, c'est l'egalite avec la carte native.
+for (const [label, pair] of Object.entries(widths)) {
+  check('TAILLE (' + label + ') : identique a la carte native',
+    Math.abs(pair[0] - pair[1]) < 0.5, pair);
+}
+check('TAILLE: la carte grandit tout de meme du telephone au televiseur 4K',
+  widths.tv4k[0] > widths.phonePortrait[0], [widths.phonePortrait, widths.tv4k]);
 check('TAILLE: proportion d affiche 2:3 conservee',
   Math.abs(styling.posterRatio - 1.5) < 0.02, styling.posterRatio);
 
 check('TIZEN: la bande n utilise pas `gap` (absent avant Chromium 84)',
   styling.stripUsesGapProperty === false, styling.stripUsesGapProperty);
-check('TIZEN: l espacement passe par des marges',
-  styling.firstCardMargin > 0, styling.firstCardMargin);
-check('VISUEL: les cartes sans rang respirent davantage',
-  styling.plainMargin > styling.firstCardMargin
-    && styling.tileMargin > styling.firstCardMargin,
-  [styling.firstCardMargin, styling.plainMargin, styling.tileMargin]);
-check('VISUEL: les libelles de genre tiennent deux lignes partout',
-  styling.plainNameMinHeight > 0, styling.plainNameMinHeight);
-check('VISUEL: la derniere carte d une rangee de genre n a pas de marge',
-  styling.lastPlainMargin === 0, styling.lastPlainMargin);
-
-check('TIZEN: pas de marge sur la derniere carte',
-  styling.lastCardMargin === 0, styling.lastCardMargin);
+check('PARITE: l espacement entre cartes est celui de Jellyfin',
+  styling.cardPadding === styling.nativeCardPadding,
+  [styling.cardPadding, styling.nativeCardPadding]);
+check('PARITE: les affiches sont des fonds CSS, comme chez Jellyfin',
+  styling.postersAreBackgrounds === true, styling.postersAreBackgrounds);
 check('TIZEN: le contour de focus tient sur :focus seul',
   styling.hasPlainFocusRule === true, styling.hasPlainFocusRule);
 check('TIZEN: le retrait au clic souris est isole dans une regle ecartable',

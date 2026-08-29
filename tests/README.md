@@ -25,6 +25,15 @@ HTML, le chargement différé des genres, le cache client, le masquage des secti
 l'accessibilité — et **rejoue la fonction `allowSwipe()` de `jellyfin-web`** pour garantir
 qu'un balayage horizontal sur mobile ne bascule pas vers l'onglet Favoris.
 
+La page de test charge `jellyfin-card.css` — les règles de carte de jellyfin-web 10.11.9,
+compilées depuis `src/components/cardbuilder/card.scss` — et porte une **rangée native de
+référence** (`#nativeReference`) que le script ne touche jamais. Nos cartes reprenant le
+balisage de `cardBuilder`, leur géométrie vient entièrement de cette feuille : les tests
+mesurent donc une **parité**, à chaque palier d'écran, entre nos cartes et cette référence,
+plutôt que des dimensions écrites en dur. C'est le garde-fou qui empêche le plugin de
+redériver son propre gabarit, défaut qui faisait détonner ses rangées au milieu des
+rangées natives.
+
 Un dernier passage charge `theme-excerpt.css` **après** nos styles, comme le fait le Custom
 CSS de Jellyfin : c'est un extrait fidèle des règles d'ElegantFin qui entrent en collision
 avec les nôtres. Il vérifie que les jetons du thème sont adoptés et que nos propres règles
