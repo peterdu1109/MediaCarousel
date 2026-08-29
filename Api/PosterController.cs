@@ -3,6 +3,7 @@ using System.IO;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
+using JellyfinCarouselPlugin.Models;
 using JellyfinCarouselPlugin.Services;
 using MediaBrowser.Common.Net;
 using Microsoft.AspNetCore.Authorization;
@@ -40,16 +41,22 @@ public class PosterController : ControllerBase
     private const int MaxBytes = 5 * 1024 * 1024;
 
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly ITopListStore _store;
     private readonly ILogger<PosterController> _logger;
 
     /// <summary>
     /// Initialise une nouvelle instance de la classe <see cref="PosterController"/>.
     /// </summary>
     /// <param name="httpClientFactory">Fabrique de clients HTTP.</param>
+    /// <param name="store">Stockage des instantanés, qui fait office de liste blanche.</param>
     /// <param name="logger">Journal.</param>
-    public PosterController(IHttpClientFactory httpClientFactory, ILogger<PosterController> logger)
+    public PosterController(
+        IHttpClientFactory httpClientFactory,
+        ITopListStore store,
+        ILogger<PosterController> logger)
     {
         _httpClientFactory = httpClientFactory;
+        _store = store;
         _logger = logger;
     }
 
@@ -74,6 +81,17 @@ public class PosterController : ControllerBase
         if (!PosterProxy.IsValidFileName(fileName))
         {
             return BadRequest();
+        }
+
+        // La route reste anonyme, et doit le rester : une requête partie d'un `background-image`
+        // ne porte aucun en-tête d'authentification, comme l'explique la remarque de classe.
+        // Ce qui est fermé ici, c'est l'AMPLIFICATION : sans cette liste blanche, n'importe qui
+        // pouvait faire télécharger au serveur — puis écrire sur son disque — tout nom
+        // syntaxiquement valide, la purge ne passant qu'au recalcul et seulement au-delà de
+        // trente jours sans accès. Un nom absent des instantanés ne déclenche plus rien.
+        if (!IsPublished(fileName))
+        {
+            return NotFound();
         }
 
         var cached = ResolveCachePath(fileName);
@@ -106,6 +124,30 @@ public class PosterController : ControllerBase
         }
 
         return ServeBytes(bytes, fileName);
+    }
+
+    /// <summary>
+    /// Indique si une affiche est référencée par un instantané publié.
+    /// </summary>
+    /// <remarks>
+    /// Le balayage porte sur quelques centaines d'entrées au plus — les instantanés sont
+    /// plafonnés à cent — donc bien moins cher que de servir le fichier qui suit.
+    /// </remarks>
+    private bool IsPublished(string fileName)
+    {
+        foreach (var kind in Enum.GetValues<TopListKind>())
+        {
+            foreach (var entry in _store.Get(kind).Entries)
+            {
+                if (PosterProxy.TryGetFileName(entry.PosterUrl, out var published)
+                    && string.Equals(published, fileName, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     /// <summary>
