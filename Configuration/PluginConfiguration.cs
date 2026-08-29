@@ -91,6 +91,28 @@ public class PluginConfiguration : BasePluginConfiguration
     /// </remarks>
     public string[] ExcludedLibraryIds { get; set; } = Array.Empty<string>();
 
+    /// <summary>
+    /// Obtient ou définit une valeur indiquant si le contenu servi par les plugins de chaîne
+    /// (XFusion et les autres passerelles IPTV) est écarté de toutes les rangées.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Inactif par défaut, pour ne rien changer aux installations existantes sans que
+    /// l'administrateur l'ait demandé. Sur un serveur sans plugin de chaîne, le réglage
+    /// n'a de toute façon aucun effet.
+    /// </para>
+    /// <para>
+    /// Il vaut la peine de l'activer dès qu'une passerelle IPTV est installée. Un tel
+    /// catalogue compte couramment plus de titres que toute la bibliothèque locale, et il
+    /// est reconstruit à chaque rafraîchissement du fournisseur : ses dates d'ajout sont
+    /// donc perpétuellement récentes, ce qui suffit à remplir « de retour cette semaine »
+    /// à lui seul, et ses studios et genres écrasent les catalogues locaux. Ces éléments
+    /// arrivent en base comme des <c>Movie</c> et des <c>Episode</c> ordinaires : rien ne
+    /// les distingue en dehors de leur <c>ChannelId</c>.
+    /// </para>
+    /// </remarks>
+    public bool ExcludeChannelContent { get; set; }
+
     // ------------------------------------------------------------------
     // Top 10 global (base de données externe)
     // ------------------------------------------------------------------

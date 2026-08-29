@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Linq;
 using System.Threading;
 using Jellyfin.Data;
@@ -60,8 +59,8 @@ public sealed class LibraryRowBuilder
         ArgumentNullException.ThrowIfNull(config);
 
         var size = Math.Clamp(config.NeverPlayedRowSize, 1, 100);
-        var excludedUsers = ParseGuids(config.ExcludedUserIds);
-        var excludedLibraries = ParseGuids(config.ExcludedLibraryIds);
+        var excludedUsers = LibraryFilter.ParseGuids(config.ExcludedUserIds);
+        var excludedLibraries = LibraryFilter.ParseGuids(config.ExcludedLibraryIds);
 
         // Un film est « déjà vu » dès qu'un seul compte l'a lu : l'union des identifiants
         // suffit, et GetItemIds ne remonte que des identifiants, jamais les éléments entiers.
@@ -107,7 +106,8 @@ public sealed class LibraryRowBuilder
         });
 
         var entries = candidates
-            .Where(item => !played.Contains(item.Id) && !IsExcluded(item, excludedLibraries))
+            .Where(item => !played.Contains(item.Id)
+                && !LibraryFilter.IsExcluded(item, excludedLibraries, config.ExcludeChannelContent))
             .Take(size)
             .Select((item, index) => ToEntry(item, index + 1, item.CommunityRating ?? 0))
             .ToArray();
@@ -135,7 +135,7 @@ public sealed class LibraryRowBuilder
 
         var size = Math.Clamp(config.ReturningRowSize, 1, 100);
         var days = Math.Clamp(config.ReturningRowDays, 1, 365);
-        var excludedLibraries = ParseGuids(config.ExcludedLibraryIds);
+        var excludedLibraries = LibraryFilter.ParseGuids(config.ExcludedLibraryIds);
 
         var episodes = _libraryManager.GetItemList(new InternalItemsQuery
         {
@@ -179,7 +179,8 @@ public sealed class LibraryRowBuilder
                 seriesCache[typed.SeriesId] = series;
             }
 
-            if (series is null || IsExcluded(series, excludedLibraries))
+            if (series is null
+                || LibraryFilter.IsExcluded(series, excludedLibraries, config.ExcludeChannelContent))
             {
                 continue;
             }
@@ -207,34 +208,4 @@ public sealed class LibraryRowBuilder
         ImdbId = item.GetProviderId(MetadataProvider.Imdb)
     };
 
-    private static bool IsExcluded(BaseItem item, IReadOnlyCollection<Guid> excludedLibraries)
-    {
-        if (excludedLibraries.Count == 0)
-        {
-            return false;
-        }
-
-        var topParent = item.GetTopParent();
-        return topParent is not null && excludedLibraries.Contains(topParent.Id);
-    }
-
-    private static HashSet<Guid> ParseGuids(string[]? values)
-    {
-        var result = new HashSet<Guid>();
-
-        if (values is null)
-        {
-            return result;
-        }
-
-        foreach (var value in values)
-        {
-            if (Guid.TryParse(value, CultureInfo.InvariantCulture, out var guid))
-            {
-                result.Add(guid);
-            }
-        }
-
-        return result;
-    }
 }

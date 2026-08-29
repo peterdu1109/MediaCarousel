@@ -24,6 +24,8 @@ public sealed class LibraryTitleIndex
     private readonly Dictionary<string, Guid> _byImdb = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, Guid> _byNameYear = new(StringComparer.Ordinal);
 
+    private bool _skipChannelContent;
+
     private LibraryTitleIndex()
     {
     }
@@ -45,14 +47,16 @@ public sealed class LibraryTitleIndex
     /// </remarks>
     /// <param name="libraryManager">Gestionnaire de bibliothèque.</param>
     /// <param name="excludedLibraries">Bibliothèques à ne pas indexer.</param>
+    /// <param name="excludeChannelContent">Vrai pour ne pas indexer le contenu des plugins de chaine.</param>
     /// <returns>L'index construit.</returns>
     public static LibraryTitleIndex Build(
         ILibraryManager libraryManager,
-        IReadOnlyCollection<Guid>? excludedLibraries = null)
+        IReadOnlyCollection<Guid>? excludedLibraries = null,
+        bool excludeChannelContent = true)
     {
         ArgumentNullException.ThrowIfNull(libraryManager);
 
-        var index = new LibraryTitleIndex();
+        var index = new LibraryTitleIndex { _skipChannelContent = excludeChannelContent };
 
         if (excludedLibraries is null || excludedLibraries.Count == 0)
         {
@@ -96,10 +100,16 @@ public sealed class LibraryTitleIndex
     {
         foreach (var item in items)
         {
-            Add(item);
-        }
+            // Un titre servi par un plugin de chaîne ne doit pas capter le rapprochement :
+            // le Top mondial mènerait vers la copie IPTV plutôt que vers le fichier local.
+            if (_skipChannelContent && item.ChannelId != Guid.Empty)
+            {
+                continue;
+            }
 
-        Count += items.Count;
+            Add(item);
+            Count++;
+        }
     }
 
     /// <summary>

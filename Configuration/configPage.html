@@ -209,6 +209,21 @@
                                     </div>
 
                                     <div class="inputContainer">
+                                        <label class="checkboxContainer">
+                                            <input is="emby-checkbox" type="checkbox" id="ExcludeChannelContent" />
+                                            <span>Ignorer le contenu des plugins de chaîne</span>
+                                        </label>
+                                        <div class="fieldDescription">
+                                            XFusion et les autres passerelles IPTV publient leurs
+                                            catalogues comme des films et des épisodes ordinaires.
+                                            À activer si vous en utilisez une : sans cela, un catalogue
+                                            IPTV — souvent plus fourni que la bibliothèque, et redaté à
+                                            chaque rafraîchissement du fournisseur — remplit à lui seul
+                                            « de retour cette semaine », les studios et les genres.
+                                            Sans plugin de chaîne, ce réglage ne fait rien.
+                                        </div>
+                                    </div>
+                                    <div class="inputContainer">
                                         <textarea is="emby-textarea" id="ExcludedLibraryIds" rows="2"
                                                   label="Bibliothèques exclues"
                                                   aria-describedby="hintExcludedLib"></textarea>
@@ -677,7 +692,8 @@
                     'EnableLocalTop', 'EnableGlobalTop', 'GlobalTopLibraryOnly',
                     'EnableStudioRow', 'EnableGenreRows', 'EnableReturningRow', 'EnableNeverPlayedRow',
                     'EnableBecauseRow', 'EnableAllTimeRow',
-                    'EnableHomeRows', 'HideNativeHomeSections', 'ManageNativeSections', 'SyncCollections'
+                    'EnableHomeRows', 'HideNativeHomeSections', 'ManageNativeSections', 'SyncCollections',
+                    'ExcludeChannelContent'
                 ];
                 var numbers = [
                     'LocalTopSize', 'LocalTopWindowDays', 'MaxPlaysCountedPerUser', 'CandidatesPerUser',

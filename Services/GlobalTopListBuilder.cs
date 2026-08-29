@@ -86,7 +86,7 @@ public sealed class GlobalTopListBuilder
             }
         }
 
-        var index = LibraryTitleIndex.Build(_libraryManager, excludedLibraries);
+        var index = LibraryTitleIndex.Build(_libraryManager, excludedLibraries, config.ExcludeChannelContent);
         var entries = new List<TopListEntry>(size);
 
         foreach (var title in titles)

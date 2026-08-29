@@ -324,16 +324,24 @@ si l'administrateur supprime la collection, elle est recréée au recalcul suiva
   Les flèches sont un confort souris : `tabindex="-1"` et `aria-hidden="true"`, la navigation au
   clavier passant par les cartes elles-mêmes. `prefers-reduced-motion` et `prefers-contrast` sont
   honorés.
+- **Balisage natif** : chaque carte reprend la structure et les classes de
+  `cardBuilder.buildCard` — `.card`, `.overflowPortraitCard`, `.cardBox`, `.cardScalable`,
+  `.cardPadder`, `.cardImageContainer`, `.cardFooter`, `.cardText` — et l'affiche est un fond
+  CSS, comme chez Jellyfin. Les vignettes de studio prennent la forme paysage
+  (`overflowBackdropCard`), le logo contenu et non recadré.
+- **Aucune dimension n'est écrite ici.** Elle vient de jellyfin-web et du thème actif :
+  ElegantFin calcule `--cardWidth` à partir d'un `--cardCount` révisé sur une quinzaine de
+  paliers, et pose `width: var(--cardWidth) !important` sur `.card`. Le plugin posait
+  auparavant ses propres tailles en pixels sur sept paliers maison ; ses rangées détonnaient
+  au milieu des rangées natives — affiches plus petites, libellés absents, gouttières
+  différentes — et aucun réglage ne pouvait les rattraper. **La règle est donc : ne jamais
+  redimensionner une carte ici.** Les tests navigateur mesurent la parité avec une carte
+  native de référence à chaque palier d'écran ; c'est ce qui empêche la dérive de revenir.
 - **CSS** : injecté dans un `<style id="mc-styles">`, tout est préfixé `mc-`, rien n'est surchargé
-  hors de ces classes.
-- **La gouttière ne vient pas du thème** : c'est la seule dimension que nous ne reprenons
-  pas de l'hôte. Voir le piège dédié — un jeton sans unité colle les cartes *et* invalide
-  silencieusement tout `calc()` qui s'appuie dessus.
-- **Dimensionnement adaptatif** : sept paliers, du téléphone en portrait au téléviseur 4K, plus un
-  palier pour les écrans bas et larges. Les points de rupture ne redéfinissent **que des jetons**,
-  jamais une règle. `clamp()` serait plus concis mais demande Chromium 79, que les téléviseurs
-  Tizen n'ont pas. Les affiches gardent partout la proportion 2:3, et les libellés grossissent plus
-  vite que les affiches sur les grands écrans — ils se lisent de loin.
+  hors de ces classes. La feuille ne garde que les trois choses qui n'existent pas dans
+  Jellyfin : le chiffre du rang, la bande défilante et les flèches. Il ne reste que trois
+  `@media`, tous de comportement (`hover:none`, `prefers-reduced-motion`, `prefers-contrast`),
+  plus aucun de taille.
 - **Ordre des rangées** : `collectRows` n'impose plus d'ordre. Chaque rangée a un identifiant
   (`local`, `global`, `returning`, `neverplayed`, `because`, `studios`, `genres`) et un
   constructeur ; `RowOrder` décide de la séquence. La normalisation est **volontairement
@@ -380,18 +388,22 @@ si l'administrateur supprime la collection, elle est recréée au recalcul suiva
   (plafond 400 ms, posé en JS à l'insertion). Au survol et au focus, la carte s'agrandit
   légèrement et l'affiche respire dans son cadre — deux échelles superposées donnent de la
   profondeur là où une seule paraît plate.
-- **Un chiffre évidé a besoin d'un halo** : le rang est un contour clair sur un
-  remplissage translucide, et ce contour **disparaît** sur la moitié du glyphe qui
-  chevauche une affiche claire — le « 1 » y perdait sa hampe et ne se lisait plus comme un
-  chiffre entier. Une ombre sombre portée tout autour (`text-shadow`, deux rayons) le
-  détache de n'importe quel fond sans le remplir. Sur fond clair, contour et halo
+- **Le chiffre du rang est un SVG**, posé en superposition dans `.cardScalable`, au coin
+  bas-gauche de l'affiche. `-webkit-text-stroke` sur du texte HTML donnait un contour
+  d'épaisseur **fixe en pixels** : il rongeait la hampe du « 1 », resserrait le « 10 », et
+  ne suivait pas la taille de la carte. Le SVG porte son propre repère, dont la largeur suit
+  le nombre de chiffres : le glyphe garde exactement les mêmes proportions du téléphone au
+  téléviseur, sans un seul point de rupture.
+- **Un chiffre évidé a besoin d'un halo** : le contour clair **disparaît** sur la moitié du
+  glyphe qui chevauche une affiche claire. Un second tracé, sombre et plus épais, dessiné
+  dessous, le détache de n'importe quel fond sans le remplir. Sur fond clair, contour et halo
   s'inversent. Le survol teinte le **contour**, pas le remplissage.
-- **Gouttière large hors des rangées classées** : genres, studios, « jamais vu » n'ont pas
-  ce chiffre géant pour écarter leurs affiches et se retrouvaient collés. Ils prennent
-  `--mc-gap-wide` (1,9 em), contre 0,8 em pour les rangées classées. Le libellé réserve
-  toujours ses deux lignes (`min-height`), et pose explicitement `white-space:normal` :
-  un thème qui met ses liens en `nowrap` faisait tenir le titre sur une seule ligne,
-  rognée net au milieu d'un mot au bord de la carte.
+- **`paint-order: stroke fill`** : par défaut SVG peint le remplissage puis le contour, qui
+  mord alors de la moitié de son épaisseur sur l'intérieur du glyphe. L'inverser rend le
+  contour net et le chiffre plus fin à taille égale.
+- **L'espacement entre cartes est celui de Jellyfin** : le padding que `.card` porte
+  lui-même, plus le `column-gap` que le thème pose sur `.itemsContainer` — classe que notre
+  bande porte pour cette raison. Plus aucune marge de notre côté.
 - **Contraintes Tizen** (voir la section dédiée) : pas de `gap` en flexbox, contour de focus porté
   par `:focus` et non `:focus-visible`, pas de `clamp()`.
 - **Cohabitation avec les thèmes** : tous les réglages passent par des variables portées par
@@ -652,14 +664,11 @@ Une bande à `overflow-x:auto` **sans cette classe** fait basculer l'accueil ver
 au moindre balayage sur mobile. Toute zone défilant horizontalement doit porter
 `scrollX hiddenScrollX smoothScrollX`.
 
-**Le chiffre du rang doit être positionné pour rester visible :** `.mc-poster` porte
-`position:relative` (son étiquette « Absent » est en `::after`), et un élément positionné peint
-**toujours** au-dessus d'un élément statique, quel que soit l'ordre du DOM. Sans
-`position:relative;z-index:1` sur `.mc-rank`, l'affiche passe donc devant le chiffre, et la marge
-négative qui les fait se chevaucher en avale une part d'autant plus grande que le glyphe est
-étroit — le « 1 » disparaissait presque entièrement. `font-variant-numeric:tabular-nums` complète
-le correctif : tous les rangs occupent la même chasse, donc le recouvrement, constant, en mange
-partout la même proportion.
+**`contain` décide de ce qui peut déborder d'une carte :** `.cardScalable` est en
+`contain: layout style` — pas de confinement de peinture, le chiffre du rang peut donc y
+déborder de l'affiche. `.cardImageContainer`, lui, est en `contain: strict`, qui **inclut** la
+peinture : un élément placé à l'intérieur y serait rogné net. Le chiffre est donc posé en frère
+de `.cardImageContainer`, après lui dans le DOM — il peint par-dessus sans aucun z-index.
 
 **Les animations ne portent que sur `transform` et `opacity` :** ce sont les deux propriétés que
 le compositeur traite sans repasser par la mise en page ni le dessin. Toute autre propriété
@@ -667,17 +676,27 @@ animée — `width`, `top`, `box-shadow` sur une grande surface — se paie sur 
 téléviseur n'en a pas les moyens. `prefers-reduced-motion` coupe **aussi** l'animation d'entrée,
 pas seulement les transitions : une rangée figée sur l'image de départ resterait invisible.
 
-**Un `<span>` reste `display:inline` hors conteneur flex :** `width` et `height` y sont ignorés.
-Les affiches des rangées de genre, qui ne sont pas des enfants directs de la bande flex, exigent
-un `display:block` explicite.
-
-**Ne pas dépendre de la remise à zéro du client hôte :** `box-sizing: border-box` est appliqué
-explicitement sous `.mc-row`, sinon les hauteurs fixes dérivent selon le thème actif.
+**Une carte native a une largeur fixe :** dans une bande en flexbox, elle serait comprimée dès
+que le contenu déborde. `.mc-row .mc-strip > .card { flex: 0 0 auto }` est la seule règle de
+géométrie que nous posons encore sur une carte, et elle ne fait que préserver la largeur venue
+du thème.
 
 **Le glob implicite du SDK avale `tests/**` :** sans
 `<DefaultItemExcludes>$(DefaultItemExcludes);tests\**</DefaultItemExcludes>`, le projet du
 plugin compile aussi les fichiers `AssemblyInfo` générés dans les `obj/` des tests et échoue
 sur des attributs dupliqués.
+
+**Le contenu des plugins de chaîne n'est pas de la bibliothèque :** XFusion et les autres
+passerelles IPTV publient leur catalogue via `IChannel`, et Jellyfin le matérialise en `Movie`
+et en `Episode` ordinaires — exactement les types que tous les classements interrogent. Rien ne
+les distingue par le type ni par le chemin ; le seul marqueur est `BaseItem.ChannelId`, non vide
+pour ces éléments. Les laisser entrer ne fausse pas seulement les rangées, cela les emporte :
+un catalogue IPTV compte couramment plus de titres que toute la bibliothèque locale, et il est
+reconstruit à chaque rafraîchissement du fournisseur, si bien que ses `DateCreated` sont
+perpétuellement récentes et remplissent « de retour cette semaine » à elles seules. `LibraryFilter`
+centralise la règle ; `ExcludeChannelContent` l'active. Le réglage est **inactif par défaut**,
+pour ne rien changer aux installations existantes sans demande explicite — sur un serveur sans
+plugin de chaîne il n'a de toute façon aucun effet.
 
 **Filtrage de visibilité au service, pas au calcul :** le classement est global ; c'est à la lecture
 que `BaseItem.IsVisible(user)` retire ce que l'appelant n'a pas le droit de voir.
@@ -702,16 +721,12 @@ propriété reste `ExcludedLibraryIds` : le renommer perdrait silencieusement le
 écrites dans `MediaCarousel.xml` et casserait le tableau `lists` de la page de configuration.
 
 **Un jeton de thème sans unité invalide silencieusement un `calc()` :**
-`--itemColumnGap` n'existe pas dans `jellyfin-web` — ce sont les thèmes qui l'inventent, et
-l'un d'eux le déclare `0`, sans unité. Deux effets muets : la valeur est valide pour
-`margin-right`, donc nos cartes se collent ; et `calc(var(--mc-gap) + 1.1em)` devient
-**invalide** — on n'additionne pas un nombre et une longueur — si bien que la déclaration
-retombe à sa valeur initiale, zéro. Les rangées de genres se retrouvaient collées alors que
-la règle existait et qu'aucun message n'apparaissait nulle part. `max()` réglerait le
-problème mais demande Chromium 79, que les téléviseurs Tizen n'ont pas : la gouttière est
-donc écrite en dur. `--sidePadding` et `--smallRadius` restent adoptés, eux ne servent que
-de valeurs directes. Le test navigateur injecte `--itemColumnGap:0` et vérifie que les deux
-gouttières tiennent.
+`--itemColumnGap` n'existe pas dans `jellyfin-web` — ce sont les thèmes qui l'inventent, et l'un
+d'eux le déclare `0`, sans unité. La valeur reste valide pour `margin-right` mais rend
+**invalide** tout `calc()` qui l'additionne à une longueur, et la déclaration retombe alors à sa
+valeur initiale, sans le moindre message. Aucune de nos règles ne lit plus ce jeton :
+l'espacement entre cartes est celui que le thème applique lui-même à `.itemsContainer`, et c'est
+son affaire. Un test le vérifie en injectant `--itemColumnGap:0`.
 
 **La couleur d'accent est validée avant d'entrer dans le CSS :** `HighlightColor` est concaténée
 dans la feuille de styles construite par `buildCss`. `safeAccent` n'accepte que

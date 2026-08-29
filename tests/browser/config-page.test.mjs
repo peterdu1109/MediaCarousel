@@ -27,7 +27,7 @@ await page.addInitScript(() => {
     EnableGenreRows: false, GenreRowCount: 6, GenreRowItemCount: 20, MinItemsPerGenre: 5,
     EnableReturningRow: true, ReturningRowTitle: 'De retour cette semaine', ReturningRowDays: 7, ReturningRowSize: 20,
     EnableNeverPlayedRow: true, NeverPlayedRowTitle: 'Jamais vu', NeverPlayedRowSize: 20, NeverPlayedMinRating: 7.5,
-    HideNativeHomeSections: false,
+    HideNativeHomeSections: false, ExcludeChannelContent: true,
     EnableHomeRows: true, LocalRowTitle: 'Top 10 sur ce serveur', GlobalRowTitle: 'Top 10 mondial',
     HighlightColor: '#e50914',
     RefreshIntervalHours: 6, SyncCollections: false,
@@ -371,6 +371,11 @@ check('note chargee sans troncature', loaded.minRating === '7.5', loaded.minRati
 check('note enregistree en decimal', saved.NeverPlayedMinRating === 8.2, saved.NeverPlayedMinRating);
 check('enregistrement : liste normalisee', JSON.stringify(saved.ExcludedUserIds) === JSON.stringify(['aaa','ccc','ddd']), saved.ExcludedUserIds);
 check('enregistrement : champ d un onglet masque conserve', saved.GlobalTopApiKey === 'secret', saved.GlobalTopApiKey);
+// Le contenu des plugins de chaine (XFusion, IPTV) est ecarte par defaut : la case doit
+// etre relue puis reenregistree telle quelle, sans quoi une sauvegarde la remettrait a
+// false et les catalogues IPTV reviendraient dans les rangees sans avertissement.
+check('CHAINE: la case est bien relue depuis la configuration',
+  saved.ExcludeChannelContent === true, saved.ExcludeChannelContent);
 check('enregistrement : champ replie sous Reglages avances conserve',
   saved.CandidatesPerUser === 100 && JSON.stringify(saved.ExcludedLibraryIds) === '[]', saved.CandidatesPerUser);
 check('retour utilisateur apres enregistrement', feedbackAfterSave.startsWith('Réglages enregistrés'), feedbackAfterSave);

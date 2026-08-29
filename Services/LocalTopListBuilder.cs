@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Linq;
 using System.Threading;
 using Jellyfin.Data;
@@ -91,8 +90,8 @@ public sealed class LocalTopListBuilder
     {
         ArgumentNullException.ThrowIfNull(config);
 
-        var excludedUsers = ParseGuids(config.ExcludedUserIds);
-        var excludedLibraries = ParseGuids(config.ExcludedLibraryIds);
+        var excludedUsers = LibraryFilter.ParseGuids(config.ExcludedUserIds);
+        var excludedLibraries = LibraryFilter.ParseGuids(config.ExcludedLibraryIds);
         var cutoffUtc = windowDays > 0
             ? DateTime.UtcNow.AddDays(-windowDays)
             : (DateTime?)null;
@@ -120,7 +119,15 @@ public sealed class LocalTopListBuilder
             }
 
             usersCounted++;
-            AccumulateForUser(user, itemTypes, candidates, cutoffUtc, excludedLibraries, accumulator, seriesCache);
+            AccumulateForUser(
+                user,
+                itemTypes,
+                candidates,
+                cutoffUtc,
+                excludedLibraries,
+                config.ExcludeChannelContent,
+                accumulator,
+                seriesCache);
         }
 
         var entries = accumulator.Rank(size)
@@ -157,6 +164,7 @@ public sealed class LocalTopListBuilder
         int candidates,
         DateTime? cutoffUtc,
         IReadOnlyCollection<Guid> excludedLibraries,
+        bool excludeChannelContent,
         TopListAccumulator accumulator,
         Dictionary<Guid, BaseItem?> seriesCache)
     {
@@ -215,13 +223,11 @@ public sealed class LocalTopListBuilder
                 ? ResolveSeries(episode.SeriesId, seriesCache) ?? item
                 : item;
 
-            if (excludedLibraries.Count > 0)
+            // Le filtre porte sur la SÉRIE une fois l'épisode reporté sur elle : c'est elle
+            // qui sera classée, et c'est donc sa provenance qui compte.
+            if (LibraryFilter.IsExcluded(target, excludedLibraries, excludeChannelContent))
             {
-                var topParent = target.GetTopParent();
-                if (topParent is not null && excludedLibraries.Contains(topParent.Id))
-                {
-                    continue;
-                }
+                continue;
             }
 
             accumulator.Add(new TopListCandidate(
@@ -260,22 +266,4 @@ public sealed class LocalTopListBuilder
         _ => Array.Empty<BaseItemKind>()
     };
 
-    private static HashSet<Guid> ParseGuids(string[]? values)
-    {
-        var result = new HashSet<Guid>();
-        if (values is null)
-        {
-            return result;
-        }
-
-        foreach (var value in values)
-        {
-            if (Guid.TryParse(value, CultureInfo.InvariantCulture, out var guid))
-            {
-                result.Add(guid);
-            }
-        }
-
-        return result;
-    }
 }

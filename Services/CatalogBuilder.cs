@@ -71,7 +71,7 @@ public sealed class CatalogBuilder
         ArgumentNullException.ThrowIfNull(config);
         cancellationToken.ThrowIfCancellationRequested();
 
-        var excluded = ParseGuids(config.ExcludedLibraryIds);
+        var excluded = LibraryFilter.ParseGuids(config.ExcludedLibraryIds);
         var studioCounter = new CatalogCounter(StudioNameNormalizer.Normalize, StringComparer.Ordinal);
 
         // Les genres se regroupent sur le nom lui-même, à la casse près : Jellyfin distingue
@@ -91,6 +91,11 @@ public sealed class CatalogBuilder
 
             foreach (var item in GetLibraryItems(library.Id))
             {
+                if (config.ExcludeChannelContent && item.ChannelId != Guid.Empty)
+                {
+                    continue;
+                }
+
                 foreach (var studio in item.Studios)
                 {
                     studioCounter.Add(studio, library.Id);
@@ -279,22 +284,4 @@ public sealed class CatalogBuilder
         }
     }
 
-    private static HashSet<Guid> ParseGuids(IEnumerable<string>? values)
-    {
-        var result = new HashSet<Guid>();
-        if (values is null)
-        {
-            return result;
-        }
-
-        foreach (var value in values)
-        {
-            if (Guid.TryParse(value, out var parsed))
-            {
-                result.Add(parsed);
-            }
-        }
-
-        return result;
-    }
 }
