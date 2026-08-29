@@ -18,7 +18,7 @@ namespace JellyfinCarouselPlugin.Providers;
 /// </summary>
 public sealed class TmdbTrendingProvider : ITrendingProvider
 {
-    private const string BaseUrl = "https://api.themoviedb.org/3/trending/";
+    private const string BaseUrl = "https://api.themoviedb.org/3/";
     private const string PosterBaseUrl = "https://image.tmdb.org/t/p/w342";
 
     private readonly IHttpClientFactory _httpClientFactory;
@@ -71,7 +71,21 @@ public sealed class TmdbTrendingProvider : ITrendingProvider
     private async Task<IReadOnlyList<TrendingTitle>> FetchAsync(string mediaType, TrendingRequest request, CancellationToken cancellationToken)
     {
         var isMovie = string.Equals(mediaType, "movie", StringComparison.Ordinal);
-        var url = BaseUrl + mediaType + "/week?language=" + Uri.EscapeDataString(request.Language);
+        var path = ResolvePath(mediaType, isMovie, request.Feed);
+
+        if (path is null)
+        {
+            // TMDB ne publie pas de « prochaines sorties » pour les séries. Ce type de média
+            // est alors simplement absent du classement, plutôt que rabattu en silence sur
+            // une autre liste que celle demandée.
+            _logger.LogInformation(
+                "TMDB ne publie pas la liste {Feed} pour {MediaType} : ce type est ignoré.",
+                request.Feed,
+                mediaType);
+            return Array.Empty<TrendingTitle>();
+        }
+
+        var url = BaseUrl + path + "?language=" + Uri.EscapeDataString(request.Language);
 
         // TMDB accepte deux formes d'authentification : jeton v4 en en-tête Bearer, clé v3 en paramètre.
         var isBearerToken = request.ApiKey.StartsWith("eyJ", StringComparison.Ordinal);
