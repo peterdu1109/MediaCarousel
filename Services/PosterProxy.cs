@@ -25,7 +25,12 @@ public static class PosterProxy
     /// <summary>
     /// Route publique du proxy, sans le nom de fichier.
     /// </summary>
-    public const string RoutePrefix = "/MediaCarousel/Poster/";
+    /// <remarks>
+    /// Volontairement <b>relatif</b>, sans barre initiale : le client le passe à
+    /// <c>ApiClient.getUrl</c>, qui y applique le chemin de base du serveur. Un chemin
+    /// absolu tombait en 404 dès que Jellyfin était servi sous un sous-chemin.
+    /// </remarks>
+    public const string RoutePrefix = "MediaCarousel/Poster/";
 
     private const string TmdbPrefix = "https://image.tmdb.org/t/p/";
 

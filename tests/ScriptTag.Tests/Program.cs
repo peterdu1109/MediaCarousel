@@ -24,6 +24,58 @@ Check("idempotent", ScriptTag.Apply(once) == once);
 var migrated = ScriptTag.Apply(html.Replace("</body>", legacy + "</body>", StringComparison.Ordinal));
 Check("ancienne balise retiree", !migrated.Contains("carousel-layout.js", StringComparison.Ordinal) && migrated.Contains(ScriptTag.Tag, StringComparison.Ordinal));
 
+// ------------------------------------------------------------------
+// Chemin de base du serveur.
+//
+// Servi sous un sous-chemin — le cas courant derriere un reverse proxy — un `src`
+// absolu tombe en 404 : aucune rangee n'apparait, alors que l'API du plugin repond
+// parfaitement par ailleurs.
+// ------------------------------------------------------------------
+
+Check("BASE: une valeur vide ne prefixe rien", ScriptTag.Normalize(null).Length == 0
+    && ScriptTag.Normalize("").Length == 0 && ScriptTag.Normalize("  ").Length == 0);
+Check("BASE: les trois ecritures acceptees par Jellyfin donnent le meme prefixe",
+    ScriptTag.Normalize("jellyfin") == "/jellyfin"
+    && ScriptTag.Normalize("/jellyfin") == "/jellyfin"
+    && ScriptTag.Normalize("/jellyfin/") == "/jellyfin");
+Check("BASE: la balise porte le prefixe",
+    ScriptTag.BuildTag("/jellyfin").Contains("src=\"/jellyfin/MediaCarousel/media-carousel.js\"", StringComparison.Ordinal));
+Check("BASE: sans prefixe, la balise est inchangee",
+    ScriptTag.BuildTag(null).Contains("src=\"/MediaCarousel/media-carousel.js\"", StringComparison.Ordinal));
+
+// Regression : le retrait ne peut pas se faire par egalite de chaine. Si l'administrateur
+// change le chemin de base entre deux demarrages, la balise en place ne ressemble plus a
+// celle que nous produirions — elle resterait, et une seconde s'ajouterait a chaque fois.
+ScriptTag.BaseUrl = "/jellyfin";
+var prefixed = ScriptTag.Apply(html);
+Check("BASE: la balise inseree porte le prefixe courant",
+    prefixed.Contains("/jellyfin/MediaCarousel/media-carousel.js", StringComparison.Ordinal));
+
+ScriptTag.BaseUrl = "/autre";
+var reprefixed = ScriptTag.Apply(prefixed);
+Check("BASE: un changement de prefixe remplace la balise au lieu d'en ajouter une",
+    CountOccurrences(reprefixed, "plugin=\"MediaCarousel\"") == 1
+    && reprefixed.Contains("/autre/MediaCarousel/", StringComparison.Ordinal)
+    && !reprefixed.Contains("/jellyfin/MediaCarousel/", StringComparison.Ordinal));
+
+Check("BASE: le retrait attrape une balise ecrite avec un autre prefixe",
+    !ScriptTag.Remove(prefixed).Contains("MediaCarousel/media-carousel.js", StringComparison.Ordinal));
+
+ScriptTag.BaseUrl = string.Empty;
+
+static int CountOccurrences(string haystack, string needle)
+{
+    var count = 0;
+    var index = 0;
+    while ((index = haystack.IndexOf(needle, index, StringComparison.Ordinal)) >= 0)
+    {
+        count++;
+        index += needle.Length;
+    }
+
+    return count;
+}
+
 var removed = ScriptTag.Remove(migrated);
 Check("suppression complete", !removed.Contains(ScriptTag.Tag, StringComparison.Ordinal) && !removed.Contains("carousel-layout.js", StringComparison.Ordinal));
 Check("suppression idempotente", ScriptTag.Remove(removed) == removed);
@@ -249,7 +301,9 @@ Check("TOP: zero lecture et identifiant vide sont ignores", noise.DistinctItems 
 // ---------------------------------------------------------------------------
 
 Check("PROXY: une affiche TMDB est relayee",
-    PosterProxy.ToLocalUrl("https://image.tmdb.org/t/p/w342/abc123.jpg") == "/MediaCarousel/Poster/abc123.jpg");
+    PosterProxy.ToLocalUrl("https://image.tmdb.org/t/p/w342/abc123.jpg") == "MediaCarousel/Poster/abc123.jpg");
+Check("PROXY: l'adresse relayee est relative, pour suivre le chemin de base du serveur",
+    !PosterProxy.ToLocalUrl("https://image.tmdb.org/t/p/w342/abc123.jpg")!.StartsWith('/'));
 Check("PROXY: l'adresse distante est reconstruite chez TMDB",
     PosterProxy.BuildRemoteUrl("abc123.jpg") == "https://image.tmdb.org/t/p/w342/abc123.jpg");
 

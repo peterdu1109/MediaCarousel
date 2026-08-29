@@ -9,6 +9,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using JellyfinCarouselPlugin.Services;
 using MediaBrowser.Common.Configuration;
+using MediaBrowser.Common.Net;
+using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Model.Tasks;
 using Microsoft.Extensions.Logging;
 
@@ -33,16 +35,22 @@ public sealed class ScriptInjectionTask : IScheduledTask
     private const string PluginId = "191bd290-1054-4b55-a137-46c72181266b";
 
     private readonly IApplicationPaths _applicationPaths;
+    private readonly IServerConfigurationManager _configurationManager;
     private readonly ILogger<ScriptInjectionTask> _logger;
 
     /// <summary>
     /// Initialise une nouvelle instance de la classe <see cref="ScriptInjectionTask"/>.
     /// </summary>
     /// <param name="applicationPaths">Chemins de l'application.</param>
+    /// <param name="configurationManager">Configuration du serveur, pour le chemin de base.</param>
     /// <param name="logger">Journal.</param>
-    public ScriptInjectionTask(IApplicationPaths applicationPaths, ILogger<ScriptInjectionTask> logger)
+    public ScriptInjectionTask(
+        IApplicationPaths applicationPaths,
+        IServerConfigurationManager configurationManager,
+        ILogger<ScriptInjectionTask> logger)
     {
         _applicationPaths = applicationPaths;
+        _configurationManager = configurationManager;
         _logger = logger;
     }
 
@@ -63,6 +71,12 @@ public sealed class ScriptInjectionTask : IScheduledTask
     {
         try
         {
+            // Le chemin de base doit être connu AVANT toute écriture ou tout enregistrement :
+            // c'est lui qui préfixe le `src` de la balise. Servi sous un sous-chemin — le cas
+            // courant derrière un reverse proxy — un `src` absolu tombe en 404 et aucune
+            // rangée n'apparaît, alors que l'API du plugin répond parfaitement par ailleurs.
+            ScriptTag.BaseUrl = ResolveBaseUrl();
+
             var enabled = Plugin.Instance?.Configuration.EnableHomeRows ?? true;
 
             if (!enabled)
@@ -99,6 +113,21 @@ public sealed class ScriptInjectionTask : IScheduledTask
     /// Enregistre la transformation auprès du plugin FileTransformation, s'il est présent.
     /// </summary>
     /// <returns><c>true</c> si l'enregistrement a réussi.</returns>
+    private string ResolveBaseUrl()
+    {
+        try
+        {
+            return ScriptTag.Normalize(_configurationManager.GetNetworkConfiguration().BaseUrl);
+        }
+        catch (Exception ex)
+        {
+            // Une configuration réseau illisible ne doit pas empêcher l'intégration : à la
+            // racine — le cas de loin le plus fréquent — le préfixe vide est le bon.
+            _logger.LogWarning(ex, "Chemin de base illisible ; la balise est écrite sans préfixe.");
+            return string.Empty;
+        }
+    }
+
     private bool TryRegisterWithFileTransformation()
     {
         var assembly = FindFileTransformationAssembly();

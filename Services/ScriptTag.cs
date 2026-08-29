@@ -1,4 +1,5 @@
 using System;
+using System.Text.RegularExpressions;
 
 namespace JellyfinCarouselPlugin.Services;
 
@@ -9,21 +10,67 @@ namespace JellyfinCarouselPlugin.Services;
 /// </summary>
 public static class ScriptTag
 {
-    /// <summary>
-    /// Balise insérée dans <c>index.html</c>.
-    /// </summary>
-    public const string Tag = "<script plugin=\"MediaCarousel\" defer=\"defer\" src=\"/MediaCarousel/media-carousel.js\"></script>";
+    private const string ScriptPath = "/MediaCarousel/media-carousel.js";
 
     /// <summary>
-    /// Balises des versions précédentes, retirées à la mise à jour pour ne pas laisser
-    /// le navigateur demander un script qui n'existe plus.
+    /// Nos balises, quel que soit le chemin de base avec lequel elles ont été écrites.
     /// </summary>
-    private static readonly string[] LegacyTags =
+    /// <remarks>
+    /// Le retrait ne peut pas se faire par égalité de chaîne. L'administrateur peut avoir
+    /// changé le chemin de base du serveur entre deux démarrages : la balise déjà en place
+    /// ne ressemblerait alors plus à celle que nous produirions aujourd'hui, elle resterait
+    /// dans le fichier, et une seconde s'y ajouterait à chaque démarrage.
+    /// </remarks>
+    private static readonly Regex OwnTagPattern = new(
+        "<script[^>]*plugin=\"MediaCarousel\"[^>]*>\\s*</script>",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    /// <summary>
+    /// Balises des versions 1.x et 2.x, qui pointaient un script aujourd'hui disparu.
+    /// </summary>
+    private static readonly Regex LegacyTagPattern = new(
+        "<script[^>]*carousel-layout\\.js[^>]*>\\s*</script>",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    /// <summary>
+    /// Obtient ou définit le chemin de base du serveur, normalisé, sans barre finale.
+    /// </summary>
+    /// <remarks>
+    /// État statique, faute de mieux : <see cref="IndexHtmlTransformer.InjectScript"/> est un
+    /// rappel <b>statique</b> dont la signature est imposée par le plugin File Transformation.
+    /// Il ne reçoit ni service ni contexte, et ne peut donc pas lire la configuration réseau
+    /// de lui-même. <c>ScriptInjectionTask</c> renseigne cette valeur avant d'enregistrer la
+    /// transformation ou d'écrire sur le disque.
+    /// </remarks>
+    public static string BaseUrl { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Obtient la balise telle qu'elle serait insérée avec le chemin de base courant.
+    /// </summary>
+    public static string Tag => BuildTag(BaseUrl);
+
+    /// <summary>
+    /// Construit la balise pour un chemin de base donné.
+    /// </summary>
+    /// <param name="baseUrl">Le chemin de base du serveur, ou une chaîne vide.</param>
+    /// <returns>La balise script complète.</returns>
+    public static string BuildTag(string? baseUrl)
+        => "<script plugin=\"MediaCarousel\" defer=\"defer\" src=\""
+            + Normalize(baseUrl) + ScriptPath + "\"></script>";
+
+    /// <summary>
+    /// Ramène un chemin de base à la forme <c>/prefixe</c>, ou à une chaîne vide.
+    /// </summary>
+    /// <param name="baseUrl">La valeur brute de la configuration réseau.</param>
+    /// <returns>Le préfixe utilisable tel quel devant un chemin absolu.</returns>
+    public static string Normalize(string? baseUrl)
     {
-        "<script FileTransformation=\"true\" plugin=\"MediaCarousel\" defer=\"defer\" src=\"/MediaCarousel/carousel-layout.js\"></script>",
-        "<script src=\"/MediaCarousel/carousel-layout.js\"></script>",
-        "<script src=\"/plugins/JellyfinCarouselPlugin/Web/carousel-layout.js\"></script>"
-    };
+        // Jellyfin accepte « jellyfin », « /jellyfin » et « /jellyfin/ » : les trois
+        // désignent le même préfixe, et la configuration les enregistre telles quelles.
+        var value = (baseUrl ?? string.Empty).Trim().Trim('/');
+
+        return value.Length == 0 ? string.Empty : "/" + value;
+    }
 
     /// <summary>
     /// Retire les balises obsolètes puis insère la balise courante si elle est absente.
@@ -33,22 +80,20 @@ public static class ScriptTag
     /// <returns>Le contenu transformé.</returns>
     public static string Apply(string html)
     {
-        html = RemoveLegacy(html);
+        ArgumentNullException.ThrowIfNull(html);
 
-        if (html.Contains(Tag, StringComparison.Ordinal))
-        {
-            return html;
-        }
-
-        var index = html.LastIndexOf("</body>", StringComparison.OrdinalIgnoreCase);
+        var cleaned = Remove(html);
+        var index = cleaned.LastIndexOf("</body>", StringComparison.OrdinalIgnoreCase);
 
         // Pas de </body> (fichier minifié atypique) : on se rabat sur </head>.
         if (index < 0)
         {
-            index = html.LastIndexOf("</head>", StringComparison.OrdinalIgnoreCase);
+            index = cleaned.LastIndexOf("</head>", StringComparison.OrdinalIgnoreCase);
         }
 
-        return index < 0 ? html : html.Insert(index, Tag);
+        // Aucun point d'ancrage : le fichier est rendu tel qu'il est arrivé, balises
+        // comprises, plutôt que renvoyé amputé de la nôtre sans l'avoir remplacée.
+        return index < 0 ? html : cleaned.Insert(index, Tag);
     }
 
     /// <summary>
@@ -56,15 +101,10 @@ public static class ScriptTag
     /// </summary>
     /// <param name="html">Contenu de <c>index.html</c>.</param>
     /// <returns>Le contenu transformé.</returns>
-    public static string Remove(string html) => RemoveLegacy(html).Replace(Tag, string.Empty, StringComparison.Ordinal);
-
-    private static string RemoveLegacy(string html)
+    public static string Remove(string html)
     {
-        foreach (var legacy in LegacyTags)
-        {
-            html = html.Replace(legacy, string.Empty, StringComparison.Ordinal);
-        }
+        ArgumentNullException.ThrowIfNull(html);
 
-        return html;
+        return LegacyTagPattern.Replace(OwnTagPattern.Replace(html, string.Empty), string.Empty);
     }
 }
