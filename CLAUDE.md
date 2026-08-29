@@ -706,6 +706,40 @@ toutes les entrées (voir « Studios et genres »). Tout classement ou seuil bâ
 le paraître. Le plugin recompte lui-même ; si une future version de Jellyfin corrige le calcul, le
 balayage restera nécessaire pour la ventilation par bibliothèque.
 
+**Tout chemin absolu doit porter le chemin de base du serveur :** Jellyfin peut être servi
+sous un sous-chemin (`BaseUrl` de la configuration réseau), ce qui est le cas courant derrière
+un reverse proxy. Un `src` ou une adresse d'affiche écrits en dur avec une barre initiale y
+tombent en 404 : aucune rangée n'apparaît, alors que l'API du plugin répond parfaitement par
+ailleurs — ce qui rend la panne particulièrement déroutante. Deux règles en découlent. La
+balise script est construite par `ScriptTag.BuildTag`, à partir de `ScriptTag.BaseUrl` que
+`ScriptInjectionTask` renseigne avant toute écriture ; cette propriété est statique parce que
+`IndexHtmlTransformer.InjectScript` est un rappel **statique** dont la signature est imposée
+par File Transformation, et qui ne reçoit donc aucun service. Et `PosterProxy.RoutePrefix` est
+**relatif**, sans barre initiale : le client le passe à `ApiClient.getUrl`, qui applique le
+préfixe lui-même.
+
+**Le retrait de la balise ne peut pas se faire par égalité de chaîne :** si l'administrateur
+change le chemin de base entre deux démarrages, la balise déjà en place ne ressemble plus à
+celle que nous produirions. Elle resterait dans le fichier, et une seconde s'y ajouterait à
+chaque démarrage. `ScriptTag.Remove` travaille donc sur `plugin="MediaCarousel"` par expression
+régulière, jamais sur la chaîne complète.
+
+**Le relais d'affiches est anonyme, mais pas ouvert :** l'accès doit rester anonyme — une
+requête partie d'un `background-image` ne porte aucun en-tête d'authentification, et les routes
+d'images de Jellyfin lui-même sont anonymes pour cette raison. Retirer `AllowAnonymous` ne
+sécuriserait rien, cela casserait toutes les affiches. Ce qui est fermé est l'**amplification** :
+`PosterController` ne télécharge un nom que s'il est référencé par un instantané publié. Sans
+cette liste blanche, n'importe qui pouvait faire télécharger au serveur, puis écrire sur son
+disque, tout nom syntaxiquement valide — la purge ne passant qu'au recalcul, et seulement
+au-delà de trente jours sans accès.
+
+**Un paramètre d'utilisateur ne prime jamais sur le jeton :** `TopListsController` honorait
+`?userId=` tel quel. Le filtrage de visibilité s'appliquait alors au compte **nommé** et non à
+l'appelant, si bien qu'un compte standard pouvait demander le classement « pour » un
+administrateur et recevoir les titres, années et affiches des bibliothèques dont il est exclu.
+Le claim `Jellyfin-UserId` gagne toujours ; le paramètre ne sert qu'aux appels par clé d'API,
+qui ne portent aucun utilisateur et valent déjà administrateur.
+
 **Le proxy d'affiches ne prend jamais d'URL du client :** `PosterController` reçoit un nom de
 fichier, le valide, et reconstruit l'adresse distante à partir d'une constante. Accepter une URL
 — même « vérifiée » — rouvrirait une SSRF, et une liste blanche d'hôtes se contourne
@@ -735,14 +769,25 @@ dans la feuille de styles construite par `buildCss`. `safeAccent` n'accepte que
 arbitraires. La constante `DEFAULT_ACCENT` du script doit rester synchronisée avec la valeur par
 défaut de `PluginConfiguration.HighlightColor`.
 
+**Le chemin TMDB dépend de la liste demandée :** `ResolvePath` traduit `TrendingFeed` en
+segment d'API (`trending/{type}/week`, `movie/now_playing`, `tv/on_the_air`, `movie/upcoming`).
+Elle est restée **orpheline** pendant plusieurs versions : `FetchAsync` codait en dur
+`trending/{type}/week`, si bien que le `<select>` « Liste » de la page de configuration, sa
+description détaillée et toute la chaîne `TrendingFeed` ne servaient à rien. Un retour `null`
+signifie que TMDB ne publie pas cette liste pour ce type de média — « prochaines sorties » côté
+séries — et ce type est alors ignoré plutôt que rabattu en silence sur une autre liste.
+
 **Clé d'API externe :** `GlobalTopApiKey` n'est jamais renvoyée par l'API du plugin. Elle reste dans
 la configuration, lisible uniquement par un administrateur via l'API de configuration de Jellyfin.
 
 **`icon.png` en double :** racine du dépôt (référencé par `manifest.json`) et `Web/icon.png`
 (référencé par le README). Synchroniser les deux à la mise à jour.
 
-**`build.yaml` maintenu à la main :** la CI ne le met pas à jour. La source de vérité des versions
-publiées est `manifest.json`.
+**`build.yaml` maintenu à la main :** la CI ne le met pas à jour, et personne d'autre ne le
+lit — aucun script du dépôt n'y touche. La source de vérité des versions publiées est
+`manifest.json`. Il avait dérivé jusqu'à s'arrêter à la 2.0.1 en annonçant `targetAbi`
+`10.11.0.0`, soit une contradiction directe avec ce que le catalogue publie ; il ne porte plus
+qu'une entrée, celle de la version courante. Le supprimer serait tout aussi défendable.
 
 ---
 
