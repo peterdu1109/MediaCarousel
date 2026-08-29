@@ -282,16 +282,21 @@ public class TopListsController : ControllerBase
 
     private Jellyfin.Database.Implementations.Entities.User? ResolveUser(Guid? userId)
     {
-        if (userId.HasValue && userId.Value != Guid.Empty)
-        {
-            return _userManager.GetUserById(userId.Value);
-        }
-
         var claim = User.Claims.FirstOrDefault(c => string.Equals(c.Type, UserIdClaim, StringComparison.OrdinalIgnoreCase))?.Value;
 
-        // Une clé d'API n'est rattachée à aucun utilisateur : la visibilité n'est alors pas filtrée.
-        return Guid.TryParse(claim, out var guid) && guid != Guid.Empty
-            ? _userManager.GetUserById(guid)
+        // Le jeton prime TOUJOURS sur le paramètre. L'inverse laissait un compte standard
+        // demander le classement « pour » un administrateur : le filtrage de visibilité
+        // s'appliquait alors au compte nommé et non à l'appelant, qui recevait les titres,
+        // années et affiches des bibliothèques dont il est pourtant exclu.
+        if (Guid.TryParse(claim, out var own) && own != Guid.Empty)
+        {
+            return _userManager.GetUserById(own);
+        }
+
+        // Aucun utilisateur dans le jeton : c'est un appel par clé d'API, qui vaut déjà
+        // administrateur. Le paramètre lui sert alors à choisir le point de vue du filtrage.
+        return userId.HasValue && userId.Value != Guid.Empty
+            ? _userManager.GetUserById(userId.Value)
             : null;
     }
 
