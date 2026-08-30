@@ -730,7 +730,13 @@ const rank = await sizing.evaluate(() => {
     // Il couvre le bas de l'affiche sans l'avaler.
     coverage: Math.round((oneBox.height / posterBox.height) * 100) / 100,
     // Le contour doit etre peint DERRIERE le remplissage.
-    paintOrder: getComputedStyle(one.querySelector('.mc-rank-glyph')).paintOrder
+    paintOrder: getComputedStyle(one.querySelector('.mc-rank-glyph')).paintOrder,
+    // La police doit etre posee explicitement. Un texte SVG dont aucun ancetre ne
+    // declare `font-family` retombe sur le defaut du moteur, qui est un SERIF : les
+    // chiffres se couvrent alors d'empattements qu'on prend pour un defaut de trace.
+    fontFamily: getComputedStyle(one.querySelector('.mc-rank-glyph')).fontFamily,
+    declaresFont: /\.mc-rank text\{[^}]*font-family:/.test(
+      document.getElementById('mc-styles').textContent)
   };
 });
 
@@ -866,6 +872,8 @@ check('RANG: « 10 » est plus large sans etre plus petit',
 check('RANG: le chiffre reste dans sa carte', rank.withinCard === true, rank);
 check('RANG: il couvre entre le tiers et la moitie de l affiche',
   rank.coverage > 0.3 && rank.coverage < 0.55, rank.coverage);
+check('RANG: la police du chiffre est posee, jamais heritee',
+  rank.declaresFont === true && /sans-serif/.test(rank.fontFamily), rank.fontFamily);
 check('RANG: le contour est peint derriere le remplissage',
   rank.paintOrder.indexOf('stroke') === 0, rank.paintOrder);
 

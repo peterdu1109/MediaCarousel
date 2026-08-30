@@ -288,7 +288,15 @@
                dans le DOM, il peint par-dessus sans empiler de z-index. */
             '.mc-row .mc-rank{position:absolute;left:-3.5%;bottom:-2%;height:45%;width:auto;',
             'overflow:visible;pointer-events:none;user-select:none;}',
-            '.mc-row .mc-rank text{font-size:108px;font-weight:900;font-style:italic;',
+            /* La police est posée EXPLICITEMENT, jamais héritée. Un texte SVG dont aucun
+               ancêtre ne déclare `font-family` retombe sur la police par défaut du moteur,
+               qui est un SERIF : les chiffres se couvraient alors d'empattements — une barre
+               sous le « 1 », des talons sur le « 4 » et le « 10 » — qu'on prend pour un
+               défaut de tracé. Jellyfin pose bien une police sur `body`, mais rien ne le
+               garantit sous tous les thèmes, et le défaut ne se voit qu'à ce moment-là. */
+            '.mc-row .mc-rank text{font-family:"Noto Sans",-apple-system,BlinkMacSystemFont,',
+            '"Segoe UI",Roboto,Helvetica,Arial,sans-serif;',
+            'font-size:108px;font-weight:900;font-style:italic;',
             'font-variant-numeric:tabular-nums;font-feature-settings:"tnum";}',
             '.mc-row .mc-rank-halo{fill:none;stroke:var(--mc-rank-halo);stroke-width:13;',
             'stroke-linejoin:round;}',
