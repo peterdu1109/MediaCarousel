@@ -21,6 +21,16 @@ public sealed class TmdbTrendingProvider : ITrendingProvider
     private const string BaseUrl = "https://api.themoviedb.org/3/";
     private const string PosterBaseUrl = "https://image.tmdb.org/t/p/w342";
 
+    /// <summary>
+    /// Nombre maximal de pages demandées à TMDB, à vingt résultats la page.
+    /// </summary>
+    /// <remarks>
+    /// Cinq pages couvrent les cent candidats que <c>GlobalTopListBuilder</c> peut
+    /// demander au plus. Au-delà, on paierait des appels pour des titres que le
+    /// classement ne retiendrait jamais.
+    /// </remarks>
+    private const int MaxPages = 5;
+
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<TmdbTrendingProvider> _logger;
 
@@ -85,7 +95,46 @@ public sealed class TmdbTrendingProvider : ITrendingProvider
             return Array.Empty<TrendingTitle>();
         }
 
-        var url = BaseUrl + path + "?language=" + Uri.EscapeDataString(request.Language);
+        // TMDB rend VINGT résultats par page, quoi qu'on demande. Sans pagination, le
+        // sur-échantillonnage de GlobalTopListBuilder — « size × 5 », prévu pour qu'il reste
+        // de quoi remplir les places après filtrage sur la bibliothèque — plafonnait en
+        // réalité à vingt candidats, et la rangée arrivait incomplète sans que rien ne le
+        // signale.
+        var titles = new List<TrendingTitle>();
+        var totalPages = 1;
+
+        for (var page = 1; page <= totalPages && page <= MaxPages && titles.Count < request.Limit; page++)
+        {
+            var reported = await FetchPageAsync(path, page, isMovie, mediaType, request, titles, cancellationToken)
+                .ConfigureAwait(false);
+
+            // Zéro signale une réponse inexploitable : inutile d'insister sur les suivantes.
+            if (reported <= 0)
+            {
+                break;
+            }
+
+            totalPages = reported;
+        }
+
+        return titles;
+    }
+
+    /// <summary>
+    /// Récupère une page et y ajoute les titres lus. Renvoie le nombre total de pages
+    /// annoncé par TMDB, ou zéro si la réponse est inexploitable.
+    /// </summary>
+    private async Task<int> FetchPageAsync(
+        string path,
+        int page,
+        bool isMovie,
+        string mediaType,
+        TrendingRequest request,
+        List<TrendingTitle> titles,
+        CancellationToken cancellationToken)
+    {
+        var url = BaseUrl + path + "?language=" + Uri.EscapeDataString(request.Language)
+            + "&page=" + page.ToString(CultureInfo.InvariantCulture);
 
         // TMDB accepte deux formes d'authentification : jeton v4 en en-tête Bearer, clé v3 en paramètre.
         var isBearerToken = request.ApiKey.StartsWith("eyJ", StringComparison.Ordinal);
@@ -112,11 +161,8 @@ public sealed class TmdbTrendingProvider : ITrendingProvider
             || resultsElement.ValueKind != JsonValueKind.Array)
         {
             _logger.LogWarning("Réponse TMDB inattendue pour {MediaType} : propriété « results » absente.", mediaType);
-            return Array.Empty<TrendingTitle>();
+            return 0;
         }
-
-        var titles = new List<TrendingTitle>();
-        var rank = 0;
 
         foreach (var element in resultsElement.EnumerateArray())
         {
@@ -139,7 +185,7 @@ public sealed class TmdbTrendingProvider : ITrendingProvider
             var posterPath = ReadString(element, "poster_path");
 
             titles.Add(new TrendingTitle(
-                ++rank,
+                titles.Count + 1,
                 title,
                 ParseYear(ReadString(element, isMovie ? "release_date" : "first_air_date")),
                 tmdbId,
@@ -149,7 +195,10 @@ public sealed class TmdbTrendingProvider : ITrendingProvider
                 string.IsNullOrEmpty(posterPath) ? null : PosterBaseUrl + posterPath));
         }
 
-        return titles;
+        return document.RootElement.TryGetProperty("total_pages", out var pages)
+               && pages.ValueKind == JsonValueKind.Number
+            ? pages.GetInt32()
+            : 1;
     }
 
     /// <summary>
