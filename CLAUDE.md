@@ -728,3 +728,19 @@ la configuration, lisible uniquement par un administrateur via l'API de configur
 
 **`build.yaml` maintenu à la main :** la CI ne le met pas à jour. La source de vérité des versions
 publiées est `manifest.json`.
+
+---
+
+## Économie de contexte
+
+Le propriétaire du dépôt travaille en budget de tokens serré. Par ordre de coût décroissant :
+
+1. **Pas de capture d'écran** sauf demande explicite, ou quand seul l'œil peut trancher.
+   Une image coûte plus qu'une réponse entière.
+2. **Lire par extrait, jamais le fichier entier** : `grep -n`, `sed -n 'a,bp'`.
+   `media-carousel.js` et `configPage.html` font plus de mille lignes chacun.
+3. **N'exécuter que la suite concernée**, et n'en afficher que les échecs
+   (`| grep -v '^OK'`). Le décompte complet ne sert qu'avant un commit.
+4. **Réponses courtes** : ce qui a changé, pourquoi, ce qui a été vérifié. Le raisonnement
+   détaillé n'est déroulé que sur demande ou quand il change une décision.
+5. **Ne pas réexpliquer** ce qui vient d'être dit, ni redemander une préférence déjà donnée.
