@@ -694,9 +694,9 @@ pour ces éléments. Les laisser entrer ne fausse pas seulement les rangées, ce
 un catalogue IPTV compte couramment plus de titres que toute la bibliothèque locale, et il est
 reconstruit à chaque rafraîchissement du fournisseur, si bien que ses `DateCreated` sont
 perpétuellement récentes et remplissent « de retour cette semaine » à elles seules. `LibraryFilter`
-centralise la règle ; `ExcludeChannelContent` l'active. Le réglage est **inactif par défaut**,
-pour ne rien changer aux installations existantes sans demande explicite — sur un serveur sans
-plugin de chaîne il n'a de toute façon aucun effet.
+centralise la règle ; `ExcludeChannelContent` l'active, **par défaut**. Sur un serveur sans
+plugin de chaîne le réglage n'a aucun effet ; sur un serveur qui en a un, l'ancien
+comportement était presque toujours subi plutôt que voulu.
 
 **Filtrage de visibilité au service, pas au calcul :** le classement est global ; c'est à la lecture
 que `BaseItem.IsVisible(user)` retire ce que l'appelant n'a pas le droit de voir.

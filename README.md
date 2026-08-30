@@ -106,7 +106,7 @@ Ensuite, plus rien à faire : le recalcul se relance au démarrage du serveur et
 | Titres candidats par utilisateur | `100` | Plus haut = plus précis, mais plus long à calculer |
 | Utilisateurs exclus | — | Comptes de service, invités |
 | Bibliothèques exclues | — | Vidéos perso, etc. S'applique à toutes les rangées, Top mondial compris |
-| Ignorer le contenu des plugins de chaîne | désactivé | Écarte les catalogues IPTV (XFusion et consorts), qui arrivent en base comme des films et des épisodes ordinaires. À activer si vous en utilisez un |
+| Ignorer le contenu des plugins de chaîne | activé | Écarte les catalogues IPTV (XFusion et consorts), qui arrivent en base comme des films et des épisodes ordinaires |
 
 Les **épisodes comptent pour leur série** : c'est la série qui apparaît au classement, pas
 l'épisode isolé.

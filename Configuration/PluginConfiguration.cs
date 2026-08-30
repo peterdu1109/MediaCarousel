@@ -97,13 +97,12 @@ public class PluginConfiguration : BasePluginConfiguration
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Inactif par défaut, pour ne rien changer aux installations existantes sans que
-    /// l'administrateur l'ait demandé. Sur un serveur sans plugin de chaîne, le réglage
-    /// n'a de toute façon aucun effet.
+    /// Actif par défaut. Sur un serveur sans plugin de chaîne le réglage n'a aucun effet ;
+    /// sur un serveur qui en a un, l'ancien comportement était presque toujours subi plutôt
+    /// que voulu. Le basculer à <c>false</c> restaure le classement d'avant.
     /// </para>
     /// <para>
-    /// Il vaut la peine de l'activer dès qu'une passerelle IPTV est installée. Un tel
-    /// catalogue compte couramment plus de titres que toute la bibliothèque locale, et il
+    /// Un catalogue IPTV compte couramment plus de titres que toute la bibliothèque locale, et il
     /// est reconstruit à chaque rafraîchissement du fournisseur : ses dates d'ajout sont
     /// donc perpétuellement récentes, ce qui suffit à remplir « de retour cette semaine »
     /// à lui seul, et ses studios et genres écrasent les catalogues locaux. Ces éléments
@@ -111,7 +110,7 @@ public class PluginConfiguration : BasePluginConfiguration
     /// les distingue en dehors de leur <c>ChannelId</c>.
     /// </para>
     /// </remarks>
-    public bool ExcludeChannelContent { get; set; }
+    public bool ExcludeChannelContent { get; set; } = true;
 
     // ------------------------------------------------------------------
     // Top 10 global (base de données externe)
