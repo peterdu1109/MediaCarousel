@@ -947,8 +947,26 @@
                     });
                 }
 
-                /* Un seul écouteur sur la liste : elle est reconstruite à chaque déplacement,
-                   des écouteurs par bouton disparaîtraient avec eux. */
+                /* Remet à jour rangs, boutons et champ caché SANS reconstruire le balisage.
+                   Reconstruire faisait clignoter la liste à chaque clic — chaque
+                   `is="emby-button"` devant être ré-initialisé par Jellyfin — et détruisait
+                   le nœud qui portait le focus. */
+                function refreshOrderState() {
+                    var items = field('mcRowOrder').children;
+                    var ids = [];
+
+                    for (var i = 0; i < items.length; i++) {
+                        ids.push(items[i].getAttribute('data-row'));
+                        items[i].querySelector('.mcCfg-order-rank').textContent = i + 1;
+                        items[i].querySelector('.mcCfg-order-up').disabled = i === 0;
+                        items[i].querySelector('.mcCfg-order-down').disabled = i === items.length - 1;
+                    }
+
+                    field('RowOrder').value = ids.join(',');
+                }
+
+                /* Un seul écouteur sur la liste : les boutons vont et viennent avec les
+                   éléments déplacés, des écouteurs par bouton disparaîtraient avec eux. */
                 function wireRowOrder() {
                     field('mcRowOrder').addEventListener('click', function (event) {
                         var button = event.target.closest('.mcCfg-order-up, .mcCfg-order-down');
@@ -957,28 +975,32 @@
                         }
 
                         var li = button.closest('li');
-                        var order = normalizeOrder(field('RowOrder').value);
-                        var from = order.indexOf(li.getAttribute('data-row'));
-                        var to = button.className.indexOf('mcCfg-order-up') !== -1 ? from - 1 : from + 1;
+                        var list = field('mcRowOrder');
+                        var up = button.className.indexOf('mcCfg-order-up') !== -1;
+                        var neighbour = up ? li.previousElementSibling : li.nextElementSibling;
 
-                        if (from < 0 || to < 0 || to >= order.length) {
+                        if (!neighbour) {
                             return;
                         }
 
-                        var moved = order[from];
-                        order[from] = order[to];
-                        order[to] = moved;
-
-                        field('RowOrder').value = order.join(',');
-                        renderRowOrder();
+                        // Un seul échange de deux nœuds : les autres ne bougent pas.
+                        list.insertBefore(up ? li : neighbour, up ? neighbour : li);
+                        refreshOrderState();
 
                         // Le focus suit la rangée déplacée, sinon la navigation au clavier
-                        // repart du début de la page à chaque appui.
-                        var target = field('mcRowOrder').children[to];
-                        var same = target.querySelector(button.className.indexOf('mcCfg-order-up') !== -1
-                            ? '.mcCfg-order-up' : '.mcCfg-order-down');
-                        if (same && !same.disabled) {
-                            same.focus();
+                        // repart du début de la page à chaque appui. `preventScroll` est
+                        // indispensable : sans lui, focaliser ramène l'élément dans le champ
+                        // de vision et fait sauter la page à chaque clic.
+                        //
+                        // Arrivée en bout de liste, la flèche utilisée devient inerte : le
+                        // focus passe alors à l'autre, sinon il retombe sur le corps du
+                        // document et la tabulation suivante repart du haut de la page.
+                        var same = li.querySelector(up ? '.mcCfg-order-up' : '.mcCfg-order-down');
+                        var other = li.querySelector(up ? '.mcCfg-order-down' : '.mcCfg-order-up');
+                        var focusTarget = same && !same.disabled ? same : other;
+
+                        if (focusTarget && !focusTarget.disabled) {
+                            focusTarget.focus({ preventScroll: true });
                         }
                     });
                 }

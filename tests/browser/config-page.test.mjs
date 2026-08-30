@@ -71,6 +71,19 @@ await page.evaluate(() => {
 });
 await page.waitForFunction(() => document.querySelectorAll('.mcCfg-tile').length === 4, { timeout: 5000 });
 
+// La verification inverse : un champ present dans le formulaire mais absent des tableaux
+// n'est ni charge ni enregistre. Il a l'air de marcher, se laisse modifier, et retrouve
+// son ancienne valeur au rechargement — sans le moindre message. C'est exactement le
+// travers qui a laisse le reglage « Liste » du Top mondial sans effet cote serveur
+// pendant plusieurs versions.
+const orphelins = await page.evaluate(() => {
+  const declares = window.__declaredFields;
+  return [...document.querySelectorAll('#mediaCarouselConfigForm input, '
+    + '#mediaCarouselConfigForm select, #mediaCarouselConfigForm textarea')]
+    .map(el => el.id)
+    .filter(id => id && !declares.includes(id));
+});
+
 const loaded = await page.evaluate(() => {
   const q = (s) => document.querySelector(s);
   return {
@@ -187,12 +200,19 @@ const afterToggle = await page.evaluate(() => ({
 // peut pas recevoir le focus, et c'est de toute facon ce que fait l'utilisateur.
 await page.evaluate(() => document.querySelector('#tabHome').click());
 await page.evaluate(() => {
+  // On marque les noeuds : un reordonnancement ne doit pas reconstruire la liste.
+  // La reconstruction faisait clignoter l'affichage a chaque clic et detruisait le
+  // noeud portant le focus, d'ou le saut de la page.
+  document.querySelectorAll('#mcRowOrder li').forEach((li, i) => { li.__marque = i; });
   document.querySelector('#mcRowOrder li:first-child .mcCfg-order-down').click();
 });
 const reordered = await page.evaluate(() => ({
   value: document.querySelector('#RowOrder').value,
   names: Array.from(document.querySelectorAll('#mcRowOrder .mcCfg-order-name')).map(e => e.textContent),
-  focusStillOnArrow: document.activeElement.className.indexOf('mcCfg-order-down') !== -1
+  focusStillOnArrow: document.activeElement.className.indexOf('mcCfg-order-down') !== -1,
+  noeudsPreserves: Array.from(document.querySelectorAll('#mcRowOrder li'))
+    .every(li => typeof li.__marque === 'number'),
+  marques: Array.from(document.querySelectorAll('#mcRowOrder li')).map(li => li.__marque).slice(0, 2)
 }));
 
 // Cocher la gestion des natives : la liste doit s'etendre sans bousculer nos rangees.
@@ -334,6 +354,9 @@ check('ORDRE: descendre echange bien les deux rangees',
     && reordered.names[1] === 'Par genre', reordered.names);
 check('ORDRE: le champ suit le deplacement',
   reordered.value.indexOf('alltime,genres') === 0, reordered.value);
+check('ORDRE: la liste n est pas reconstruite a chaque deplacement',
+  reordered.noeudsPreserves === true && JSON.stringify(reordered.marques) === '[1,0]',
+  [reordered.noeudsPreserves, reordered.marques]);
 check('ORDRE: le focus reste sur la rangee deplacee',
   reordered.focusStillOnArrow === true, reordered);
 check('ORDRE: l ordre modifie est enregistre',
@@ -371,6 +394,8 @@ check('note chargee sans troncature', loaded.minRating === '7.5', loaded.minRati
 check('note enregistree en decimal', saved.NeverPlayedMinRating === 8.2, saved.NeverPlayedMinRating);
 check('enregistrement : liste normalisee', JSON.stringify(saved.ExcludedUserIds) === JSON.stringify(['aaa','ccc','ddd']), saved.ExcludedUserIds);
 check('enregistrement : champ d un onglet masque conserve', saved.GlobalTopApiKey === 'secret', saved.GlobalTopApiKey);
+check('aucun champ du formulaire n est orphelin des tableaux',
+  orphelins.length === 0, orphelins);
 // Le contenu des plugins de chaine (XFusion, IPTV) est ecarte par defaut : la case doit
 // etre relue puis reenregistree telle quelle, sans quoi une sauvegarde la remettrait a
 // false et les catalogues IPTV reviendraient dans les rangees sans avertissement.
