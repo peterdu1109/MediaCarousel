@@ -487,6 +487,54 @@ const deepFirst = await deepPage.evaluate(() =>
   document.querySelector('#homeTab .homeSectionsContainer').firstElementChild.className);
 await deepPage.close();
 
+// Une section native DEPLACEE doit conserver sa liaison aux donnees.
+//
+// `emby-itemscontainer.detachedCallback` met `fetchData` a null, et `loadSection` de
+// jellyfin-web ne la reassigne jamais : un simple insertBefore rendait la section
+// definitivement incapable de se charger. C'est ce qui vidait « A suivre ».
+const bindingPage = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+bindingPage.on('pageerror', e => errors.push('pageerror(binding): ' + e.message));
+await bindingPage.addInitScript(() => {
+  window.__manageNatives = true;
+  window.__customPrefs = { homesection0: 'smalllibrarytiles', homesection1: 'resume', homesection2: 'nextup' };
+  // « nextup » est demande en DERNIER : la section doit donc etre deplacee.
+  window.__rowOrder = 'native:smalllibrarytiles,local,alltime,global,returning,'
+    + 'neverplayed,because,studios,genres,native:resume,native:nextup';
+});
+await bindingPage.goto('file://' + path.join(here, 'home.html'));
+// `disconnectedCallback` est SYNCHRONE : un MutationObserver ne le simule pas
+// fidelement. Un vrai element personnalise est le seul moyen de reproduire l'ordre
+// des operations que subit `emby-itemscontainer` pendant un insertBefore.
+await bindingPage.evaluate(() => {
+  window.__resumed = 0;
+  class FakeItemsContainer extends HTMLDivElement {
+    disconnectedCallback() {
+      this.fetchData = null;
+      this.getItemsHtml = null;
+      this.parentContainer = null;
+    }
+    resume() { window.__resumed++; }
+  }
+  customElements.define('mc-fake-itemscontainer', FakeItemsContainer, { extends: 'div' });
+
+  const section = document.querySelector('#homeTab .homeSectionsContainer .section2');
+  section.innerHTML = '<h2 class="sectionTitle">A suivre</h2>'
+    + '<div is="mc-fake-itemscontainer" class="itemsContainer"></div>';
+  const ic = section.querySelector('.itemsContainer');
+  ic.fetchData = () => Promise.resolve({ Items: [] });
+  ic.getItemsHtml = () => '';
+  ic.parentContainer = section;
+});
+await bindingPage.evaluate(stub);
+await bindingPage.evaluate(script);
+await bindingPage.waitForFunction(() => document.querySelectorAll('.mc-row').length === 10, { timeout: 8000 });
+await bindingPage.waitForTimeout(300);
+const binding = await bindingPage.evaluate(() => {
+  const ic = document.querySelector('#homeTab .homeSectionsContainer .section2 .itemsContainer');
+  return { deplacee: !!ic, liaison: typeof (ic && ic.fetchData), relancee: window.__resumed > 0 };
+});
+await bindingPage.close();
+
 // Valeur heritee : un compte ancien peut porter `folders` la ou Jellyfin ecrit
 // aujourd'hui `smalllibrarytiles`. jellyfin-web la traduit avant de rendre
 // (`homesections.js`) ; nous devons faire de meme, sinon `native:smalllibrarytiles`
@@ -912,6 +960,10 @@ check('VOISIN: la section des bibliotheques n est jamais re-ajoutee',
 
 check('NATIF: une section en neuvieme position est trouvee',
   deepFirst.indexOf('section8') !== -1, deepFirst);
+check('NATIF: une section deplacee garde sa liaison aux donnees',
+  binding.liaison === 'function', binding);
+check('NATIF: et son chargement est relance',
+  binding.relancee === true, binding);
 check('NATIF: la valeur heritee « folders » vaut la section des bibliotheques',
   legacyFolders === modernFolders, [legacyFolders, modernFolders]);
 check('NATIF: le decalage des interfaces televiseur est rattrape',

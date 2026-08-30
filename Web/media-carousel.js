@@ -797,6 +797,57 @@
      * Déplacer une section native est sans risque : `loadSection` de jellyfin-web la
      * retrouve par `querySelector('.section' + i)` sur le conteneur, où qu'elle s'y trouve.
      */
+    /**
+     * Déplace un nœud du conteneur en préservant la liaison aux données des sections
+     * natives qu'il contient.
+     *
+     * `emby-itemscontainer.detachedCallback` met `fetchData`, `getItemsHtml` et
+     * `parentContainer` à **null**. Or `loadSection` de jellyfin-web ne les assigne qu'une
+     * seule fois, au montage de la page : rien ne les réassigne jamais. Un simple
+     * `insertBefore`, qui détache puis rattache le nœud, suffit donc à rendre la section
+     * définitivement incapable de se charger — elle reste avec sa classe `hide` et aucune
+     * carte, et `resume()` n'y peut rien puisqu'il commence par `if (!this.fetchData)`.
+     *
+     * C'est ce qui vidait « À suivre » dès que l'ordre configuré la déplaçait.
+     */
+    function moveSection(container, node, before) {
+        var containers = node.querySelectorAll('.itemsContainer');
+        var saved = [];
+        var i;
+
+        for (i = 0; i < containers.length; i++) {
+            saved.push({
+                element: containers[i],
+                fetchData: containers[i].fetchData,
+                getItemsHtml: containers[i].getItemsHtml,
+                parentContainer: containers[i].parentContainer
+            });
+        }
+
+        container.insertBefore(node, before);
+
+        for (i = 0; i < saved.length; i++) {
+            var entry = saved[i];
+
+            // Rien à restaurer si la liaison n'existait pas encore : la section n'avait pas
+            // fini d'être montée, et jellyfin-web la renseignera lui-même.
+            if (!entry.fetchData || entry.element.fetchData) {
+                continue;
+            }
+
+            entry.element.fetchData = entry.fetchData;
+            entry.element.getItemsHtml = entry.getItemsHtml;
+            entry.element.parentContainer = entry.parentContainer;
+
+            // La section n'avait peut-être jamais eu le temps de charger avant d'être
+            // déplacée : `resume` relance la récupération, et ne fait rien si elle a
+            // déjà eu lieu.
+            if (typeof entry.element.resume === 'function') {
+                entry.element.resume();
+            }
+        }
+    }
+
     function placeRows(container, rows, order, nativeLayout) {
         var byId = {};
 
@@ -878,7 +929,7 @@
                 return;
             }
 
-            container.insertBefore(node, before);
+            moveSection(container, node, before);
         });
 
         // Décalage d'entrée : nos rangées arrivent l'une après l'autre plutôt que toutes
