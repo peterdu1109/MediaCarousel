@@ -121,7 +121,27 @@ public sealed class TopListAccumulator
             _aggregates[candidate.ItemId] = aggregate;
         }
 
-        aggregate.Score += Math.Min(candidate.PlayCount, _playCap);
+        // Le plafond porte sur la contribution TOTALE d'un utilisateur à ce titre, et non
+        // sur chaque élément pris isolément.
+        //
+        // Un épisode est un élément, et son score est reporté sur sa série. Tant que le
+        // plafond s'appliquait par élément, un seul compte qui enchaînait vingt-quatre
+        // épisodes apportait vingt-quatre points à la série, là où trois personnes ayant vu
+        // un film une fois chacune en apportaient trois. Les séries écrasaient donc
+        // structurellement les films, et une seule personne suffisait à en placer une en
+        // tête — l'exact contraire de ce que le réglage annonce, « nombre maximal de
+        // lectures comptabilisées par utilisateur et PAR TITRE ».
+        aggregate.CountedByUser.TryGetValue(candidate.UserId, out var counted);
+        var room = _playCap - counted;
+
+        if (room > 0)
+        {
+            var accepted = Math.Min(candidate.PlayCount, room);
+            aggregate.Score += accepted;
+            aggregate.CountedByUser[candidate.UserId] = counted + accepted;
+        }
+
+        // TotalPlays reste le décompte brut : il sert à l'affichage, pas au classement.
         aggregate.TotalPlays += candidate.PlayCount;
         aggregate.Viewers.Add(candidate.UserId);
 
@@ -182,5 +202,8 @@ public sealed class TopListAccumulator
         public DateTime? LastPlayedUtc { get; set; }
 
         public HashSet<Guid> Viewers { get; } = new();
+
+        /// <summary>Ce que chaque utilisateur a déjà apporté au score de ce titre.</summary>
+        public Dictionary<Guid, int> CountedByUser { get; } = new();
     }
 }

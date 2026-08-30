@@ -252,6 +252,38 @@ Check("TOP: a score egal, le plus partage passe devant", ranked[0].ItemId == dun
 Check("TOP: 3 spectateurs distincts sur Dune", ranked[0].DistinctViewers == 3);
 Check("TOP: 1 seul spectateur sur Matrix", ranked[1].DistinctViewers == 1);
 
+// Une SERIE recoit le score de chacun de ses episodes, chaque episode etant un element
+// distinct. Le plafond doit porter sur la contribution totale de l'utilisateur au titre,
+// sinon un seul binge-watcher place n'importe quelle serie en tete.
+var serie = Guid.NewGuid();
+var binge = new TopListAccumulator(playCap: 3);
+for (var ep = 0; ep < 24; ep++)
+{
+    binge.Add(Play(serie, "Serie", alice, 1));
+}
+
+binge.Add(Play(dune, "Dune", alice, 1));
+binge.Add(Play(dune, "Dune", bob, 1));
+binge.Add(Play(dune, "Dune", carol, 1));
+var bingeRank = binge.Rank(10);
+Check("TOP: 24 episodes d'un seul compte plafonnent a 3, comme un film",
+    Math.Abs(bingeRank.Single(r => r.ItemId == serie).Score - 3) < 0.001);
+Check("TOP: trois spectateurs d'un film valent le binge d'une serie",
+    Math.Abs(bingeRank.Single(r => r.ItemId == dune).Score - 3) < 0.001);
+Check("TOP: les 24 lectures restent visibles dans TotalPlays",
+    bingeRank.Single(r => r.ItemId == serie).TotalPlays == 24);
+
+// Deux comptes qui suivent la meme serie doivent la faire monter, eux.
+var partage = new TopListAccumulator(playCap: 3);
+for (var ep = 0; ep < 24; ep++)
+{
+    partage.Add(Play(serie, "Serie", alice, 1));
+    partage.Add(Play(serie, "Serie", bob, 1));
+}
+
+Check("TOP: deux spectateurs sur une serie valent deux fois le plafond",
+    Math.Abs(partage.Rank(10).Single().Score - 6) < 0.001);
+
 // Un meme compte qui rejoue ne gonfle pas le nombre de spectateurs.
 var repeat = new TopListAccumulator(playCap: 10);
 repeat.Add(Play(dune, "Dune", alice, 2));
