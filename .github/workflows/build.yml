@@ -4,13 +4,56 @@ on:
   push:
     branches:
       - main
+  # Filet de securite : le projet se pousse a plusieurs, et un push n'arme pas
+  # toujours le declencheur ci-dessus (celui du 30/08 n'a cree aucun run). Ce
+  # passage horaire publie ce qui attend, quel que soit l'auteur du push. Il ne
+  # fait rien quand il n'y a rien a publier — voir le job « check ».
+  schedule:
+    - cron: '17 * * * *'
   workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
+  # Y a-t-il quelque chose a publier ? Sans cette porte, le passage horaire
+  # sortirait une version identique a la precedente toutes les heures.
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      release: ${{ steps.pending.outputs.release }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Commits en attente depuis la derniere version
+        id: pending
+        run: |
+          LAST_TAG=$(git tag --sort=-version:refname | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | head -1 || true)
+          if [ -z "$LAST_TAG" ]; then
+            RANGE=""
+          else
+            RANGE="${LAST_TAG}..HEAD"
+          fi
+
+          # Les commits de la CI elle-meme portent [skip ci] : les compter
+          # relancerait une publication a chaque passage, indefiniment.
+          COUNT=$(git log $RANGE --no-merges --pretty=format:"%s" | grep -vc "\[skip ci\]" || true)
+          COUNT=${COUNT:-0}
+
+          echo "$COUNT commit(s) a publier depuis ${LAST_TAG:-le debut}"
+          if [ "$COUNT" -gt 0 ]; then
+            echo "release=true" >> $GITHUB_OUTPUT
+          else
+            echo "release=false" >> $GITHUB_OUTPUT
+          fi
+
   build:
+    needs: check
+    if: needs.check.outputs.release == 'true'
     runs-on: ubuntu-latest
 
     steps:
