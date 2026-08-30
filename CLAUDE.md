@@ -394,13 +394,16 @@ si l'administrateur supprime la collection, elle est recréée au recalcul suiva
   ne suivait pas la taille de la carte. Le SVG porte son propre repère, dont la largeur suit
   le nombre de chiffres : le glyphe garde exactement les mêmes proportions du téléphone au
   téléviseur, sans un seul point de rupture.
-- **Un chiffre évidé a besoin d'un halo** : le contour clair **disparaît** sur la moitié du
-  glyphe qui chevauche une affiche claire. Un second tracé, sombre et plus épais, dessiné
-  dessous, le détache de n'importe quel fond sans le remplir. Sur fond clair, contour et halo
-  s'inversent. Le survol teinte le **contour**, pas le remplissage.
-- **`paint-order: stroke fill`** : par défaut SVG peint le remplissage puis le contour, qui
-  mord alors de la moitié de son épaisseur sur l'intérieur du glyphe. L'inverser rend le
-  contour net et le chiffre plus fin à taille égale.
+- **Le voile, pas le contour** : contour, halo et ombre dépendent tous de ce qu'il y a sous
+  le glyphe. Ils tiennent sur une affiche sombre et lâchent sur une affiche claire, et il
+  fallait les inverser selon le thème. Un dégradé sombre posé sous le chiffre — dans
+  `.cardImageContainer`, donc rogné aux angles arrondis que le thème lui donne — fabrique son
+  propre contraste. Le chiffre est alors **plein, blanc, et indifférent au thème**. Le survol
+  teinte le remplissage.
+- **Le voile vit dans le conteneur d'image, le chiffre au-dessus** : `.cardImageContainer` est
+  en `contain: strict`, donc il rogne ce qu'il contient — parfait pour le voile, qui épouse
+  ainsi le rayon des angles sans qu'on ait à le deviner, rédhibitoire pour le chiffre, qui
+  doit déborder. D'où la séparation entre `decoration` et `overlay` dans `nativeCard`.
 - **L'espacement entre cartes est celui de Jellyfin** : le padding que `.card` porte
   lui-même, plus le `column-gap` que le thème pose sur `.itemsContainer` — classe que notre
   bande porte pour cette raison. Plus aucune marge de notre côté.

@@ -237,11 +237,12 @@
             /* Repris du thème quand il l'expose ; sinon la valeur de `.padded-left`. */
             '--mc-side-padding:var(--sidePadding,3.3%);',
             '--mc-ease:cubic-bezier(.22,.61,.36,1);--mc-dur:.28s;',
-            '--mc-rank-fill:rgba(255,255,255,.2);',
-            '--mc-rank-outline:rgba(255,255,255,.94);',
-            /* Le halo est ce qui fait un chiffre COMPLET : sans lui, le contour blanc
-               disparaît sur la moitié du glyphe qui chevauche une affiche claire. */
-            '--mc-rank-halo:rgba(0,0,0,.78);',
+            '--mc-rank-fill:#fff;',
+            /* Le voile est ce qui rend le chiffre lisible sur N'IMPORTE QUELLE affiche.
+               Un contour, un halo ou une ombre dépendent tous de ce qu'il y a dessous :
+               ils tiennent sur une image sombre et lâchent sur une image claire. Un
+               dégradé posé sous le chiffre, lui, fabrique son propre contraste. */
+            '--mc-rank-scrim:linear-gradient(0deg,rgba(0,0,0,.76) 0%,rgba(0,0,0,.32) 55%,transparent 100%);',
             '--mc-scrim:rgba(0,0,0,.45);',
             '}',
 
@@ -286,7 +287,12 @@
             /* `contain:layout style` sur `.cardScalable` n'inclut pas la peinture : le
                chiffre peut donc déborder de l'affiche. Posé après `.cardImageContainer`
                dans le DOM, il peint par-dessus sans empiler de z-index. */
-            '.mc-row .mc-rank{position:absolute;left:-3.5%;bottom:-2%;height:45%;width:auto;',
+            /* Le voile vit DANS `.cardImageContainer`, qui est en `contain: strict` :
+               il est donc rogné aux angles arrondis de l'affiche, quel que soit le rayon
+               que le thème lui donne. Le poser en frère obligerait à deviner ce rayon. */
+            '.mc-row .mc-rank-scrim{position:absolute;left:0;right:0;bottom:0;height:41%;',
+            'pointer-events:none;background:var(--mc-rank-scrim);}',
+            '.mc-row .mc-rank{position:absolute;left:-3%;bottom:-1.5%;height:32%;width:auto;',
             'overflow:visible;pointer-events:none;user-select:none;}',
             /* La police est posée EXPLICITEMENT, jamais héritée. Un texte SVG dont aucun
                ancêtre ne déclare `font-family` retombe sur la police par défaut du moteur,
@@ -296,17 +302,13 @@
                garantit sous tous les thèmes, et le défaut ne se voit qu'à ce moment-là. */
             '.mc-row .mc-rank text{font-family:"Noto Sans",-apple-system,BlinkMacSystemFont,',
             '"Segoe UI",Roboto,Helvetica,Arial,sans-serif;',
-            'font-size:108px;font-weight:900;font-style:italic;',
+            'font-size:108px;font-weight:900;',
             'font-variant-numeric:tabular-nums;font-feature-settings:"tnum";}',
-            '.mc-row .mc-rank-halo{fill:none;stroke:var(--mc-rank-halo);stroke-width:13;',
-            'stroke-linejoin:round;}',
-            /* `paint-order` place le contour DERRIÈRE le remplissage ; par défaut il est
-               peint par-dessus et rogne le glyphe de la moitié de son épaisseur. */
-            '.mc-row .mc-rank-glyph{fill:var(--mc-rank-fill);stroke:var(--mc-rank-outline);',
-            'stroke-width:4.5;stroke-linejoin:round;paint-order:stroke fill;',
-            'transition:stroke var(--mc-dur) var(--mc-ease);}',
+
+            '.mc-row .mc-rank-glyph{fill:var(--mc-rank-fill);',
+            'transition:fill var(--mc-dur) var(--mc-ease);}',
             '.mc-row .card:hover .mc-rank-glyph,.mc-row .card:focus .mc-rank-glyph{',
-            'stroke:var(--mc-accent);}',
+            'fill:var(--mc-accent);}',
 
             /* Titre présent chez la source externe mais absent du serveur : la carte
                n'est pas cliquable, l'affiche est atténuée, la seconde ligne le dit. */
@@ -347,9 +349,8 @@
             /* Fond clair, détecté en JS sur la couleur réelle de la page : les blancs
                translucides du chiffre y sont invisibles, tout passe en sombre. */
             '.mc-row.mc-on-light{',
-            '--mc-rank-fill:rgba(0,0,0,.14);',
-            '--mc-rank-outline:rgba(0,0,0,.72);',
-            '--mc-rank-halo:rgba(255,255,255,.88);',
+            /* Le chiffre reste blanc : il est posé sur un voile sombre, pas sur la page.
+               C'est tout l'intérêt du voile — il rend le rang indifférent au thème. */
             '--mc-scrim:rgba(0,0,0,.55);',
             '}',
 
@@ -362,7 +363,7 @@
             '}',
 
             '@media (prefers-contrast:more){',
-            '.mc-row{--mc-rank-fill:rgba(255,255,255,.5);}',
+            '.mc-row{--mc-rank-scrim:linear-gradient(0deg,rgba(0,0,0,.92) 0%,rgba(0,0,0,.55) 55%,transparent 100%);}',
             '}'
         ].join('');
     }
@@ -419,9 +420,15 @@
             : '';
 
         var inner = opts.inner || '';
+
         if (!inner && !opts.imageUrl && opts.name) {
             inner = '<div class="cardText cardDefaultText">' + escapeHtml(opts.name) + '</div>';
         }
+
+        // La décoration s'ajoute toujours, sans jamais tenir lieu de contenu : le voile
+        // d'une carte classée ne doit pas empêcher le repli textuel quand l'affiche
+        // manque, ni s'ajouter au logo d'un studio comme un second libellé.
+        inner += opts.decoration || '';
 
         var body = opts.href
             ? '<a href="' + escapeHtml(opts.href) + '" data-action="link" class="' + imageClasses
@@ -465,6 +472,12 @@
      * téléviseur. Le SVG porte son propre repère : une seule règle CSS et le glyphe
      * garde exactement les mêmes proportions partout.
      *
+     * Le voile qui l'accompagne n'est pas décoratif. Contour, halo et ombre dépendent
+     * tous de ce qu'il y a sous le glyphe : ils tiennent sur une affiche sombre et
+     * lâchent sur une affiche claire. Le dégradé, lui, fabrique son propre contraste,
+     * et rend le chiffre lisible sur toutes les affiches — y compris celles qui
+     * seront ajoutées demain.
+     *
      * La largeur du repère suit le nombre de chiffres, pour que « 1 » et « 10 »
      * occupent la même hauteur sans que le second soit comprimé.
      */
@@ -474,7 +487,6 @@
         var middle = width / 2;
 
         return '<svg class="mc-rank" viewBox="0 0 ' + width + ' 128" aria-hidden="true" focusable="false">'
-            + '<text class="mc-rank-halo" x="' + middle + '" y="115" text-anchor="middle">' + text + '</text>'
             + '<text class="mc-rank-glyph" x="' + middle + '" y="115" text-anchor="middle">' + text + '</text>'
             + '</svg>';
     }
@@ -499,6 +511,7 @@
             ariaLabel: 'Numéro ' + entry.Rank + ' : ' + name + (year ? ' (' + year + ')' : '')
                 + (inLibrary ? '' : ' — absent de la bibliothèque'),
             cardClass: 'mc-ranked' + (inLibrary ? '' : ' mc-unavailable'),
+            decoration: '<span class="mc-rank-scrim" aria-hidden="true"></span>',
             overlay: rankBadge(entry.Rank)
         });
     }

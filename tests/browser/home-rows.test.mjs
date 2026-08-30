@@ -233,7 +233,12 @@ const result = await page.evaluate(() => {
     textBox: measure(rows[0].querySelector('.cardText-first')),
     nativeTextBox: measure(document.querySelector('#nativeReference .cardText-first')),
     rankFill: getComputedStyle(rows[0]).getPropertyValue('--mc-rank-fill').trim(),
-    rankOutline: getComputedStyle(rows[0]).getPropertyValue('--mc-rank-outline').trim(),
+    rankScrim: getComputedStyle(rows[0]).getPropertyValue('--mc-rank-scrim').trim(),
+    scrimHeight: (() => {
+      const s = rows[0].querySelector('.mc-rank-scrim');
+      const p = rows[0].querySelector('.mc-ranked .cardImageContainer');
+      return s && p ? Math.round((s.getBoundingClientRect().height / p.getBoundingClientRect().height) * 100) : 0;
+    })(),
     accentDefault: getComputedStyle(rows[0]).getPropertyValue('--mc-accent').trim(),
     genreBox: measure(rows[7].querySelector('.card')),
     // Les vignettes de studio prennent la forme paysage native, pas un format maison.
@@ -607,12 +612,18 @@ await light.evaluate(script);
 await light.waitForFunction(() => document.querySelectorAll('.mc-row').length === 10, { timeout: 8000 });
 const lightMode = await light.evaluate(() => {
   const row = document.querySelector('.mc-row');
-  const outline = getComputedStyle(row).getPropertyValue('--mc-rank-outline').trim();
-  const halo = getComputedStyle(row).getPropertyValue('--mc-rank-halo').trim();
   return {
     flagged: document.querySelectorAll('.mc-row.mc-on-light').length,
-    outlineIsDark: /^rgba\((\d{1,2})[, ]/.test(outline),
-    haloIsLight: halo.indexOf('rgba(255,255,255') === 0
+    // Le chiffre est pose sur le voile, pas sur la page : il reste blanc quel que soit
+    // le theme. C'est tout l'interet du voile, et ce que les anciens contour et halo,
+    // qui devaient s'inverser, ne savaient pas faire.
+    fillStaysWhite: getComputedStyle(row).getPropertyValue('--mc-rank-fill').trim() === '#fff',
+    // Et le voile n'a pas non plus a changer : il est pose sur l'affiche, pas sur la
+    // page. Le rang est donc entierement indifferent au theme — ce que l'ancien duo
+    // contour + halo, qui devait s'inverser, ne savait pas faire.
+    scrimUnchanged: getComputedStyle(row).getPropertyValue('--mc-rank-scrim').trim()
+      === getComputedStyle(document.querySelector('.mc-row:not(.mc-on-light)') || row)
+        .getPropertyValue('--mc-rank-scrim').trim()
   };
 });
 await light.close();
@@ -777,8 +788,8 @@ const rank = await sizing.evaluate(() => {
     withinCard: oneBox.left >= cardBox.left - 1 && oneBox.right <= cardBox.right + 1,
     // Il couvre le bas de l'affiche sans l'avaler.
     coverage: Math.round((oneBox.height / posterBox.height) * 100) / 100,
-    // Le contour doit etre peint DERRIERE le remplissage.
-    paintOrder: getComputedStyle(one.querySelector('.mc-rank-glyph')).paintOrder,
+    // Le voile accompagne chaque carte classee, et une seule fois.
+    voiles: cards[0].querySelectorAll('.mc-rank-scrim').length,
     // La police doit etre posee explicitement. Un texte SVG dont aucun ancetre ne
     // declare `font-family` retombe sur le defaut du moteur, qui est un SERIF : les
     // chiffres se couvrent alors d'empattements qu'on prend pour un defaut de trace.
@@ -904,8 +915,14 @@ check('THEME: aucune de nos regles ne depend de --itemColumnGap',
 check('THEME: un --sidePadding a zero ne casse pas la bande',
   zeroGap.cardWidth > 0 && zeroGap.stripPadding >= 0, zeroGap);
 
-check('C1: chiffres evides, contour clair',
-  result.rankFill === 'rgba(255,255,255,.2)' && result.rankOutline === 'rgba(255,255,255,.94)', result);
+// Le chiffre est PLEIN et blanc, pose sur un voile degrade. Contour, halo et ombre
+// dependaient tous de ce qu'il y avait dessous : ils tenaient sur une affiche sombre et
+// lachaient sur une affiche claire. Le voile, lui, fabrique son propre contraste.
+check('C1: chiffre plein, blanc, sur un voile degrade',
+  result.rankFill === '#fff' && result.rankScrim.indexOf('linear-gradient') === 0,
+  [result.rankFill, result.rankScrim]);
+check('C1: le voile couvre le bas de l affiche, sous le chiffre',
+  result.scrimHeight >= 35 && result.scrimHeight <= 50, result.scrimHeight);
 check('C2: accent violet par defaut', result.accentDefault === '#775BF4', result.accentDefault);
 check('D1: une couleur invalide retombe sur le defaut',
   accent.applied === '#775BF4', accent.applied);
@@ -922,14 +939,14 @@ check('RANG: il couvre entre le tiers et la moitie de l affiche',
   rank.coverage > 0.3 && rank.coverage < 0.55, rank.coverage);
 check('RANG: la police du chiffre est posee, jamais heritee',
   rank.declaresFont === true && /sans-serif/.test(rank.fontFamily), rank.fontFamily);
-check('RANG: le contour est peint derriere le remplissage',
-  rank.paintOrder.indexOf('stroke') === 0, rank.paintOrder);
+check('RANG: chaque carte classee porte un voile, et un seul',
+  rank.voiles === 1, rank.voiles);
 
 check('ANIM: les rangees entrent en animation', motion.name === 'mc-rise', motion.name);
 check('ANIM: chaque rangee entre apres la precedente',
   JSON.stringify(motion.delays) === JSON.stringify(['0ms', '55ms', '110ms', '165ms']), motion.delays);
 check('ANIM: seul le chiffre transitionne, et seulement sur sa couleur',
-  motion.glyphTransition === 'stroke', motion.glyphTransition);
+  motion.glyphTransition === 'fill', motion.glyphTransition);
 check('ANIM: prefers-reduced-motion coupe l entree', reduced.animationName === 'none', reduced.animationName);
 check('ANIM: prefers-reduced-motion coupe les transitions',
   reduced.glyphTransition === 'none', reduced.glyphTransition);
@@ -981,8 +998,10 @@ check('VISUEL: accroche de defilement posee (proximity est la valeur normalisee 
   /^x( proximity)?$/.test(styling.snapType), styling.snapType);
 check('CLAIR: fond sombre, aucun mode clair', styling.lightRows === 0, styling.lightRows);
 check('CLAIR: fond clair detecte sur les 10 rangees', lightMode.flagged === 10, lightMode.flagged);
-check('CLAIR: le contour des chiffres devient sombre', lightMode.outlineIsDark === true, lightMode);
-check('CLAIR: et le halo qui le detache devient clair', lightMode.haloIsLight === true, lightMode);
+check('CLAIR: le chiffre reste blanc, il est pose sur le voile et non sur la page',
+  lightMode.fillStaysWhite === true, lightMode);
+check('CLAIR: le rang est indifferent au theme, voile compris',
+  lightMode.scrimUnchanged === true, lightMode);
 
 check('CSS: la feuille produit bien des regles', styling.ruleCount > 25, styling.ruleCount);
 check('CSS: accolades equilibrees', styling.bracesBalanced === true, styling.bracesBalanced);
