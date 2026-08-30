@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/icon.png",
     "versions": [
       {
+        "version": "3.12.0.0",
+        "changelog": "Nouveautes :\n- Chiffre plein sur voile degrade, a 32 % de la carte\nCorrections :\n- TMDB — Paginer, le sur-echantillonnage plafonnait a vingt candidats\n- API — Apparier les elements sur leur identifiant, pas sur leur position\n- Configuration — Reordonner sans reconstruire la liste ni faire sauter la page\n- Preserver la liaison aux donnees d'une section native deplacee",
+        "targetAbi": "10.11.11.0",
+        "sourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/3.12.0/JellyfinCarouselPlugin.zip",
+        "checksum": "0c42e97516c10aaab3434d5450793957",
+        "timestamp": "2026-08-30T18:43:49Z"
+      },
+      {
         "version": "3.11.0.0",
         "changelog": "Nouveautes :\n- Activer par defaut l'exclusion du contenu de chaine\nCorrections :\n- Plafonner les lectures par titre, pas par element\n- Poser la police du chiffre au lieu de l'heriter",
         "targetAbi": "10.11.11.0",
