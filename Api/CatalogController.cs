@@ -6,6 +6,7 @@ using JellyfinCarouselPlugin.Services;
 using MediaBrowser.Controller.Dto;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
+using MediaBrowser.Model.Dto;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Querying;
 using Microsoft.AspNetCore.Authorization;
@@ -125,12 +126,27 @@ public class CatalogController : ControllerBase
             targets.Add(dto);
         }
 
+        // `GetBaseItemDtos` FILTRE sur `IsVisible` et rend donc une liste potentiellement
+        // plus courte que celle qu'on lui passe. Apparier sur la position ferait alors
+        // glisser toutes les affiches d'un cran, sans que rien ne le signale et pour les
+        // seuls comptes concernes. Aujourd'hui la boucle ci-dessus a deja ecarte les
+        // elements invisibles, mais cette correspondance ne doit dependre de personne.
         if (items.Count > 0)
         {
             var dtos = _dtoService.GetBaseItemDtos(items, CreateDtoOptions());
-            for (var i = 0; i < dtos.Count && i < targets.Count; i++)
+            var byId = new Dictionary<Guid, BaseItemDto>(dtos.Count);
+
+            foreach (var dto in dtos)
             {
-                targets[i].Item = dtos[i];
+                byId[dto.Id] = dto;
+            }
+
+            for (var i = 0; i < targets.Count; i++)
+            {
+                if (byId.TryGetValue(items[i].Id, out var match))
+                {
+                    targets[i].Item = match;
+                }
             }
         }
 
