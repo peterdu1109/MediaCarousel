@@ -71,6 +71,10 @@ public sealed class CatalogBuilder
         ArgumentNullException.ThrowIfNull(config);
         cancellationToken.ThrowIfCancellationRequested();
 
+        // Ce balayage charge tous les films et séries de chaque bibliothèque en mémoire,
+        // pour n'en lire que les studios et les genres. Sa durée décide si une garde
+        // « rien n'a bougé » vaut la peine d'être écrite : on la mesure avant d'optimiser.
+        var watch = System.Diagnostics.Stopwatch.StartNew();
         var excluded = LibraryFilter.ParseGuids(config.ExcludedLibraryIds);
         var studioCounter = new CatalogCounter(StudioNameNormalizer.Normalize, StringComparer.Ordinal);
 
@@ -131,8 +135,9 @@ public sealed class CatalogBuilder
             minimumItems: config.MinItemsPerGenre);
 
         _logger.LogInformation(
-            "Catalogues agrégés sur {Scanned} titre(s) : {Studios} studio(s), {Genres} genre(s).",
+            "Catalogues agrégés sur {Scanned} titre(s) en {Elapsed} ms : {Studios} studio(s), {Genres} genre(s).",
             scanned,
+            watch.ElapsedMilliseconds,
             studios.Entries.Count,
             genres.Entries.Count);
 
