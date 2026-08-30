@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/icon.png",
     "versions": [
       {
+        "version": "3.10.0.0",
+        "changelog": "Nouveautes :\n- Ecarter le contenu des plugins de chaine\nCorrections :\n- TMDB — Brancher le reglage de liste, sans effet jusqu'ici\n- Respecter le chemin de base du serveur\n- Ne relayer que les affiches d'un instantane publie\n- API — Le jeton prime sur ?userId= dans la resolution d'utilisateur\n- Balisage natif des cartes et routage conforme a appRouter",
+        "targetAbi": "10.11.11.0",
+        "sourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/3.10.0/JellyfinCarouselPlugin.zip",
+        "checksum": "7f9df46aa867e8db056b5652b7974f37",
+        "timestamp": "2026-08-30T16:22:22Z"
+      },
+      {
         "version": "3.9.6.0",
         "changelog": "- Corrections et ajustements divers",
         "targetAbi": "10.11.11.0",
