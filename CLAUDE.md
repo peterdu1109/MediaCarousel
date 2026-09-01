@@ -394,6 +394,14 @@ si l'administrateur supprime la collection, elle est recréée au recalcul suiva
   ne suivait pas la taille de la carte. Le SVG porte son propre repère, dont la largeur suit
   le nombre de chiffres : le glyphe garde exactement les mêmes proportions du téléphone au
   téléviseur, sans un seul point de rupture.
+
+  **Son encart n'est pas ce que dit le CSS.** Le repère SVG porte sa propre marge —
+  l'espace des hampes et des talons sous la ligne de base — si bien que `left` et
+  `bottom` ne décrivent pas ce qu'on voit : à `bottom:-1.5%`, la ligne de base du
+  glyphe tombait **4 % sous l'affiche**, dans la zone du titre. Les valeurs actuelles
+  (`left:1%`, `bottom:7.5%`) donnent un encart réel d'environ 6 % à gauche et 5 % en
+  bas, la convention des plateformes sur leurs rangées classées. C'est cet encart
+  mesuré sur le glyphe, pas la valeur CSS, que verrouille le test.
 - **Le voile, pas le contour** : contour, halo et ombre dépendent tous de ce qu'il y a sous
   le glyphe. Ils tiennent sur une affiche sombre et lâchent sur une affiche claire, et il
   fallait les inverser selon le thème. Un dégradé sombre posé sous le chiffre — dans
@@ -515,7 +523,7 @@ dotnet run --project tests/ScriptTag.Tests -c Release
 cd tests/browser && npm install && node home-rows.test.mjs && node config-page.test.mjs
 ```
 
-Trois suites sans framework — 240 assertions — exécutées en CI avant la publication ; voir
+Trois suites sans framework — 265 assertions — exécutées en CI avant la publication ; voir
 `tests/README.md`. L'une charge un extrait des règles d'ElegantFin **après** les nôtres pour
 vérifier que la cohabitation tient.
 Les deux suites navigateur chargent le vrai `media-carousel.js` et le vrai `configPage.html`

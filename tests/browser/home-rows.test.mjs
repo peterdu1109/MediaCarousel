@@ -709,6 +709,18 @@ widths.shortScreen = await sizing.evaluate(() => [
 await sizing.setViewportSize({ width: 1280, height: 900 });
 await sizing.waitForTimeout(120);
 
+// Les logos de studio sont en `loading="lazy"` et la rangee est sous la ligne de
+// flottaison : sans cela, l'image n'est jamais demandee, donc jamais marquee prete,
+// et la mesure suivante tombe sur un element inexistant. On force le chargement
+// plutot que de dependre de la position du defilement.
+await sizing.evaluate(() => {
+  Array.prototype.forEach.call(document.querySelectorAll('.mc-row img'), img => {
+    img.loading = 'eager';
+    img.src = img.src;
+  });
+});
+await sizing.waitForTimeout(800);
+
 const styling = await sizing.evaluate(() => {
   const sheet = document.getElementById('mc-styles');
   const css = sheet.textContent;
@@ -773,6 +785,7 @@ const rank = await sizing.evaluate(() => {
   const tenBox = ten && ten.getBoundingClientRect();
   const cardBox = cards[0].getBoundingClientRect();
   const posterBox = cards[0].querySelector('.cardScalable').getBoundingClientRect();
+  const glyphBox = cards[0].querySelector('.mc-rank-glyph').getBoundingClientRect();
 
   return {
     text: one.querySelector('.mc-rank-glyph').textContent,
@@ -788,6 +801,12 @@ const rank = await sizing.evaluate(() => {
     withinCard: oneBox.left >= cardBox.left - 1 && oneBox.right <= cardBox.right + 1,
     // Il couvre le bas de l'affiche sans l'avaler.
     coverage: Math.round((oneBox.height / posterBox.height) * 100) / 100,
+    // Encart REEL du glyphe dans l'affiche, en pourcentage de la carte. C'est le
+    // seul chiffre qui compte : le repere SVG porte sa propre marge, si bien que
+    // les valeurs CSS ne disent rien de ce qu'on voit. Le glyphe debordait sous la
+    // carte — sa ligne de base tombait 4 % SOUS l'affiche, dans la zone du titre.
+    encartGauche: +(((glyphBox.left - posterBox.left) / posterBox.width) * 100).toFixed(1),
+    encartBas: +(((posterBox.bottom - glyphBox.bottom) / posterBox.height) * 100).toFixed(1),
     // Le voile accompagne chaque carte classee, et une seule fois.
     voiles: cards[0].querySelectorAll('.mc-rank-scrim').length,
     // La police doit etre posee explicitement. Un texte SVG dont aucun ancetre ne
@@ -935,6 +954,10 @@ check('RANG: « 1 » et « 2 » occupent exactement la meme boite', rank.sameWid
 check('RANG: « 10 » est plus large sans etre plus petit',
   rank.tenText === '10' && rank.tenWider && rank.tenSameHeight, rank);
 check('RANG: le chiffre reste dans sa carte', rank.withinCard === true, rank);
+check('RANG: il est pose DANS l affiche, coin bas-gauche, comme sur les plateformes',
+  rank.encartGauche >= 3 && rank.encartGauche <= 10
+    && rank.encartBas >= 3 && rank.encartBas <= 10,
+  [rank.encartGauche, rank.encartBas]);
 check('RANG: il couvre entre le tiers et la moitie de l affiche',
   rank.coverage > 0.3 && rank.coverage < 0.55, rank.coverage);
 check('RANG: la police du chiffre est posee, jamais heritee',

@@ -292,7 +292,13 @@
                que le thème lui donne. Le poser en frère obligerait à deviner ce rayon. */
             '.mc-row .mc-rank-scrim{position:absolute;left:0;right:0;bottom:0;height:41%;',
             'pointer-events:none;background:var(--mc-rank-scrim);}',
-            '.mc-row .mc-rank{position:absolute;left:-3%;bottom:-1.5%;height:32%;width:auto;',
+            /* Le chiffre est posé DANS l'affiche, coin bas-gauche, comme le font les
+               plateformes sur leurs rangées classées. Il débordait auparavant sous la
+               carte — sa ligne de base tombait 4 % SOUS le bas de l'affiche, dans la
+               zone du titre. Ces deux valeurs ne sont pas l'encart visible : le repère
+               SVG porte sa propre marge (hampe et talon des chiffres), qu'elles
+               compensent. L'encart réel du glyphe est mesuré par les tests. */
+            '.mc-row .mc-rank{position:absolute;left:1%;bottom:7.5%;height:32%;width:auto;',
             'overflow:visible;pointer-events:none;user-select:none;}',
             /* La police est posée EXPLICITEMENT, jamais héritée. Un texte SVG dont aucun
                ancêtre ne déclare `font-family` retombe sur la police par défaut du moteur,
