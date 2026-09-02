@@ -335,8 +335,16 @@ si l'administrateur supprime la collection, elle est recréée au recalcul suiva
   auparavant ses propres tailles en pixels sur sept paliers maison ; ses rangées détonnaient
   au milieu des rangées natives — affiches plus petites, libellés absents, gouttières
   différentes — et aucun réglage ne pouvait les rattraper. **La règle est donc : ne jamais
-  redimensionner une carte ici.** Les tests navigateur mesurent la parité avec une carte
-  native de référence à chaque palier d'écran ; c'est ce qui empêche la dérive de revenir.
+  redimensionner une carte ici.** Une carte classée fait exception : elle est volontairement
+  plus large, le chiffre occupant sa propre colonne — mais **l'affiche qu'elle contient garde
+  la taille native au pixel près**. Les tests navigateur mesurent donc la parité sur
+  l'**affiche**, et non sur la carte, à chaque palier d'écran.
+- **La référence native des tests porte un `emby-scroller`.** Jellyfin interpose ce maillon
+  entre la section et le conteneur de cartes, et c'est **lui** que les thèmes padent. Sans lui,
+  la fixture résolvait ses pourcentages contre 100 % de la largeur alors que nos rangées les
+  résolvaient contre une boîte rétrécie par le thème : la comparaison passait au vert en
+  montrant un écart d'un pixel dans le navigateur. Toute référence ajoutée doit reproduire la
+  chaîne complète, pas seulement les classes de la carte.
 - **CSS** : injecté dans un `<style id="mc-styles">`, tout est préfixé `mc-`, rien n'est surchargé
   hors de ces classes. La feuille ne garde que les trois choses qui n'existent pas dans
   Jellyfin : le chiffre du rang, la bande défilante et les flèches. Il ne reste que trois
@@ -388,30 +396,46 @@ si l'administrateur supprime la collection, elle est recréée au recalcul suiva
   (plafond 400 ms, posé en JS à l'insertion). Au survol et au focus, la carte s'agrandit
   légèrement et l'affiche respire dans son cadre — deux échelles superposées donnent de la
   profondeur là où une seule paraît plate.
-- **Le chiffre du rang est un SVG**, posé en superposition dans `.cardScalable`, au coin
-  bas-gauche de l'affiche. `-webkit-text-stroke` sur du texte HTML donnait un contour
-  d'épaisseur **fixe en pixels** : il rongeait la hampe du « 1 », resserrait le « 10 », et
-  ne suivait pas la taille de la carte. Le SVG porte son propre repère, dont la largeur suit
-  le nombre de chiffres : le glyphe garde exactement les mêmes proportions du téléphone au
-  téléviseur, sans un seul point de rupture.
+- **Le chiffre du rang est un SVG**, dans sa propre colonne **à côté** de l'affiche, comme
+  chez Netflix. `-webkit-text-stroke` sur du texte HTML donnait un contour d'épaisseur **fixe
+  en pixels** : il rongeait la hampe du « 1 », resserrait le « 10 », et ne suivait pas la
+  taille de la carte. Le SVG porte son propre repère, dont la largeur suit le nombre de
+  chiffres : le glyphe garde les mêmes proportions du téléphone au téléviseur, sans un seul
+  point de rupture. Le repère est **resserré sur le glyphe** (`viewBox="0 30 W 84"`) : une
+  hauteur d'em complète laisse près de quarante pour cent de vide au-dessus des capitales et
+  sous la ligne de base, et le chiffre paraissait alors deux fois plus petit que demandé.
 
-  **Son encart n'est pas ce que dit le CSS.** Le repère SVG porte sa propre marge —
-  l'espace des hampes et des talons sous la ligne de base — si bien que `left` et
-  `bottom` ne décrivent pas ce qu'on voit : à `bottom:-1.5%`, la ligne de base du
-  glyphe tombait **4 % sous l'affiche**, dans la zone du titre. Les valeurs actuelles
-  (`left:1%`, `bottom:7.5%`) donnent un encart réel d'environ 6 % à gauche et 5 % en
-  bas, la convention des plateformes sur leurs rangées classées. C'est cet encart
-  mesuré sur le glyphe, pas la valeur CSS, que verrouille le test.
-- **Le voile, pas le contour** : contour, halo et ombre dépendent tous de ce qu'il y a sous
-  le glyphe. Ils tiennent sur une affiche sombre et lâchent sur une affiche claire, et il
-  fallait les inverser selon le thème. Un dégradé sombre posé sous le chiffre — dans
-  `.cardImageContainer`, donc rogné aux angles arrondis que le thème lui donne — fabrique son
-  propre contraste. Le chiffre est alors **plein, blanc, et indifférent au thème**. Le survol
-  teinte le remplissage.
-- **Le voile vit dans le conteneur d'image, le chiffre au-dessus** : `.cardImageContainer` est
-  en `contain: strict`, donc il rogne ce qu'il contient — parfait pour le voile, qui épouse
-  ainsi le rayon des angles sans qu'on ait à le deviner, rédhibitoire pour le chiffre, qui
-  doit déborder. D'où la séparation entre `decoration` et `overlay` dans `nativeCard`.
+  **Sa position n'est jamais ce que dit le CSS.** Le repère SVG porte sa propre marge —
+  l'espace des hampes et des talons — si bien que les valeurs déclarées ne décrivent pas ce
+  qu'on voit : un réglage antérieur à `bottom:-1.5%` faisait tomber la ligne de base **4 %
+  sous l'affiche**, dans la zone du titre, alors que le CSS annonçait l'inverse. Les tests
+  mesurent donc la boîte du **glyphe**, jamais la valeur déclarée.
+- **À côté, plus par-dessus** : posé sur l'affiche, le chiffre dépendait de ce qu'il y avait
+  dessous — contour, halo et ombre tiennent sur une image sombre et lâchent sur une image
+  claire, et il fallait tout inverser selon le thème. Le sortir de l'affiche supprime le
+  problème à la racine : plus de voile, plus de remplissage, un simple contour évidé
+  (`fill: none`) dans le gris du thème. L'affiche mord dessus par une marge négative
+  (`-.46` de sa largeur), ce qui l'enfonce comme sur la maquette Netflix.
+- **Alignement par le HAUT de la ligne**, pas par le bas. La colonne contient l'affiche **et**
+  son libellé ; aligné par le bas, le chiffre descendait de toute la hauteur du libellé et
+  venait le chevaucher. Par le haut, ses deux bords tombent sur ceux de l'affiche, dont il a
+  exactement la hauteur. Pour la même raison le libellé entre **dans** la colonne de
+  l'affiche : centré sur la carte élargie, il aurait dérivé à cheval sur le chiffre.
+- **La largeur d'affiche des rangées classées est MESURÉE, jamais calculée.** La colonne du
+  chiffre tient la place d'un `.cardScalable`, et c'est donc sa largeur qu'il faut reproduire.
+  La calculer supposerait de connaître le modèle de boîte, le padding de `.card` et la marge
+  de `.cardBox` — trois valeurs qu'un thème redéfinit. `measurePosterWidth()` lit la vraie
+  valeur sur un `.cardScalable` non classé de la page et la publie dans `--mc-measured` ;
+  elle est relue à chaque redimensionnement, regroupée sur la trame d'affichage. Mesurer
+  `.cardImageContainer` serait un piège : ElegantFin borde `.cardScalable` d'un pixel, et
+  chaque affiche classée sortirait deux pixels trop étroite.
+- **La respiration de fin de bande est une cale, jamais un `padding-right`.** `--cardWidth`
+  contient un **pourcentage** (`99vw - 3.3% × 2`), qui se résout contre la boîte de contenu de
+  la bande. Un padding la rétrécit — et les thèmes, ElegantFin compris, ne padent que le côté
+  **gauche** (`.emby-scroller, .scrollX`). Nos affiches sortaient donc un demi-pixel plus
+  larges que celles des sections natives, sur **toutes** les rangées, classées ou non. Une
+  cale (`::after`) occupe la ligne sans toucher à la boîte de contenu. Second bénéfice : un
+  `padding-right` de fin est ignoré par plusieurs moteurs à défilement horizontal.
 - **L'espacement entre cartes est celui de Jellyfin** : le padding que `.card` porte
   lui-même, plus le `column-gap` que le thème pose sur `.itemsContainer` — classe que notre
   bande porte pour cette raison. Plus aucune marge de notre côté.
@@ -675,11 +699,11 @@ Une bande à `overflow-x:auto` **sans cette classe** fait basculer l'accueil ver
 au moindre balayage sur mobile. Toute zone défilant horizontalement doit porter
 `scrollX hiddenScrollX smoothScrollX`.
 
-**`contain` décide de ce qui peut déborder d'une carte :** `.cardScalable` est en
-`contain: layout style` — pas de confinement de peinture, le chiffre du rang peut donc y
-déborder de l'affiche. `.cardImageContainer`, lui, est en `contain: strict`, qui **inclut** la
-peinture : un élément placé à l'intérieur y serait rogné net. Le chiffre est donc posé en frère
-de `.cardImageContainer`, après lui dans le DOM — il peint par-dessus sans aucun z-index.
+**`contain` décide de ce qui peut déborder d'une carte :** `.cardImageContainer` est en
+`contain: strict`, qui **inclut** la peinture — un élément placé à l'intérieur y serait rogné
+net. C'est l'une des raisons pour lesquelles le chiffre du rang a quitté l'affiche : il vit
+maintenant en frère de `.cardScalable`, dans la ligne flex `.mc-rank-row`, et n'a plus rien à
+déborder ni aucun `z-index` à arbitrer.
 
 **Les animations ne portent que sur `transform` et `opacity` :** ce sont les deux propriétés que
 le compositeur traite sans repasser par la mise en page ni le dessin. Toute autre propriété

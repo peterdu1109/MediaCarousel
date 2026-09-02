@@ -17,9 +17,13 @@
     --smallRadius: 1em;
 }
 
+/* Regle reelle d'ElegantFin (v1.2.94, ligne 1540) : le retrait n'est pose que d'UN
+   cote. Toute respiration que nous ajoutons a droite retrecit donc notre boite de
+   contenu sans retrecir celle des sections natives — et le pourcentage contenu dans
+   `--cardWidth` ne se resout plus sur la meme base. */
 .emby-scroller,
 .scrollX {
-    padding-left: calc(var(--sidePadding));
+    padding-left: calc(var(--sidePadding) - 0.375em);
 }
 
 .verticalSection {

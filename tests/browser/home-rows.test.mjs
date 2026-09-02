@@ -228,19 +228,22 @@ const result = await page.evaluate(() => {
     // Parite avec une carte NATIVE presente sur la page. C'est le seul invariant
     // de dimension qui vaille desormais : la geometrie vient entierement de
     // jellyfin-web et du theme, plus d'un jeu de pixels que nous inventions.
-    box: measure(rows[0].querySelector('.card')),
-    nativeBox: measure(document.querySelector('#nativeReference .card')),
-    textBox: measure(rows[0].querySelector('.cardText-first')),
+    // La parite porte sur l'AFFICHE, plus sur la carte : une carte classee est
+    // volontairement plus large, le chiffre occupant sa propre colonne a cote.
+    box: measure(rows[0].querySelector('.mc-ranked .cardImageContainer')),
+    nativeBox: measure(document.querySelector('#nativeReference .cardImageContainer')),
+    textBox: measure(rows[0].querySelector('.mc-ranked .cardText-first')),
     nativeTextBox: measure(document.querySelector('#nativeReference .cardText-first')),
-    rankFill: getComputedStyle(rows[0]).getPropertyValue('--mc-rank-fill').trim(),
-    rankScrim: getComputedStyle(rows[0]).getPropertyValue('--mc-rank-scrim').trim(),
-    scrimHeight: (() => {
-      const s = rows[0].querySelector('.mc-rank-scrim');
-      const p = rows[0].querySelector('.mc-ranked .cardImageContainer');
-      return s && p ? Math.round((s.getBoundingClientRect().height / p.getBoundingClientRect().height) * 100) : 0;
+    rankStroke: getComputedStyle(rows[0]).getPropertyValue('--mc-rank-stroke').trim(),
+    // Le chiffre est a COTE de l'affiche : il la chevauche par une marge negative,
+    // et sa hauteur vaut celle de l'affiche.
+    rankOverlap: (() => {
+      const g = rows[0].querySelector('.mc-rank').getBoundingClientRect();
+      const p = rows[0].querySelector('.mc-ranked .cardImageContainer').getBoundingClientRect();
+      return { chevauche: Math.round(g.right - p.left) > 0, aGauche: Math.round(g.left) < Math.round(p.left) };
     })(),
     accentDefault: getComputedStyle(rows[0]).getPropertyValue('--mc-accent').trim(),
-    genreBox: measure(rows[7].querySelector('.card')),
+    genreBox: measure(rows[7].querySelector('.cardImageContainer')),
     // Les vignettes de studio prennent la forme paysage native, pas un format maison.
     tileIsBackdrop: rows[6].querySelector('.mc-tile').classList.contains('overflowBackdropCard'),
     shapeClasses: rows[0].querySelector('.card').className.indexOf('overflowPortraitCard') !== -1
@@ -324,13 +327,26 @@ const theme = await themed.evaluate(() => {
     // sections natives : c'est ce qui la fait respirer au meme rythme qu'elles.
     rowMarginBottom: getComputedStyle(row).marginBottom,
     // Sous un theme aussi, nos cartes restent identiques aux cartes natives.
-    cardWidth: Math.round(row.querySelector('.card').getBoundingClientRect().width * 10) / 10,
+    cardWidth: Math.round(
+      row.querySelector('.card .cardImageContainer').getBoundingClientRect().width * 10) / 10,
     nativeCardWidth: Math.round(
-      document.querySelector('#nativeReference .card').getBoundingClientRect().width * 10) / 10,
+      document.querySelector('#nativeReference .cardImageContainer').getBoundingClientRect().width * 10) / 10,
     cardRadius: getComputedStyle(poster.querySelector('.cardImageContainer')).borderTopLeftRadius,
     nativeCardRadius: getComputedStyle(
       document.querySelector('#nativeReference .cardImageContainer')).borderTopLeftRadius,
-    nativeRowMargin: getComputedStyle(document.getElementById('nativeReference')).marginBottom
+    nativeRowMargin: getComputedStyle(document.getElementById('nativeReference')).marginBottom,
+    // `--cardWidth` de Jellyfin contient un POURCENTAGE, resolu contre la boite de
+    // contenu de la bande. Les themes ne padent qu'a gauche : la moindre respiration
+    // ajoutee a droite retrecit notre boite et elargit toutes nos affiches. La
+    // respiration de fin doit donc etre une cale, jamais un padding.
+    stripPaddingRight: getComputedStyle(strip).paddingRight,
+    caleDeFin: getComputedStyle(strip, '::after').content,
+    // Et le bord gauche de la premiere carte doit tomber sur celui de la reference.
+    bordGauche: (() => {
+      const n = document.querySelector('#nativeReference .card').getBoundingClientRect().left;
+      const o = strip.querySelector('.card').getBoundingClientRect().left;
+      return Math.round(Math.abs(n - o) * 100) / 100;
+    })()
   };
 });
 await themed.close();
@@ -617,13 +633,20 @@ const lightMode = await light.evaluate(() => {
     // Le chiffre est pose sur le voile, pas sur la page : il reste blanc quel que soit
     // le theme. C'est tout l'interet du voile, et ce que les anciens contour et halo,
     // qui devaient s'inverser, ne savaient pas faire.
-    fillStaysWhite: getComputedStyle(row).getPropertyValue('--mc-rank-fill').trim() === '#fff',
-    // Et le voile n'a pas non plus a changer : il est pose sur l'affiche, pas sur la
-    // page. Le rang est donc entierement indifferent au theme — ce que l'ancien duo
-    // contour + halo, qui devait s'inverser, ne savait pas faire.
-    scrimUnchanged: getComputedStyle(row).getPropertyValue('--mc-rank-scrim').trim()
-      === getComputedStyle(document.querySelector('.mc-row:not(.mc-on-light)') || row)
-        .getPropertyValue('--mc-rank-scrim').trim()
+    contourFonce: (() => {
+      const v = getComputedStyle(row).getPropertyValue('--mc-rank-stroke');
+      const m = v.match(/hsl\(\s*\d+\s*,\s*\d+%\s*,\s*(\d+)%/);
+      return m ? Number(m[1]) > 50 : false;
+    })(),
+    // Seule la COULEUR du contour suit la page claire. La geometrie, elle, ne bouge
+    // pas : l'affiche garde sa taille native et le chiffre son chevauchement. C'est ce
+    // qui distingue un reglage de teinte d'une mise en page qui se reorganise.
+    aucunVoileResiduel: document.querySelectorAll('.mc-rank-scrim').length === 0,
+    afficheIntacte: (() => {
+      const a = row.querySelector('.mc-ranked .cardImageContainer').getBoundingClientRect();
+      const n = document.querySelector('#nativeReference .cardImageContainer').getBoundingClientRect();
+      return Math.abs(a.width - n.width) < 0.5;
+    })()
   };
 });
 await light.close();
@@ -693,8 +716,8 @@ for (const [label, size] of [
   await sizing.setViewportSize(size);
   await sizing.waitForTimeout(120);
   widths[label] = await sizing.evaluate(() => [
-    document.querySelector('.mc-row .card').getBoundingClientRect().width,
-    document.querySelector('#nativeReference .card').getBoundingClientRect().width
+    document.querySelector('.mc-row .card .cardImageContainer').getBoundingClientRect().width,
+    document.querySelector('#nativeReference .cardImageContainer').getBoundingClientRect().width
   ]);
 }
 
@@ -702,8 +725,8 @@ for (const [label, size] of [
 await sizing.setViewportSize({ width: 1280, height: 560 });
 await sizing.waitForTimeout(120);
 widths.shortScreen = await sizing.evaluate(() => [
-  document.querySelector('.mc-row .card').getBoundingClientRect().width,
-  document.querySelector('#nativeReference .card').getBoundingClientRect().width
+  document.querySelector('.mc-row .card .cardImageContainer').getBoundingClientRect().width,
+  document.querySelector('#nativeReference .cardImageContainer').getBoundingClientRect().width
 ]);
 
 await sizing.setViewportSize({ width: 1280, height: 900 });
@@ -801,14 +824,20 @@ const rank = await sizing.evaluate(() => {
     withinCard: oneBox.left >= cardBox.left - 1 && oneBox.right <= cardBox.right + 1,
     // Il couvre le bas de l'affiche sans l'avaler.
     coverage: Math.round((oneBox.height / posterBox.height) * 100) / 100,
-    // Encart REEL du glyphe dans l'affiche, en pourcentage de la carte. C'est le
-    // seul chiffre qui compte : le repere SVG porte sa propre marge, si bien que
-    // les valeurs CSS ne disent rien de ce qu'on voit. Le glyphe debordait sous la
-    // carte — sa ligne de base tombait 4 % SOUS l'affiche, dans la zone du titre.
+    // Position REELLE du glyphe, en pourcentage de l'affiche. C'est la seule qui
+    // compte : le repere SVG porte sa propre marge, si bien que les valeurs CSS ne
+    // disent rien de ce qu'on voit. Le chiffre etant desormais A COTE de l'affiche,
+    // l'ecart de gauche est NEGATIF — il commence avant elle — et celui du bas doit
+    // tomber a zero, les deux bords du glyphe epousant ceux de l'affiche.
     encartGauche: +(((glyphBox.left - posterBox.left) / posterBox.width) * 100).toFixed(1),
-    encartBas: +(((posterBox.bottom - glyphBox.bottom) / posterBox.height) * 100).toFixed(1),
-    // Le voile accompagne chaque carte classee, et une seule fois.
-    voiles: cards[0].querySelectorAll('.mc-rank-scrim').length,
+    // Le pied se mesure sur la boite SVG, pas sur celle du `<text>` : cette derniere
+    // reserve la place des jambages sous la ligne de base, que les chiffres n'occupent
+    // pas — elle depasse donc de pres de 30 % ce que l'oeil voit. Le `viewBox` etant
+    // resserre sur le glyphe et ancre en `yMax`, le bas de la boite SVG, lui, tombe sur
+    // le pied du chiffre.
+    encartBas: +(((posterBox.bottom - oneBox.bottom) / posterBox.height) * 100).toFixed(1),
+    // Le chiffre occupe sa propre colonne, en frere de l'affiche.
+    colonnes: cards[0].querySelectorAll('.mc-rank-row > .mc-rank').length,
     // La police doit etre posee explicitement. Un texte SVG dont aucun ancetre ne
     // declare `font-family` retombe sur le defaut du moteur, qui est un SERIF : les
     // chiffres se couvrent alors d'empattements qu'on prend pour un defaut de trace.
@@ -899,11 +928,11 @@ check('ROUTAGE: une serie ouvre sa fiche, pas la liste de ses saisons',
 // Un studio n'est le parent de rien : `parentId` donnait une page vide.
 check('ROUTAGE: un studio ouvre une liste filtree par studioId',
   result.studioHref === '#/list?studioId=s1&serverId=server-1', result.studioHref);
-check('PARITE: nos cartes ont la taille exacte d une carte native',
+check('PARITE: nos affiches ont la taille exacte d une affiche native',
   JSON.stringify(result.box) === JSON.stringify(result.nativeBox), [result.box, result.nativeBox]);
 check('PARITE: le libelle a la taille exacte du libelle natif',
   JSON.stringify(result.textBox) === JSON.stringify(result.nativeTextBox), [result.textBox, result.nativeTextBox]);
-check('PARITE: les rangees de genre suivent la meme taille',
+check('PARITE: les rangees de genre suivent la meme taille d affiche',
   JSON.stringify(result.genreBox) === JSON.stringify(result.nativeBox), [result.genreBox, result.nativeBox]);
 check('PARITE: la forme native est bien celle des rangees d accueil',
   result.shapeClasses === true, result.shapeClasses);
@@ -921,7 +950,11 @@ check('MASQUAGE: nos 10 rangees restent visibles', hidden.ourRowsVisible === 10,
 check('MASQUAGE: la rangee d un autre plugin est epargnee', hidden.foreignVisible === true, hidden);
 
 check('THEME: la feuille du theme est bien chargee apres la notre', theme.themeLoadedAfter === true, theme);
-check('THEME: sous un theme aussi, nos cartes gardent la taille native',
+check('THEME: aucune respiration a droite — elle fausserait le pourcentage de --cardWidth',
+  theme.stripPaddingRight === '0px' && theme.caleDeFin === '""' , theme);
+check('THEME: la premiere carte s aligne sur celle de la section native',
+  theme.bordGauche < 0.5, theme.bordGauche);
+check('THEME: sous un theme aussi, nos affiches gardent la taille native',
   theme.cardWidth === theme.nativeCardWidth, [theme.cardWidth, theme.nativeCardWidth]);
 check('THEME: meme arrondi que les cartes natives',
   theme.cardRadius === theme.nativeCardRadius, [theme.cardRadius, theme.nativeCardRadius]);
@@ -937,11 +970,10 @@ check('THEME: un --sidePadding a zero ne casse pas la bande',
 // Le chiffre est PLEIN et blanc, pose sur un voile degrade. Contour, halo et ombre
 // dependaient tous de ce qu'il y avait dessous : ils tenaient sur une affiche sombre et
 // lachaient sur une affiche claire. Le voile, lui, fabrique son propre contraste.
-check('C1: chiffre plein, blanc, sur un voile degrade',
-  result.rankFill === '#fff' && result.rankScrim.indexOf('linear-gradient') === 0,
-  [result.rankFill, result.rankScrim]);
-check('C1: le voile couvre le bas de l affiche, sous le chiffre',
-  result.scrimHeight >= 35 && result.scrimHeight <= 50, result.scrimHeight);
+check('C1: le chiffre est evide, dans le gris du theme',
+  result.rankStroke.indexOf('hsl(') === 0, result.rankStroke);
+check('C1: il est a gauche de l affiche et mord dessus',
+  result.rankOverlap.aGauche === true && result.rankOverlap.chevauche === true, result.rankOverlap);
 check('C2: accent violet par defaut', result.accentDefault === '#775BF4', result.accentDefault);
 check('D1: une couleur invalide retombe sur le defaut',
   accent.applied === '#775BF4', accent.applied);
@@ -954,22 +986,21 @@ check('RANG: « 1 » et « 2 » occupent exactement la meme boite', rank.sameWid
 check('RANG: « 10 » est plus large sans etre plus petit',
   rank.tenText === '10' && rank.tenWider && rank.tenSameHeight, rank);
 check('RANG: le chiffre reste dans sa carte', rank.withinCard === true, rank);
-check('RANG: il est pose DANS l affiche, coin bas-gauche, comme sur les plateformes',
-  rank.encartGauche >= 3 && rank.encartGauche <= 10
-    && rank.encartBas >= 3 && rank.encartBas <= 10,
+check('RANG: il commence AVANT l affiche et son pied tombe sur celui de l affiche',
+  rank.encartGauche < -20 && Math.abs(rank.encartBas) < 6,
   [rank.encartGauche, rank.encartBas]);
-check('RANG: il couvre entre le tiers et la moitie de l affiche',
-  rank.coverage > 0.3 && rank.coverage < 0.55, rank.coverage);
+check('RANG: il fait la hauteur de l affiche',
+  rank.coverage > 0.95 && rank.coverage < 1.1, rank.coverage);
 check('RANG: la police du chiffre est posee, jamais heritee',
   rank.declaresFont === true && /sans-serif/.test(rank.fontFamily), rank.fontFamily);
-check('RANG: chaque carte classee porte un voile, et un seul',
-  rank.voiles === 1, rank.voiles);
+check('RANG: le chiffre est en frere de l affiche, dans sa propre colonne',
+  rank.colonnes === 1, rank.colonnes);
 
 check('ANIM: les rangees entrent en animation', motion.name === 'mc-rise', motion.name);
 check('ANIM: chaque rangee entre apres la precedente',
   JSON.stringify(motion.delays) === JSON.stringify(['0ms', '55ms', '110ms', '165ms']), motion.delays);
 check('ANIM: seul le chiffre transitionne, et seulement sur sa couleur',
-  motion.glyphTransition === 'fill', motion.glyphTransition);
+  motion.glyphTransition === 'stroke', motion.glyphTransition);
 check('ANIM: prefers-reduced-motion coupe l entree', reduced.animationName === 'none', reduced.animationName);
 check('ANIM: prefers-reduced-motion coupe les transitions',
   reduced.glyphTransition === 'none', reduced.glyphTransition);
@@ -1021,10 +1052,10 @@ check('VISUEL: accroche de defilement posee (proximity est la valeur normalisee 
   /^x( proximity)?$/.test(styling.snapType), styling.snapType);
 check('CLAIR: fond sombre, aucun mode clair', styling.lightRows === 0, styling.lightRows);
 check('CLAIR: fond clair detecte sur les 10 rangees', lightMode.flagged === 10, lightMode.flagged);
-check('CLAIR: le chiffre reste blanc, il est pose sur le voile et non sur la page',
-  lightMode.fillStaysWhite === true, lightMode);
-check('CLAIR: le rang est indifferent au theme, voile compris',
-  lightMode.scrimUnchanged === true, lightMode);
+check('CLAIR: le contour du chiffre s eclaircit pour tenir sur une page claire',
+  lightMode.contourFonce === true, lightMode);
+check('CLAIR: sur page claire, seule la teinte change — la geometrie tient',
+  lightMode.aucunVoileResiduel === true && lightMode.afficheIntacte === true, lightMode);
 
 check('CSS: la feuille produit bien des regles', styling.ruleCount > 25, styling.ruleCount);
 check('CSS: accolades equilibrees', styling.bracesBalanced === true, styling.bracesBalanced);

@@ -237,12 +237,14 @@
             /* Repris du thème quand il l'expose ; sinon la valeur de `.padded-left`. */
             '--mc-side-padding:var(--sidePadding,3.3%);',
             '--mc-ease:cubic-bezier(.22,.61,.36,1);--mc-dur:.28s;',
-            '--mc-rank-fill:#fff;',
-            /* Le voile est ce qui rend le chiffre lisible sur N'IMPORTE QUELLE affiche.
-               Un contour, un halo ou une ombre dépendent tous de ce qu'il y a dessous :
-               ils tiennent sur une image sombre et lâchent sur une image claire. Un
-               dégradé posé sous le chiffre, lui, fabrique son propre contraste. */
-            '--mc-rank-scrim:linear-gradient(0deg,rgba(0,0,0,.76) 0%,rgba(0,0,0,.32) 55%,transparent 100%);',
+            '--mc-rank-stroke:hsl(214,13%,40%);',
+            /* Largeur d'affiche des rangees classees. Elle est MESUREE sur une affiche
+               non classee de la page et publiee dans `--mc-measured` : la calculer depuis
+               `--mc-cardWidth` supposerait de connaitre le modele de boite, le padding de
+               `.card` et la marge de `.cardBox`, que chaque theme redefinit. Le repli ne
+               sert que si la page ne contient aucune affiche de reference. */
+            '--mc-poster-width:var(--mc-measured,calc(var(--cardWidth,15.5vw) - 1.95em));',
+
             '--mc-scrim:rgba(0,0,0,.45);',
             '}',
 
@@ -265,9 +267,17 @@
             '.mc-row .mc-strip{display:flex;flex-wrap:nowrap;align-items:flex-start;',
             'overflow-x:auto;overflow-y:hidden;scrollbar-width:none;-ms-overflow-style:none;',
             'padding-left:calc(var(--mc-side-padding) - .375em);',
-            'padding-right:var(--mc-side-padding);',
             'scroll-snap-type:x proximity;',
             'scroll-padding-left:calc(var(--mc-side-padding) - .375em);}',
+            /* La respiration de fin de bande est une CALE, pas un `padding-right`.
+               Deux raisons. D'abord `--cardWidth` contient un pourcentage (`3.3%`),
+               qui se résout contre la boîte de CONTENU de la bande : un padding la
+               rétrécit, et nos affiches sortaient alors un demi-pixel plus larges que
+               celles des sections natives — les thèmes, ElegantFin compris, ne padent
+               que le côté gauche. Ensuite un `padding-right` en fin de conteneur à
+               défilement horizontal est ignoré par plusieurs moteurs ; une cale, elle,
+               est une boîte, et tient partout. */
+            '.mc-row .mc-strip::after{content:"";flex:0 0 var(--mc-side-padding);}',
             '.mc-row .mc-strip>*{scroll-snap-align:start;}',
             '.mc-row .mc-strip::-webkit-scrollbar{display:none;}',
             /* Une carte native a une largeur fixe ; sans cela, flexbox la comprime dès
@@ -284,21 +294,24 @@
                grandissent ensemble avec l'affiche, du téléphone au téléviseur, sans un
                seul point de rupture.
                ------------------------------------------------------------------ */
-            /* `contain:layout style` sur `.cardScalable` n'inclut pas la peinture : le
-               chiffre peut donc déborder de l'affiche. Posé après `.cardImageContainer`
-               dans le DOM, il peint par-dessus sans empiler de z-index. */
-            /* Le voile vit DANS `.cardImageContainer`, qui est en `contain: strict` :
-               il est donc rogné aux angles arrondis de l'affiche, quel que soit le rayon
-               que le thème lui donne. Le poser en frère obligerait à deviner ce rayon. */
-            '.mc-row .mc-rank-scrim{position:absolute;left:0;right:0;bottom:0;height:41%;',
-            'pointer-events:none;background:var(--mc-rank-scrim);}',
-            /* Le chiffre est posé DANS l'affiche, coin bas-gauche, comme le font les
-               plateformes sur leurs rangées classées. Il débordait auparavant sous la
-               carte — sa ligne de base tombait 4 % SOUS le bas de l'affiche, dans la
-               zone du titre. Ces deux valeurs ne sont pas l'encart visible : le repère
-               SVG porte sa propre marge (hampe et talon des chiffres), qu'elles
-               compensent. L'encart réel du glyphe est mesuré par les tests. */
-            '.mc-row .mc-rank{position:absolute;left:1%;bottom:7.5%;height:32%;width:auto;',
+            /* Le chiffre n'est plus une superposition : il vit dans sa propre colonne,
+               en frère de `.cardScalable`. Il n'a donc plus rien à déborder, ni aucun
+               z-index à arbitrer — ce qui règle du même coup le `contain: strict` de
+               `.cardImageContainer`, qui rognait tout ce qu'on y plaçait. */
+            /* La carte prend la largeur de son contenu : le chiffre y ajoute sa part
+               sans qu'aucune formule n'ait a etre ajustee palier par palier. */
+            '.mc-row .mc-ranked{width:auto!important;}',
+            /* Alignement par le HAUT, et non par le bas : la colonne contient l'affiche
+               ET son libellé, alors que le chiffre doit se caler sur la seule affiche.
+               Aligné par le bas, il descendait de toute la hauteur du libellé et venait
+               le chevaucher. Par le haut, ses deux bords tombent sur ceux de l'affiche,
+               puisqu'il en a exactement la hauteur. */
+            '.mc-row .mc-rank-row{display:flex;align-items:flex-start;}',
+            /* L'affiche garde EXACTEMENT la largeur d'une affiche non classee. */
+            '.mc-row .mc-rank-col{flex:0 0 var(--mc-poster-width);min-width:0;}',
+            /* Marge negative : l'affiche mord sur le chiffre, comme chez Netflix. */
+            '.mc-row .mc-rank{flex:0 0 auto;height:calc(var(--mc-poster-width) * 1.5);',
+            'margin-right:calc(var(--mc-poster-width) * -.46);',
             'overflow:visible;pointer-events:none;user-select:none;}',
             /* La police est posée EXPLICITEMENT, jamais héritée. Un texte SVG dont aucun
                ancêtre ne déclare `font-family` retombe sur la police par défaut du moteur,
@@ -311,10 +324,13 @@
             'font-size:108px;font-weight:900;',
             'font-variant-numeric:tabular-nums;font-feature-settings:"tnum";}',
 
-            '.mc-row .mc-rank-glyph{fill:var(--mc-rank-fill);',
-            'transition:fill var(--mc-dur) var(--mc-ease);}',
+            /* Chiffre evide : contour seul, sans remplissage. Il n'est plus pose SUR
+               l'affiche mais a cote, donc il n'a plus rien a contraster — le fond de la
+               page suffit, et le voile degrade qui l'accompagnait devient inutile. */
+            '.mc-row .mc-rank-glyph{fill:none;stroke:var(--mc-rank-stroke);stroke-width:5;',
+            'stroke-linejoin:round;transition:stroke var(--mc-dur) var(--mc-ease);}',
             '.mc-row .card:hover .mc-rank-glyph,.mc-row .card:focus .mc-rank-glyph{',
-            'fill:var(--mc-accent);}',
+            'stroke:var(--mc-accent);}',
 
             /* Titre présent chez la source externe mais absent du serveur : la carte
                n'est pas cliquable, l'affiche est atténuée, la seconde ligne le dit. */
@@ -355,8 +371,8 @@
             /* Fond clair, détecté en JS sur la couleur réelle de la page : les blancs
                translucides du chiffre y sont invisibles, tout passe en sombre. */
             '.mc-row.mc-on-light{',
-            /* Le chiffre reste blanc : il est posé sur un voile sombre, pas sur la page.
-               C'est tout l'intérêt du voile — il rend le rang indifférent au thème. */
+            /* Sur fond clair, le gris du contour disparaitrait : il fonce. */
+            '--mc-rank-stroke:hsl(214,13%,62%);',
             '--mc-scrim:rgba(0,0,0,.55);',
             '}',
 
@@ -369,7 +385,7 @@
             '}',
 
             '@media (prefers-contrast:more){',
-            '.mc-row{--mc-rank-scrim:linear-gradient(0deg,rgba(0,0,0,.92) 0%,rgba(0,0,0,.55) 55%,transparent 100%);}',
+            '.mc-row{--mc-rank-stroke:hsl(214,13%,58%);}',
             '}'
         ].join('');
     }
@@ -452,6 +468,24 @@
                 + (opts.secondary ? escapeHtml(opts.secondary) : '&#160;') + '</bdi></div>'
                 + '</div>';
 
+        var scalable = '<div class="cardScalable">'
+            + '<div class="cardPadder cardPadder-' + shape + '"></div>'
+            + body
+            + (opts.overlay || '')
+            + '</div>';
+
+        // `beside` place un element en frere de l'affiche, dans une ligne flex : c'est la
+        // geometrie des rangees classees, ou le chiffre occupe sa propre colonne.
+        //
+        // Le libelle entre dans la colonne de l'affiche, pas sous la carte entiere : la
+        // carte etant elargie par le chiffre, un libelle centre sur elle se retrouverait
+        // decale, a cheval sur le chiffre.
+        if (opts.beside) {
+            scalable = '<div class="mc-rank-row">' + opts.beside
+                + '<div class="mc-rank-col">' + scalable + footer + '</div></div>';
+            footer = '';
+        }
+
         return '<div class="card ' + shape + 'Card' + layoutCardClass() + ' card-withuserdata'
             + (opts.cardClass ? ' ' + opts.cardClass : '') + '"'
             + (opts.ariaHidden ? ' aria-hidden="true"' : ' role="listitem"')
@@ -460,11 +494,7 @@
             + (opts.itemType ? ' data-type="' + escapeHtml(opts.itemType) + '"' : '')
             + ' data-isfolder="' + (opts.isFolder ? 'true' : 'false') + '">'
             + '<div class="cardBox' + (footer ? ' cardBox-bottompadded' : '') + '">'
-            + '<div class="cardScalable">'
-            + '<div class="cardPadder cardPadder-' + shape + '"></div>'
-            + body
-            + (opts.overlay || '')
-            + '</div>'
+            + scalable
             + footer
             + '</div></div>';
     }
@@ -478,23 +508,22 @@
      * téléviseur. Le SVG porte son propre repère : une seule règle CSS et le glyphe
      * garde exactement les mêmes proportions partout.
      *
-     * Le voile qui l'accompagne n'est pas décoratif. Contour, halo et ombre dépendent
-     * tous de ce qu'il y a sous le glyphe : ils tiennent sur une affiche sombre et
-     * lâchent sur une affiche claire. Le dégradé, lui, fabrique son propre contraste,
-     * et rend le chiffre lisible sur toutes les affiches — y compris celles qui
-     * seront ajoutées demain.
+     * Le repere est resserre sur le glyphe. Un viewBox de 128 unites de haut, hauteur
+     * d'em habituelle, laisse pres de quarante pour cent de vide au-dessus des capitales
+     * et sous la ligne de base : le chiffre ne remplissait alors jamais la hauteur qu'on
+     * lui donnait, et paraissait deux fois plus petit que demande.
      *
      * La largeur du repère suit le nombre de chiffres, pour que « 1 » et « 10 »
      * occupent la même hauteur sans que le second soit comprimé.
      */
     function rankBadge(rank) {
         var text = String(rank);
-        var width = 24 + (text.length * 64);
-        var middle = width / 2;
+        var width = 8 + (text.length * 62);
 
-        return '<svg class="mc-rank" viewBox="0 0 ' + width + ' 128" aria-hidden="true" focusable="false">'
-            + '<text class="mc-rank-glyph" x="' + middle + '" y="115" text-anchor="middle">' + text + '</text>'
-            + '</svg>';
+        return '<svg class="mc-rank" viewBox="0 30 ' + width + ' 84" aria-hidden="true"'
+            + ' focusable="false" preserveAspectRatio="xMaxYMax meet">'
+            + '<text class="mc-rank-glyph" x="' + (width / 2) + '" y="110" text-anchor="middle">'
+            + text + '</text></svg>';
     }
 
     function buildRankedCard(entry) {
@@ -517,8 +546,7 @@
             ariaLabel: 'Numéro ' + entry.Rank + ' : ' + name + (year ? ' (' + year + ')' : '')
                 + (inLibrary ? '' : ' — absent de la bibliothèque'),
             cardClass: 'mc-ranked' + (inLibrary ? '' : ' mc-unavailable'),
-            decoration: '<span class="mc-rank-scrim" aria-hidden="true"></span>',
-            overlay: rankBadge(entry.Rank)
+            beside: rankBadge(entry.Rank)
         });
     }
 
@@ -867,6 +895,40 @@
         }
     }
 
+    /**
+     * Mesure la largeur d'une affiche NON classée et la publie dans `--mc-measured`.
+     *
+     * Les rangées classées placent leur chiffre à côté de l'affiche, et cette affiche
+     * doit garder très exactement la taille de toutes les autres de la page. La calculer
+     * est un piège : elle vaut la largeur de carte moins le padding de `.card`, moins la
+     * marge de `.cardBox`, le tout dépendant du modèle de boîte — que le thème bascule
+     * de `content-box` à `border-box` selon la présence de `aspect-ratio`. Trois valeurs
+     * qu'un thème peut redéfinir, et une formule fausse d'un thème à l'autre.
+     *
+     * On lit donc la vraie valeur dans la page, sur une carte non classée : les nôtres
+     * comme celles de Jellyfin conviennent, elles ont toutes la largeur native.
+     *
+     * C'est `.cardScalable` qui est mesuré, et non l'affiche elle-même : notre colonne
+     * de rang tient la place d'un `.cardScalable`, et c'est donc SA largeur qu'il faut
+     * reproduire. ElegantFin borde `.cardScalable` d'un pixel — mesurer l'affiche, qui
+     * vit à l'intérieur, aurait rendu chaque affiche classée deux pixels trop étroite.
+     */
+    function measurePosterWidth(container) {
+        var reference = container.querySelector('.card:not(.mc-ranked) .cardScalable');
+
+        if (!reference) {
+            return;
+        }
+
+        var width = reference.getBoundingClientRect().width;
+
+        // Une carte encore masquée mesure zéro : mieux vaut garder le repli que publier
+        // une largeur nulle, qui ferait disparaître toutes les affiches classées.
+        if (width > 0) {
+            container.style.setProperty('--mc-measured', (Math.round(width * 100) / 100) + 'px');
+        }
+    }
+
     function placeRows(container, rows, order, nativeLayout) {
         var byId = {};
 
@@ -956,6 +1018,8 @@
         rows.forEach(function (row, index) {
             row.style.animationDelay = Math.min(index * 55, 400) + 'ms';
         });
+
+        measurePosterWidth(container);
 
         return findLibrarySection(container);
     }
@@ -1414,6 +1478,30 @@
 
         window.addEventListener('hashchange', schedule);
         document.addEventListener('viewshow', schedule);
+
+        // La largeur d'affiche change à chaque palier de la grille : elle doit être
+        // remesurée, sinon les rangées classées gardent celle du palier précédent.
+        //
+        // Le regroupement se fait sur la trame d'affichage plutôt que sur un délai :
+        // la rafale d'événements d'un redimensionnement est absorbée de la même façon,
+        // mais la nouvelle taille est en place dès la première image rendue — un délai,
+        // lui, laisserait voir la taille de l'ancien palier le temps qu'il s'écoule.
+        var scheduled = false;
+        window.addEventListener('resize', function () {
+            if (scheduled) {
+                return;
+            }
+
+            scheduled = true;
+            requestAnimationFrame(function () {
+                scheduled = false;
+                var container = findSectionsContainer();
+
+                if (container) {
+                    measurePosterWidth(container);
+                }
+            });
+        }, { passive: true });
     }
 
     function start() {
