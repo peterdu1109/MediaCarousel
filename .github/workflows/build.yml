@@ -4,12 +4,6 @@ on:
   push:
     branches:
       - main
-  # Filet de securite : le projet se pousse a plusieurs, et un push n'arme pas
-  # toujours le declencheur ci-dessus (celui du 30/08 n'a cree aucun run). Ce
-  # passage horaire publie ce qui attend, quel que soit l'auteur du push. Il ne
-  # fait rien quand il n'y a rien a publier — voir le job « check ».
-  schedule:
-    - cron: '17 * * * *'
   workflow_dispatch:
 
 permissions:
