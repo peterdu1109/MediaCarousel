@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/icon.png",
     "versions": [
       {
+        "version": "3.12.2.0",
+        "changelog": "- Corrections et ajustements divers",
+        "targetAbi": "10.11.11.0",
+        "sourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/3.12.2/JellyfinCarouselPlugin.zip",
+        "checksum": "5e9f6b7cf6640517899d691065d03dc0",
+        "timestamp": "2026-09-02T17:38:54Z"
+      },
+      {
         "version": "3.12.1.0",
         "changelog": "Corrections :\n- Poser le chiffre dans l affiche, pas sous la carte",
         "targetAbi": "10.11.11.0",
