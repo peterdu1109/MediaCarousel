@@ -79,6 +79,9 @@ public sealed class ClientOptionsDto
     /// <summary>Obtient ou définit le nombre d'entrées du classement de toujours.</summary>
     public int AllTimeRowSize { get; set; }
 
+    /// <summary>Obtient ou définit la hauteur du chiffre, en pourcentage de l'affiche.</summary>
+    public int RankNumberScale { get; set; } = 75;
+
     /// <summary>Obtient ou définit une valeur indiquant si la rangée « parce que tu as regardé » est active.</summary>
     public bool ShowBecauseRow { get; set; }
 

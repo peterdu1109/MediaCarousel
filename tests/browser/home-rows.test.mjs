@@ -353,6 +353,16 @@ const theme = await themed.evaluate(() => {
     // contenu de la bande. Les themes ne padent qu'a gauche : la moindre respiration
     // ajoutee a droite retrecit notre boite et elargit toutes nos affiches. La
     // respiration de fin doit donc etre une cale, jamais un padding.
+    // Une carte classee doit s'ELARGIR pour loger son chiffre, et son affiche ne doit
+    // jamais deborder de sa carte : la carte suivante serait peinte par-dessus.
+    carteClassee: Math.round(row.querySelector('.mc-ranked').getBoundingClientRect().width),
+    carteNative: Math.round(
+      document.querySelector('#nativeReference .card').getBoundingClientRect().width),
+    afficheDeborde: (() => {
+      const c = row.querySelector('.mc-ranked').getBoundingClientRect();
+      const p = row.querySelector('.mc-ranked .cardImageContainer').getBoundingClientRect();
+      return Math.round(p.right - c.right) > 1;
+    })(),
     stripPaddingRight: getComputedStyle(strip).paddingRight,
     caleDeFin: getComputedStyle(strip, '::after').content,
     // Et le bord gauche de la premiere carte doit tomber sur celui de la reference.
@@ -364,6 +374,46 @@ const theme = await themed.evaluate(() => {
   };
 });
 await themed.close();
+
+// Les cartes classees sont JOINTIVES : leur largeur vaut exactement celle de leur
+// contenu. L'agrandissement au survol — 1,06 chez ElegantFin — deborde donc sur la carte
+// voisine, qui est peinte apres et recouvrait l'affiche agrandie en la rognant a droite.
+const survol = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+survol.on('pageerror', e => errors.push('pageerror(survol): ' + e.message));
+await survol.goto('file://' + path.join(here, 'home.html'));
+await survol.evaluate(stub);
+await survol.evaluate(script);
+await survol.waitForFunction(() => document.querySelectorAll('.mc-row').length === 10, { timeout: 8000 });
+await survol.addStyleTag({ path: path.join(here, 'theme-excerpt.css') });
+// Le theme d'essai agrandit l'affiche au survol, comme le font les vrais.
+await survol.addStyleTag({
+  content: '.card-hoverable:hover .cardScalable{transform:scale(1.06);}'
+});
+await survol.waitForTimeout(250);
+await survol.hover('.mc-row .mc-ranked');
+await survol.waitForTimeout(250);
+
+const hover = await survol.evaluate(() => {
+  const carte = document.querySelector('.mc-row .mc-ranked');
+  const cs = getComputedStyle(carte);
+  const voisine = carte.nextElementSibling;
+  return {
+    // La carte survolee doit passer DEVANT ses voisines, sinon l'agrandissement est rogne.
+    zIndex: cs.zIndex,
+    positionnee: cs.position !== 'static',
+    agrandie: getComputedStyle(carte.querySelector('.cardScalable')).transform !== 'none',
+    // Et la voisine ne doit pas, elle, se hisser au meme plan.
+    zIndexVoisine: voisine ? getComputedStyle(voisine).zIndex : 'aucune',
+    // `contain: content` inclut la PEINTURE, qui decoupe net ce qui depasse de la carte.
+    // Une carte classee fait exactement la largeur de son contenu : l'agrandissement au
+    // survol est alors tranche sur sa droite.
+    confinement: cs.contain,
+    peintureConfinee: cs.contain.split(' ').some(v => v === 'paint' || v === 'content'
+      || v === 'strict')
+  };
+});
+await survol.close();
+
 
 // Un theme qui declare la gouttiere « 0 », SANS UNITE. La valeur reste valide pour
 // `margin-right` mais elle est invalide dans un `calc()` : tant que notre gouttiere
@@ -852,6 +902,21 @@ const rank = await sizing.evaluate(() => {
     encartBas: +(((posterBox.bottom - oneBox.bottom) / posterBox.height) * 100).toFixed(1),
     // Le chiffre occupe sa propre colonne, en frere de l'affiche.
     colonnes: cards[0].querySelectorAll('.mc-rank-row > .mc-rank').length,
+    // Le rang 10 porte DEUX chiffres : son repere est deux fois plus large, donc sa carte
+    // aussi. C'est le cas ou une largeur de carte calculee de travers se voit le plus —
+    // l'affiche y ressortirait de sa carte, et la voisine la recouvrirait.
+    dixieme: (() => {
+      const dix = cards[9];
+      if (!dix) { return null; }
+      const p1 = cards[0].querySelector('.cardImageContainer').getBoundingClientRect();
+      const p10 = dix.querySelector('.cardImageContainer').getBoundingClientRect();
+      const c10 = dix.getBoundingClientRect();
+      return {
+        memeAffiche: Math.abs(p10.width - p1.width) < 0.5,
+        carteElargie: c10.width > cards[0].getBoundingClientRect().width * 1.3,
+        afficheDedans: Math.round(p10.right - c10.right) <= 1
+      };
+    })(),
     // La police doit etre posee explicitement. Un texte SVG dont aucun ancetre ne
     // declare `font-family` retombe sur le defaut du moteur, qui est un SERIF : les
     // chiffres se couvrent alors d'empattements qu'on prend pour un defaut de trace.
@@ -980,6 +1045,17 @@ check('MASQUAGE: la rangee d un autre plugin est epargnee', hidden.foreignVisibl
 check('THEME: la feuille du theme est bien chargee apres la notre', theme.themeLoadedAfter === true, theme);
 check('THEME: aucune respiration a droite — elle fausserait le pourcentage de --cardWidth',
   theme.stripPaddingRight === '0px' && theme.caleDeFin === '""' , theme);
+check('SURVOL: l affiche est bien agrandie par le theme', hover.agrandie === true, hover);
+check('SURVOL: la carte ne confine pas la peinture, sinon l agrandissement est tranche',
+  hover.peintureConfinee === false, hover.confinement);
+check('SURVOL: la carte survolee passe devant ses voisines',
+  hover.positionnee === true && Number(hover.zIndex) >= 2, hover);
+check('SURVOL: les cartes voisines restent au plan par defaut',
+  hover.zIndexVoisine === 'auto' || hover.zIndexVoisine === '0', hover);
+check('THEME: une carte classee s elargit pour loger son chiffre, malgre le theme',
+  theme.carteClassee > theme.carteNative * 1.4, [theme.carteClassee, theme.carteNative]);
+check('THEME: l affiche ne deborde jamais de sa carte',
+  theme.afficheDeborde === false, theme);
 check('THEME: la premiere carte s aligne sur celle de la section native',
   theme.bordGauche < 0.5, theme.bordGauche);
 check('THEME: sous un theme aussi, nos affiches gardent la taille native',
@@ -1017,10 +1093,17 @@ check('RANG: le chiffre reste dans sa carte', rank.withinCard === true, rank);
 check('RANG: il commence AVANT l affiche et son pied tombe sur celui de l affiche',
   rank.encartGauche < -20 && Math.abs(rank.encartBas) < 6,
   [rank.encartGauche, rank.encartBas]);
-check('RANG: il fait la hauteur de l affiche',
-  rank.coverage > 0.95 && rank.coverage < 1.1, rank.coverage);
+// La hauteur du chiffre est un REGLAGE — `RankNumberScale`, 75 % par defaut. A 100 % la
+// rangee classee occupe pres du double d'une rangee ordinaire, et sur telephone une seule
+// carte tient a l'ecran. L'affiche, elle, ne bouge jamais : seul le chiffre suit.
+check('RANG: le chiffre fait 75 % de la hauteur d affiche, la valeur par defaut',
+  rank.coverage > 0.72 && rank.coverage < 0.78, rank.coverage);
 check('RANG: la police du chiffre est posee, jamais heritee',
   rank.declaresFont === true && /sans-serif/.test(rank.fontFamily), rank.fontFamily);
+check('RANG: le rang 10, a deux chiffres, garde la meme affiche et la loge dans sa carte',
+  rank.dixieme !== null && rank.dixieme.memeAffiche === true
+    && rank.dixieme.carteElargie === true && rank.dixieme.afficheDedans === true,
+  rank.dixieme);
 check('RANG: le chiffre est en frere de l affiche, dans sa propre colonne',
   rank.colonnes === 1, rank.colonnes);
 

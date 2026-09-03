@@ -20,6 +20,14 @@
     var RETRY_DELAYS = [0, 400, 1200, 3000];
     // Doit rester synchronisé avec PluginConfiguration.HighlightColor.
     var DEFAULT_ACCENT = '#775BF4';
+
+    // Hauteur du chiffre, en fraction de la hauteur d'affiche. Doit rester synchronisé avec
+    // PluginConfiguration.RankNumberScale. À 1, c'est la proportion de Netflix — et une
+    // rangée classée occupe alors près du double d'une rangée ordinaire.
+    var DEFAULT_RANK_SCALE = 0.75;
+
+    // Échelle en vigueur, relue à chaque rendu depuis les réglages du serveur.
+    var rankScale = DEFAULT_RANK_SCALE;
     // Les sections que Jellyfin construit lui-même : `<div class="verticalSection section0">`.
     var NATIVE_SECTION = /(^|\s)section\d+(\s|$)/;
 
@@ -191,8 +199,8 @@
         return false;
     }
 
-    function injectStyles(accent) {
-        var css = buildCss(accent);
+    function injectStyles(accent, rankScale) {
+        var css = buildCss(accent, rankScale);
         var existing = document.getElementById(STYLE_ID);
 
         if (existing) {
@@ -230,7 +238,25 @@
      * Ne restent que les trois choses qui n'existent pas dans Jellyfin : le chiffre du
      * rang, la bande défilante, et les flèches de confort.
      */
-    function buildCss(accent) {
+    /**
+     * Hauteur du chiffre, en fraction de la hauteur d'affiche.
+     *
+     * Bornée à l'intervalle utile : sous 40 % le chiffre passe entièrement derrière
+     * l'affiche, au-delà de 100 % il dépasse du cadre de sa carte.
+     */
+    function normalizeRankScale(percent) {
+        var value = Number(percent);
+
+        if (!isFinite(value) || value <= 0) {
+            return DEFAULT_RANK_SCALE;
+        }
+
+        return Math.min(100, Math.max(40, Math.round(value))) / 100;
+    }
+
+    function buildCss(accent, rankScale) {
+        var scale = rankScale || DEFAULT_RANK_SCALE;
+
         return [
             '.mc-row{',
             '--mc-accent:' + safeAccent(accent) + ';',
@@ -307,11 +333,41 @@
                le chevaucher. Par le haut, ses deux bords tombent sur ceux de l'affiche,
                puisqu'il en a exactement la hauteur. */
             '.mc-row .mc-rank-row{display:flex;align-items:flex-start;}',
+            /* Au survol, les thèmes agrandissent l'affiche — ElegantFin la met à 1,06. Dans
+               une rangée classée, les cartes sont JOINTIVES : leur largeur vaut exactement
+               celle de leur contenu, sans marge de manœuvre. Ce débordement tombe donc pile
+               sur la carte voisine qui, peinte après, recouvre l'affiche agrandie et la
+               rogne sur sa droite.
+               Les thèmes posent bien un `z-index` sur `.cardBox`, mais il ne vaut que si
+               cet élément est positionné, ce que rien ne garantit. On pose donc le plan
+               nous-mêmes, sur notre propre carte. `:focus-within` couvre la télécommande,
+               qui déplace le focus sans jamais survoler. */
+            /* `contain: content` — la valeur que jellyfin-web pose sur `.card` — inclut le
+               confinement de PEINTURE, qui découpe net tout ce qui dépasse de la carte. Une
+               carte classée fait exactement la largeur de son contenu : l'agrandissement au
+               survol tombe donc pile sur cette lame et l'affiche est tranchée sur sa droite.
+               On retire la peinture et on garde le reste : `layout` et `style` apportent
+               l'essentiel du gain, sans rien découper. */
+            '.mc-row .mc-ranked{contain:layout style;}',
+            /* Et la carte survolée passe devant ses voisines : elles sont jointives, donc
+               l'agrandissement empiète sur elles. `:focus-within` couvre la télécommande,
+               qui déplace le focus sans jamais survoler. */
+            '.mc-row .mc-ranked:hover,.mc-row .mc-ranked:focus-within{',
+            'position:relative;z-index:3;}',
             /* L'affiche garde EXACTEMENT la largeur d'une affiche non classee. */
             '.mc-row .mc-rank-col{flex:0 0 var(--mc-poster-width);min-width:0;}',
             /* Marge negative : l'affiche mord sur le chiffre, comme chez Netflix. */
-            '.mc-row .mc-rank{flex:0 0 auto;height:calc(var(--mc-poster-width) * 1.5);',
-            'margin-right:calc(var(--mc-poster-width) * -.46);',
+            /* Le chevauchement suit l'échelle. À valeur fixe, un chiffre réduit finirait
+               presque entièrement caché derrière l'affiche : la part visible fondrait deux
+               fois plus vite que le chiffre lui-même. Proportionnel, le rendu garde ses
+               proportions à toutes les tailles.
+               La marge du haut recale le chiffre réduit sur le BAS de l'affiche : sans
+               elle, il resterait accroché en haut, l'alignement de la ligne se faisant par
+               le haut pour ne pas suivre la hauteur du libellé. */
+            '.mc-row .mc-rank{flex:0 0 auto;',
+            'height:calc(var(--mc-poster-width) * ' + (1.5 * scale) + ');',
+            'margin-top:calc(var(--mc-poster-width) * ' + (1.5 * (1 - scale)) + ');',
+            'margin-right:calc(var(--mc-poster-width) * ' + (-0.46 * scale) + ');',
             'overflow:visible;pointer-events:none;user-select:none;}',
             /* La police est posée EXPLICITEMENT, jamais héritée. Un texte SVG dont aucun
                ancêtre ne déclare `font-family` retombe sur la police par défaut du moteur,
@@ -480,10 +536,41 @@
         // Le libelle entre dans la colonne de l'affiche, pas sous la carte entiere : la
         // carte etant elargie par le chiffre, un libelle centre sur elle se retrouverait
         // decale, a cheval sur le chiffre.
+        var inlineStyle = '';
+
         if (opts.beside) {
             scalable = '<div class="mc-rank-row">' + opts.beside
                 + '<div class="mc-rank-col">' + scalable + footer + '</div></div>';
             footer = '';
+
+            // La largeur est posée EN LIGNE, et pas par une règle de notre feuille.
+            //
+            // Une carte classée doit s'élargir pour loger son chiffre. Or les thèmes posent
+            // `width: var(--cardWidth) !important` sur `.card`, et il suffit qu'un thème le
+            // fasse depuis un sélecteur un peu plus spécifique que le nôtre pour qu'il
+            // l'emporte : la carte reste alors à la largeur d'une affiche pendant que son
+            // contenu en réclame le double. L'affiche déborde de sa carte, la carte suivante
+            // est peinte par-dessus, et il ne reste qu'une lamelle de chaque affiche —
+            // mesuré sur un serveur réel : carte de 200 px pour un contenu de 430.
+            //
+            // Un style en ligne marqué `!important` prime sur TOUTE feuille de style de la
+            // page, quelle que soit sa spécificité. C'est la seule façon de ne pas dépendre
+            // de ce qu'un thème présent ou futur voudra imposer.
+            // `box-sizing` est imposé en même temps que la largeur, et pas par hasard :
+            // la valeur calculée est une largeur de CONTENU. Sous `border-box`, le padding
+            // de `.card` la rognerait par l'intérieur, et l'affiche ressortirait de sa
+            // carte de la valeur de ce padding — le défaut qu'on vient de corriger, en
+            // plus petit. ElegantFin déclare bien `content-box`, mais rien ne dit que le
+            // thème suivant le fera.
+            // `border-box` : la valeur posée est la largeur EXTÉRIEURE de la carte. Elle
+            // vaut la place du chiffre et de l'affiche, plus l'habillage mesuré — padding de
+            // la carte et marges de son `.cardBox`. Sans ce dernier terme, le contenu
+            // dépassait de la carte et la voisine venait le recouvrir : c'est ce qui rognait
+            // les affiches sur leur droite.
+            inlineStyle = ' style="box-sizing:border-box !important;'
+                + 'width:calc(var(--mc-poster-width) * '
+                + (opts.besideFactor || rankCardFactor(1, rankScale))
+                + ' + var(--mc-card-chrome, 0px)) !important"';
         }
 
         return '<div class="card ' + shape + 'Card' + layoutCardClass() + ' card-withuserdata'
@@ -492,7 +579,8 @@
             + (opts.itemId ? ' data-id="' + escapeHtml(opts.itemId) + '"' : '')
             + (opts.serverId ? ' data-serverid="' + escapeHtml(opts.serverId) + '"' : '')
             + (opts.itemType ? ' data-type="' + escapeHtml(opts.itemType) + '"' : '')
-            + ' data-isfolder="' + (opts.isFolder ? 'true' : 'false') + '">'
+            + ' data-isfolder="' + (opts.isFolder ? 'true' : 'false') + '"'
+            + inlineStyle + '>'
             + '<div class="cardBox' + (footer ? ' cardBox-bottompadded' : '') + '">'
             + scalable
             + footer
@@ -516,9 +604,36 @@
      * La largeur du repère suit le nombre de chiffres, pour que « 1 » et « 10 »
      * occupent la même hauteur sans que le second soit comprimé.
      */
+    /**
+     * Largeur du repère SVG du chiffre, en unités de ce repère.
+     *
+     * Le repère est resserré sur le glyphe : sa hauteur vaut 84, sa largeur suit le nombre
+     * de chiffres. C'est de ce rapport que découle toute la largeur de la carte.
+     */
+    function rankViewBoxWidth(rank) {
+        return 8 + String(rank).length * 62;
+    }
+
+    /**
+     * Largeur d'une carte classée, en multiples de la largeur d'affiche.
+     *
+     * Elle est CALCULÉE, et non laissée à `width: auto`. Le navigateur doit alors deviner
+     * la largeur « max-content » de la carte, et la marge négative du chiffre le trompe :
+     * mesuré sur un serveur réel, il proposait 342 px pour un contenu qui en réclamait 433,
+     * et l'affiche se retrouvait rognée de 91 px sur sa droite par la carte suivante.
+     *
+     * Les trois termes sont pourtant connus : le chiffre, haut d'une affiche entière donc
+     * large de `1,5 × largeurDuRepère / 84` ; le chevauchement, qui retire 0,46 ; et
+     * l'affiche elle-même, soit 1.
+     */
+    function rankCardFactor(rank, scale) {
+        var s = scale || DEFAULT_RANK_SCALE;
+        return Math.round((s * (1.5 * (rankViewBoxWidth(rank) / 84) - 0.46) + 1) * 1000) / 1000;
+    }
+
     function rankBadge(rank) {
         var text = String(rank);
-        var width = 8 + (text.length * 62);
+        var width = rankViewBoxWidth(rank);
 
         return '<svg class="mc-rank" viewBox="0 30 ' + width + ' 84" aria-hidden="true"'
             + ' focusable="false" preserveAspectRatio="xMaxYMax meet">'
@@ -546,7 +661,8 @@
             ariaLabel: 'Numéro ' + entry.Rank + ' : ' + name + (year ? ' (' + year + ')' : '')
                 + (inLibrary ? '' : ' — absent de la bibliothèque'),
             cardClass: 'mc-ranked' + (inLibrary ? '' : ' mc-unavailable'),
-            beside: rankBadge(entry.Rank)
+            beside: rankBadge(entry.Rank),
+            besideFactor: rankCardFactor(entry.Rank, rankScale)
         });
     }
 
@@ -937,11 +1053,68 @@
             var rapport = boite.height / boite.width;
 
             if (rapport > 1.3 && rapport < 1.7) {
-                container.style.setProperty(
-                    '--mc-measured', (Math.round(boite.width * 100) / 100) + 'px');
+                publishMetrics(candidats[i], container);
+                observePoster(candidats[i], container);
                 return;
             }
         }
+    }
+
+    /**
+     * Publie les deux mesures dont dépendent les rangées classées.
+     *
+     * `--mc-measured` est la largeur d'affiche. `--mc-card-chrome` est tout ce qui, dans une
+     * carte, sépare son bord extérieur de l'affiche : le padding de `.card` et les marges de
+     * `.cardBox`. Ces valeurs appartiennent au thème — ElegantFin met 0,375 em et 0,6 em, un
+     * autre thème mettra autre chose — et les oublier suffit à faire ressortir l'affiche de
+     * sa carte, où la carte voisine vient la recouvrir.
+     */
+    function publishMetrics(reference, container) {
+        var carte = reference.closest('.card');
+        var poster = reference.getBoundingClientRect().width;
+        var chrome = carte ? carte.getBoundingClientRect().width - poster : 0;
+
+        container.style.setProperty('--mc-measured', (Math.round(poster * 100) / 100) + 'px');
+        container.style.setProperty(
+            '--mc-card-chrome', (Math.round(Math.max(chrome, 0) * 100) / 100) + 'px');
+    }
+
+    var posterObserver = null;
+    var posterObserved = null;
+
+    /**
+     * Surveille la carte de référence, et remesure dès que SA taille change.
+     *
+     * Le redimensionnement de fenêtre ne suffit pas. La feuille du thème est chargée par le
+     * Custom CSS de Jellyfin, et rien ne garantit qu'elle soit arrivée quand nous mesurons :
+     * si elle atterrit après, elle change la taille des cartes sans qu'aucun événement de
+     * fenêtre ne se produise, et les rangées classées gardent la largeur d'avant. Une police
+     * qui finit de charger, un panneau latéral qu'on replie, un changement d'onglet
+     * produisent le même décalage.
+     *
+     * `ResizeObserver` manque sur les moteurs les plus anciens ; l'écouteur de
+     * redimensionnement reste alors le seul filet, ce qui était le comportement précédent.
+     */
+    function observePoster(reference, container) {
+        if (!window.ResizeObserver || posterObserved === reference) {
+            return;
+        }
+
+        if (posterObserver) {
+            posterObserver.disconnect();
+        }
+
+        posterObserved = reference;
+        posterObserver = new ResizeObserver(function () {
+            var boite = reference.getBoundingClientRect();
+
+            // La référence n'est pas classée : les valeurs qu'on publie ne peuvent pas la
+            // modifier en retour, donc pas de boucle à craindre.
+            if (boite.width > 0) {
+                publishMetrics(reference, container);
+            }
+        });
+        posterObserver.observe(reference);
     }
 
     function placeRows(container, rows, order, nativeLayout) {
@@ -1443,7 +1616,8 @@
                 return null;
             }
 
-            injectStyles(opts.HighlightColor);
+            rankScale = normalizeRankScale(opts.RankNumberScale);
+            injectStyles(opts.HighlightColor, rankScale);
             onLightBackground = isLightBackground();
 
             var natives = opts.ManageNativeSections === true

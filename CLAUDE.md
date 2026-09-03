@@ -310,6 +310,27 @@ si l'administrateur supprime la collection, elle est recréée au recalcul suiva
   refus de `..`), et l'hôte distant est une constante du plugin — aucune requête ne peut être
   détournée vers une adresse choisie par l'appelant. Une adresse que le plugin ne sait pas relayer
   est laissée intacte : mieux vaut une affiche chargée depuis sa source qu'une vignette vide.
+- **Les dates de lecture passent par `PlaybackDate.AsUtc`.** Jellyfin écrit ses dates en UTC,
+  mais EF Core sur SQLite les relit en `Unspecified`, et `ToUniversalTime()` traite alors une
+  date non qualifiée comme LOCALE : une lecture de 1 h du matin à Paris ressortait à 23 h la
+  veille, donc un jour plus tôt, ce qui déplace la frontière de la fenêtre d'observation.
+- **Sous une fenêtre d'observation, le plafond vaut 1.** `UserItemData.PlayCount` est le cumul
+  DEPUIS TOUJOURS — Jellyfin ne compte rien par période. Retenir ce cumul ferait remonter un
+  film vu cinquante fois il y a trois ans et une fois cette semaine comme s'il avait été vu
+  cinquante fois cette semaine. Chaque compte pèse donc une voix, la seule chose que la
+  donnée permette d'affirmer.
+- **Une requête PAR TYPE de média, chacune avec ses créneaux.** Une requête unique mêlant
+  films et épisodes laissait un seul binge-watcher consommer ses cent créneaux avec quatre
+  saisons : ses films n'atteignaient jamais le classement.
+- **`RefreshIntervalHours` est appliqué par `RefreshScheduleSynchronizer`.**
+  `GetDefaultTriggers()` n'est consulté par Jellyfin qu'à la PREMIÈRE installation de la
+  tâche ; ensuite le calendrier vit dans sa configuration. Sans ce service, le réglage ne
+  faisait plus rien. Seul le déclencheur d'intervalle est réécrit : un passage quotidien
+  ajouté à la main survit.
+- **Le contrat d'API ne publie que ce que le rendu consomme.** Le score, le nombre de
+  lectures, le nombre de spectateurs distincts et la date de dernière lecture en ont été
+  retirés : le client ne les lisait pas, et ils décrivent le comportement de visionnage des
+  autres comptes. Ils restent calculés — ils départagent les ex æquo.
 - **`ClientOptions` existe parce que** `GET /Plugins/{id}/Configuration` exige `RequiresElevation` :
   un utilisateur standard ne peut pas lire la configuration du plugin. Le contrat `ClientOptionsDto`
   n'expose que ce qui sert au rendu — jamais la clé d'API de la source externe.
@@ -421,6 +442,24 @@ si l'administrateur supprime la collection, elle est recréée au recalcul suiva
   venait le chevaucher. Par le haut, ses deux bords tombent sur ceux de l'affiche, dont il a
   exactement la hauteur. Pour la même raison le libellé entre **dans** la colonne de
   l'affiche : centré sur la carte élargie, il aurait dérivé à cheval sur le chiffre.
+- **La largeur d'une carte classée est CALCULÉE, jamais laissée à `width: auto`.** Le
+  navigateur doit alors deviner la largeur « max-content » de la carte, et la marge négative
+  du chiffre le trompe : mesuré sur un serveur réel, il proposait 342 px pour un contenu qui
+  en réclamait 433, et l'affiche se faisait rogner de 91 px par la carte suivante. Les trois
+  termes sont connus — le chiffre vaut `1,5 × largeurDuRepère / 84` d'affiche, moins le
+  chevauchement, plus l'affiche — auxquels s'ajoute **l'habillage mesuré** : le padding de
+  `.card` et les marges de son `.cardBox`, que chaque thème fixe à sa guise. La valeur est
+  posée **en ligne** et en `border-box` : les thèmes déclarent `width: var(--cardWidth)
+  !important` sur `.card`, et à spécificité égale c'est la dernière feuille chargée qui
+  gagne — le Custom CSS de Jellyfin est toujours chargé après la nôtre. Seul un style en
+  ligne `!important` échappe à cette course.
+- **Une carte classée ne confine pas la peinture.** `jellyfin-web` pose `contain: content`
+  sur `.card` ; ce mot inclut le confinement de peinture, qui découpe net ce qui dépasse de
+  la boîte. Tant que la carte était plus large que son contenu il restait du jeu ; calée au
+  pixel, elle amène le bord de l'affiche pile sur cette lame, et l'agrandissement au survol
+  — 1,06 chez ElegantFin — était tranché à droite. On garde `layout` et `style`, on retire
+  `paint`. Et la carte survolée prend un `z-index` : les cartes classées sont jointives,
+  donc l'agrandissement empiète sur la voisine, qui la recouvrirait.
 - **La largeur d'affiche des rangées classées est MESURÉE, jamais calculée.** La colonne du
   chiffre tient la place d'un `.cardScalable`, et c'est donc sa largeur qu'il faut reproduire.
   La calculer supposerait de connaître le modèle de boîte, le padding de `.card` et la marge
@@ -428,7 +467,17 @@ si l'administrateur supprime la collection, elle est recréée au recalcul suiva
   valeur sur un `.cardScalable` non classé de la page et la publie dans `--mc-measured` ;
   elle est relue à chaque redimensionnement, regroupée sur la trame d'affichage. Mesurer
   `.cardImageContainer` serait un piège : ElegantFin borde `.cardScalable` d'un pixel, et
-  chaque affiche classée sortirait deux pixels trop étroite.
+  chaque affiche classée sortirait deux pixels trop étroite. La référence doit aussi avoir la
+  **même forme** : nos rangées sont insérées juste après « Mes médias », dont les vignettes
+  de bibliothèque sont au format PAYSAGE et précèdent tout le reste dans le DOM. Prendre la
+  première carte venue gonflait l'affiche de moitié au bureau et la DOUBLAIT presque sur
+  téléphone. D'où le filtre sur `.overflowPortraitCard`, doublé d'un contrôle du rapport de
+  la boîte.
+- **La hauteur du chiffre est un réglage**, `RankNumberScale`, 75 % par défaut. À 100 % c'est
+  la proportion de Netflix, et une rangée classée occupe près du double d'une rangée
+  ordinaire — sur téléphone une seule carte tient à l'écran. Le chevauchement suit l'échelle :
+  à valeur fixe, un chiffre réduit finirait presque entièrement caché derrière l'affiche.
+  **L'affiche, elle, ne bouge jamais.**
 - **La respiration de fin de bande est une cale, jamais un `padding-right`.** `--cardWidth`
   contient un **pourcentage** (`99vw - 3.3% × 2`), qui se résout contre la boîte de contenu de
   la bande. Un padding la rétrécit — et les thèmes, ElegantFin compris, ne padent que le côté

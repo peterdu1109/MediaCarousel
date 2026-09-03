@@ -26,6 +26,20 @@
     padding-left: calc(var(--sidePadding) - 0.375em);
 }
 
+/* Le piege qui a coute le plus cher : un theme qui impose la largeur des cartes depuis
+   un selecteur AUSSI specifique que le notre. A specificite egale, c'est la derniere
+   feuille chargee qui gagne — et le Custom CSS de Jellyfin est toujours charge apres la
+   notre. Notre `.mc-row .mc-ranked{width:auto!important}` perdait donc, la carte restait
+   a la largeur d'une affiche pendant que son contenu en reclamait le double, et il ne
+   restait qu'une lamelle de chaque affiche. Notre bande porte bien `itemsContainer`. */
+.itemsContainer .card {
+    /* Largeur FIXE, et non `var(--cardWidth)` : ce jeton contient un pourcentage qui se
+       resout contre chaque conteneur, ce qui ferait varier la valeur d'une rangee a
+       l'autre et brouillerait ce que ce piege doit prouver — que notre carte s'elargit
+       malgre une regle de theme, et rien d'autre. */
+    width: 132px !important;
+}
+
 .verticalSection {
     margin-bottom: 1em;
     margin-top: 0.5em;

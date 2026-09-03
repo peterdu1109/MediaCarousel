@@ -186,8 +186,11 @@
                                                label="Lectures comptées au maximum par utilisateur" required
                                                aria-describedby="hintCap" />
                                         <div class="fieldDescription" id="hintCap">
-                                            Empêche qu'un seul spectateur qui revoit le même titre en boucle fausse le
-                                            classement. 0 pour ne pas plafonner.
+                                            Empêche qu'un seul spectateur qui revoit le même titre en boucle fausse
+                                            le classement. 0 pour ne pas plafonner.
+                                            <strong>Sans effet dès que la fenêtre ci-dessus est active</strong> :
+                                            Jellyfin ne compte pas les lectures par période, seul le cumul depuis
+                                            toujours existe. Sous fenêtre, chaque compte pèse donc une voix.
                                         </div>
                                     </div>
 
@@ -597,6 +600,21 @@
                                             Contour du chiffre au survol et anneau de focus.
                                         </div>
                                     </div>
+
+                                    <div class="inputContainer">
+                                        <input is="emby-input" type="number" id="RankNumberScale"
+                                               min="40" max="100" step="5"
+                                               label="Hauteur du chiffre de rang (%)"
+                                               required aria-describedby="hintRankScale" />
+                                        <div class="fieldDescription" id="hintRankScale">
+                                            En pourcentage de la hauteur d'affiche. 100 donne la
+                                            proportion de Netflix, mais une rangée classée occupe
+                                            alors près du double d'une rangée ordinaire — sur
+                                            téléphone, une seule carte tient à l'écran.
+                                            <strong>L'affiche ne change jamais de taille</strong> :
+                                            seul le chiffre bouge, et la rangée se resserre avec lui.
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </fieldset>
@@ -638,7 +656,10 @@
                                 <input is="emby-input" type="number" id="RefreshIntervalHours" min="1" max="168" step="1"
                                        label="Intervalle de recalcul (heures)" required aria-describedby="hintInterval" />
                                 <div class="fieldDescription" id="hintInterval">
-                                    Modifiable aussi depuis Tableau de bord → Tâches planifiées.
+                                    Appliqué dès l'enregistrement. Ce champ fait foi pour la
+                                    périodicité : un intervalle saisi dans Tableau de bord →
+                                    Tâches planifiées serait écrasé. Les autres déclencheurs
+                                    que vous y ajoutez, eux, sont conservés.
                                 </div>
                             </div>
 
@@ -702,7 +723,7 @@
                     'GenreRowCount', 'GenreRowItemCount', 'MinItemsPerGenre',
                     'ReturningRowDays', 'ReturningRowSize', 'NeverPlayedRowSize', 'BecauseRowSize',
                     'AllTimeRowSize',
-                    'RefreshIntervalHours'
+                    'RefreshIntervalHours', 'RankNumberScale'
                 ];
                 // Seul reglage a virgule : parseInt le tronquerait a 7.
                 var decimals = ['NeverPlayedMinRating'];
