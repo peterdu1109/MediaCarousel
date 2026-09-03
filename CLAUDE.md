@@ -473,9 +473,10 @@ si l'administrateur supprime la collection, elle est recréée au recalcul suiva
   première carte venue gonflait l'affiche de moitié au bureau et la DOUBLAIT presque sur
   téléphone. D'où le filtre sur `.overflowPortraitCard`, doublé d'un contrôle du rapport de
   la boîte.
-- **La hauteur du chiffre est un réglage**, `RankNumberScale`, 75 % par défaut. À 100 % c'est
-  la proportion de Netflix, et une rangée classée occupe près du double d'une rangée
-  ordinaire — sur téléphone une seule carte tient à l'écran. Le chevauchement suit l'échelle :
+- **La hauteur du chiffre est un réglage**, `RankNumberScale`, **100 % par défaut** — la
+  proportion de Netflix, et le rendu validé à l'écran. Le prix est qu'une rangée classée
+  occupe près du double d'une rangée ordinaire : sur téléphone une seule carte tient. Le
+  réglage existe pour la resserrer sans jamais toucher à l'affiche. Le chevauchement suit l'échelle :
   à valeur fixe, un chiffre réduit finirait presque entièrement caché derrière l'affiche.
   **L'affiche, elle, ne bouge jamais.**
 - **La respiration de fin de bande est une cale, jamais un `padding-right`.** `--cardWidth`

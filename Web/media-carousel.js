@@ -22,9 +22,10 @@
     var DEFAULT_ACCENT = '#775BF4';
 
     // Hauteur du chiffre, en fraction de la hauteur d'affiche. Doit rester synchronisé avec
-    // PluginConfiguration.RankNumberScale. À 1, c'est la proportion de Netflix — et une
-    // rangée classée occupe alors près du double d'une rangée ordinaire.
-    var DEFAULT_RANK_SCALE = 0.75;
+    // PluginConfiguration.RankNumberScale. À 1, c'est la proportion de Netflix, et le rendu
+    // validé à l'écran — au prix d'une rangée qui occupe près du double d'une rangée
+    // ordinaire. Le réglage permet de la resserrer.
+    var DEFAULT_RANK_SCALE = 1;
 
     // Échelle en vigueur, relue à chaque rendu depuis les réglages du serveur.
     var rankScale = DEFAULT_RANK_SCALE;

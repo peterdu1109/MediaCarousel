@@ -1093,11 +1093,11 @@ check('RANG: le chiffre reste dans sa carte', rank.withinCard === true, rank);
 check('RANG: il commence AVANT l affiche et son pied tombe sur celui de l affiche',
   rank.encartGauche < -20 && Math.abs(rank.encartBas) < 6,
   [rank.encartGauche, rank.encartBas]);
-// La hauteur du chiffre est un REGLAGE — `RankNumberScale`, 75 % par defaut. A 100 % la
-// rangee classee occupe pres du double d'une rangee ordinaire, et sur telephone une seule
-// carte tient a l'ecran. L'affiche, elle, ne bouge jamais : seul le chiffre suit.
-check('RANG: le chiffre fait 75 % de la hauteur d affiche, la valeur par defaut',
-  rank.coverage > 0.72 && rank.coverage < 0.78, rank.coverage);
+// La hauteur du chiffre est un REGLAGE — `RankNumberScale`, 100 % par defaut : le chiffre
+// fait toute la hauteur de l'affiche, la proportion de Netflix. Descendre resserre la
+// rangee. L'affiche, elle, ne bouge jamais : seul le chiffre suit.
+check('RANG: le chiffre fait la hauteur de l affiche, la valeur par defaut',
+  rank.coverage > 0.95 && rank.coverage < 1.05, rank.coverage);
 check('RANG: la police du chiffre est posee, jamais heritee',
   rank.declaresFont === true && /sans-serif/.test(rank.fontFamily), rank.fontFamily);
 check('RANG: le rang 10, a deux chiffres, garde la meme affiche et la loge dans sa carte',

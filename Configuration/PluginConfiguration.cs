@@ -279,13 +279,14 @@ public class PluginConfiguration : BasePluginConfiguration
     /// d'affiche.
     /// </summary>
     /// <remarks>
-    /// À 100, le chiffre fait toute la hauteur de l'affiche : c'est la proportion de
-    /// Netflix, et une rangée classée occupe alors près du double d'une rangée ordinaire.
-    /// Le réglage existe parce que ce choix relève du goût et de l'écran — sur un
-    /// téléphone, un chiffre pleine hauteur ne laisse tenir qu'une seule carte.
+    /// La valeur par défaut est 100 : le chiffre fait toute la hauteur de l'affiche, la
+    /// proportion de Netflix, et c'est le rendu validé à l'écran. Le prix à payer est
+    /// qu'une rangée classée occupe près du double d'une rangée ordinaire — sur un
+    /// téléphone, une seule carte tient à l'écran. Descendre à 75 ou 55 resserre la rangée
+    /// d'autant, le chevauchement suivant l'échelle.
     /// L'affiche, elle, ne change jamais de taille : seul le chiffre bouge.
     /// </remarks>
-    public int RankNumberScale { get; set; } = 75;
+    public int RankNumberScale { get; set; } = 100;
 
     /// <summary>
     /// Obtient ou définit une valeur indiquant si la rangée « parce que tu as regardé »
