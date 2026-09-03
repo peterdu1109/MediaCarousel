@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/icon.png",
     "versions": [
       {
+        "version": "3.13.1.0",
+        "changelog": "Corrections :\n- Mesurer l affiche sur une carte de MEME FORME",
+        "targetAbi": "10.11.11.0",
+        "sourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/3.13.1/JellyfinCarouselPlugin.zip",
+        "checksum": "750aa5a71c29572e92862f548df5202f",
+        "timestamp": "2026-09-03T17:29:51Z"
+      },
+      {
         "version": "3.13.0.0",
         "changelog": "Nouveautes :\n- Chiffre du rang a cote de l'affiche, au format Netflix",
         "targetAbi": "10.11.11.0",
