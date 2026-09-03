@@ -20,6 +20,7 @@
     <Compile Include="../../Services/CatalogRepresentative.cs" />
     <Compile Include="../../Services/TopListAccumulator.cs" />
     <Compile Include="../../Services/PosterProxy.cs" />
+    <Compile Include="../../Services/PlaybackDate.cs" />
   </ItemGroup>
 
 </Project>

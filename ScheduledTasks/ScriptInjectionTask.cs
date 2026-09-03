@@ -161,6 +161,14 @@ public sealed class ScriptInjectionTask : IScheduledTask
         }
 
         registerMethod.Invoke(null, new[] { payload });
+
+        // Une balise a pu être écrite dans index.html par un démarrage antérieur, quand
+        // File Transformation n'était pas encore installé. Elle survit à son installation :
+        // la transformation en mémoire s'ajoute alors à celle du disque, et le script est
+        // chargé DEUX fois — deux observateurs de mutations, deux gestionnaires de
+        // redimensionnement. Les deux stratégies s'excluent, il faut donc défaire l'autre.
+        RemoveFromDisk();
+
         _logger.LogInformation("Transformation enregistrée auprès du plugin File Transformation.");
         return true;
     }

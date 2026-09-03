@@ -27,6 +27,10 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton<TopListRefreshService>();
         serviceCollection.AddSingleton<RefreshHealth>();
 
+        // `GetDefaultTriggers()` n'est lu qu'à la première installation de la tâche : sans ce
+        // service, le réglage « intervalle de recalcul » n'avait plus aucun effet ensuite.
+        serviceCollection.AddHostedService<RefreshScheduleSynchronizer>();
+
         // Les sources externes sont injectées en liste ; le fournisseur actif est choisi à l'exécution.
         serviceCollection.AddSingleton<ITrendingProvider, TmdbTrendingProvider>();
         serviceCollection.AddSingleton<ITrendingProvider, TraktTrendingProvider>();

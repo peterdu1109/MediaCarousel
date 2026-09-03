@@ -7,13 +7,22 @@ namespace JellyfinCarouselPlugin.Api;
 /// <summary>
 /// Une entrée de classement telle qu'exposée par l'API.
 /// </summary>
+/// <remarks>
+/// Ce contrat ne porte QUE ce que le rendu consomme. Le score, le nombre de lectures, le
+/// nombre de spectateurs distincts et la date de dernière lecture en ont été retirés : le
+/// client ne les lisait pas, et ils décrivent le comportement de visionnage des autres
+/// comptes. Sur un serveur familial, « un seul spectateur » et une date de dernière lecture
+/// suffisent à désigner quelqu'un — c'est une information sur les personnes, pas sur les
+/// titres, et elle n'a rien à faire dans une réponse lue par tous les comptes.
+///
+/// Ces valeurs restent calculées et conservées dans <c>TopListEntry</c> : elles servent à
+/// départager les ex æquo du classement. Ce qui change ici, c'est leur publication.
+/// </remarks>
 public sealed class TopListItemDto
 {
     /// <summary>Obtient ou définit le rang, à partir de 1.</summary>
     public int Rank { get; set; }
 
-    /// <summary>Obtient ou définit le score de classement.</summary>
-    public double Score { get; set; }
 
     /// <summary>Obtient ou définit le titre affichable.</summary>
     public string Name { get; set; } = string.Empty;
@@ -26,15 +35,6 @@ public sealed class TopListItemDto
 
     /// <summary>Obtient ou définit l'identifiant IMDb, si connu.</summary>
     public string? ImdbId { get; set; }
-
-    /// <summary>Obtient ou définit le nombre total de lectures (Top local).</summary>
-    public int TotalPlays { get; set; }
-
-    /// <summary>Obtient ou définit le nombre d'utilisateurs distincts (Top local).</summary>
-    public int DistinctViewers { get; set; }
-
-    /// <summary>Obtient ou définit la date de dernière lecture (Top local).</summary>
-    public DateTime? LastPlayedUtc { get; set; }
 
     /// <summary>Obtient ou définit l'affiche externe, utilisée quand le titre n'est pas dans la bibliothèque.</summary>
     public string? PosterUrl { get; set; }

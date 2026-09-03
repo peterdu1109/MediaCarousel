@@ -235,6 +235,24 @@ var duneRank = capped.Rank(10).Single();
 Check("TOP: le plafond borne le score a 3", Math.Abs(duneRank.Score - 3) < 0.001);
 Check("TOP: TotalPlays conserve les 10 lectures reelles", duneRank.TotalPlays == 10);
 
+// Jellyfin ecrit ses dates en UTC mais EF Core sur SQLite les relit en Unspecified.
+// `ToUniversalTime()` les traiterait alors comme LOCALES et les decalerait du fuseau du
+// serveur : une lecture de 1 h du matin a Paris ressortait a 23 h la veille, donc un jour
+// plus tot, ce qui deplace la frontiere de la fenetre d'observation.
+var brute = new DateTime(2026, 3, 1, 1, 0, 0, DateTimeKind.Unspecified);
+var ramenee = PlaybackDate.AsUtc(brute);
+Check("FUSEAU: une date non qualifiee est lue comme de l UTC, sans decalage",
+    ramenee.Kind == DateTimeKind.Utc && ramenee.Hour == 1 && ramenee.Day == 1);
+
+var deja = new DateTime(2026, 3, 1, 1, 0, 0, DateTimeKind.Utc);
+Check("FUSEAU: une date deja en UTC n est pas touchee",
+    PlaybackDate.AsUtc(deja) == deja);
+
+var locale = new DateTime(2026, 3, 1, 1, 0, 0, DateTimeKind.Local);
+Check("FUSEAU: une date locale est bien convertie",
+    PlaybackDate.AsUtc(locale) == locale.ToUniversalTime()
+        && PlaybackDate.AsUtc(locale).Kind == DateTimeKind.Utc);
+
 // Un plafond nul ou negatif signifie « pas de plafond ».
 var uncapped = new TopListAccumulator(playCap: 0);
 uncapped.Add(Play(dune, "Dune", alice, 10));

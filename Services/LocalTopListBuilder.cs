@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Threading;
 using Jellyfin.Data;
@@ -95,7 +96,16 @@ public sealed class LocalTopListBuilder
         var cutoffUtc = windowDays > 0
             ? DateTime.UtcNow.AddDays(-windowDays)
             : (DateTime?)null;
-        var playCap = config.MaxPlaysCountedPerUser > 0 ? config.MaxPlaysCountedPerUser : int.MaxValue;
+        // `UserItemData.PlayCount` est le cumul DEPUIS TOUJOURS : Jellyfin ne compte rien
+        // par période. Sous une fenêtre, on ne sait donc qu'une chose de vrai — ce compte a
+        // lancé ce titre au moins une fois pendant la fenêtre. Retenir son cumul reviendrait
+        // à faire remonter un film vu cinquante fois il y a trois ans et une fois cette
+        // semaine comme s'il avait été vu cinquante fois cette semaine. Le plafond vaut donc
+        // 1 dès qu'une fenêtre est active : chaque compte pèse une voix, ce qui est
+        // exactement ce que la donnée permet d'affirmer.
+        var playCap = cutoffUtc.HasValue
+            ? 1
+            : (config.MaxPlaysCountedPerUser > 0 ? config.MaxPlaysCountedPerUser : int.MaxValue);
         var candidates = Math.Clamp(config.CandidatesPerUser, 10, 1000);
         var itemTypes = ResolveItemTypes(config.LocalTopMediaKind);
 
@@ -119,15 +129,23 @@ public sealed class LocalTopListBuilder
             }
 
             usersCounted++;
-            AccumulateForUser(
-                user,
-                itemTypes,
-                candidates,
-                cutoffUtc,
-                excludedLibraries,
-                config.ExcludeChannelContent,
-                accumulator,
-                seriesCache);
+
+            // Une requête PAR TYPE, chacune avec ses propres créneaux. Une requête unique
+            // mêlant films et épisodes laissait un seul binge-watcher consommer ses cent
+            // créneaux avec quatre saisons d'une même série : ses films n'atteignaient alors
+            // jamais le classement, et les séries écrasaient structurellement les films.
+            foreach (var itemType in itemTypes)
+            {
+                AccumulateForUser(
+                    user,
+                    new[] { itemType },
+                    candidates,
+                    cutoffUtc,
+                    excludedLibraries,
+                    config.ExcludeChannelContent,
+                    accumulator,
+                    seriesCache);
+            }
         }
 
         var entries = accumulator.Rank(size)
@@ -147,10 +165,11 @@ public sealed class LocalTopListBuilder
             .ToArray();
 
         _logger.LogInformation(
-            "Top local recalculé : {Count} entrées à partir de {Users} utilisateur(s) et {Candidates} titre(s) distincts.",
+            "Top local recalculé : {Count} entrées à partir de {Users} utilisateur(s) et {Candidates} titre(s) distincts (plafond {Cap} par compte).",
             entries.Length,
             usersCounted,
-            accumulator.DistinctItems);
+            accumulator.DistinctItems,
+            playCap == int.MaxValue ? "aucun" : playCap.ToString(CultureInfo.InvariantCulture));
 
         return new TopListSnapshot(kind, "Jellyfin", entries);
     }
@@ -213,7 +232,9 @@ public sealed class LocalTopListBuilder
                 continue;
             }
 
-            if (cutoffUtc.HasValue && (!userData.LastPlayedDate.HasValue || userData.LastPlayedDate.Value.ToUniversalTime() < cutoffUtc.Value))
+            if (cutoffUtc.HasValue
+                && (!userData.LastPlayedDate.HasValue
+                    || PlaybackDate.AsUtc(userData.LastPlayedDate.Value) < cutoffUtc.Value))
             {
                 continue;
             }
@@ -238,7 +259,9 @@ public sealed class LocalTopListBuilder
                 target.GetProviderId(MetadataProvider.Imdb),
                 user.Id,
                 userData.PlayCount,
-                userData.LastPlayedDate?.ToUniversalTime()));
+                userData.LastPlayedDate.HasValue
+                    ? PlaybackDate.AsUtc(userData.LastPlayedDate.Value)
+                    : (DateTime?)null));
         }
     }
 

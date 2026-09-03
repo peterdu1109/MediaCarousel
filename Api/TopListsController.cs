@@ -169,6 +169,7 @@ public class TopListsController : ControllerBase
             ShowAllTimeRow = config.EnableAllTimeRow,
             AllTimeRowTitle = config.AllTimeRowTitle,
             AllTimeRowSize = config.AllTimeRowSize,
+            RankNumberScale = config.RankNumberScale,
             ShowBecauseRow = config.EnableBecauseRow,
             BecauseRowTitle = config.BecauseRowTitle,
             BecauseRowSize = config.BecauseRowSize,
@@ -240,17 +241,13 @@ public class TopListsController : ControllerBase
             var dto = new TopListItemDto
             {
                 Rank = items.Count + 1,
-                Score = entry.Score,
                 Name = entry.Name,
                 ProductionYear = entry.ProductionYear,
                 TmdbId = entry.TmdbId,
                 ImdbId = entry.ImdbId,
                 // Relayée par le plugin : sans cela, chaque navigateur irait chercher
                 // l'affiche chez TMDB et lui livrerait son adresse IP.
-                PosterUrl = PosterProxy.ToLocalUrl(entry.PosterUrl),
-                TotalPlays = entry.TotalPlays,
-                DistinctViewers = entry.DistinctViewers,
-                LastPlayedUtc = entry.LastPlayedUtc
+                PosterUrl = PosterProxy.ToLocalUrl(entry.PosterUrl)
             };
 
             items.Add(dto);

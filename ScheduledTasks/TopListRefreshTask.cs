@@ -15,6 +15,22 @@ public sealed class TopListRefreshTask : IScheduledTask
 {
     private const int DefaultIntervalHours = 6;
 
+    /// <summary>
+    /// Lit l'intervalle de recalcul configuré, borné aux valeurs acceptables.
+    /// </summary>
+    /// <remarks>
+    /// Exposé parce que <see cref="JellyfinCarouselPlugin.Services.RefreshScheduleSynchronizer"/>
+    /// doit lire exactement la même valeur : c'est lui qui applique le réglage après la
+    /// première installation, <see cref="GetDefaultTriggers"/> n'étant plus consulté ensuite.
+    /// </remarks>
+    /// <returns>L'intervalle en heures, entre 1 et 168.</returns>
+    public static int ResolveIntervalHours()
+    {
+        // La configuration peut ne pas être encore chargée au moment de l'enregistrement.
+        var hours = Plugin.Instance?.Configuration.RefreshIntervalHours ?? DefaultIntervalHours;
+        return Math.Clamp(hours, 1, 168);
+    }
+
     private readonly TopListRefreshService _refreshService;
 
     /// <summary>
@@ -45,10 +61,6 @@ public sealed class TopListRefreshTask : IScheduledTask
     /// <inheritdoc />
     public IEnumerable<TaskTriggerInfo> GetDefaultTriggers()
     {
-        // La configuration peut ne pas être encore chargée au moment de l'enregistrement de la tâche.
-        var hours = Plugin.Instance?.Configuration.RefreshIntervalHours ?? DefaultIntervalHours;
-        hours = Math.Clamp(hours, 1, 168);
-
         yield return new TaskTriggerInfo
         {
             Type = TaskTriggerInfoType.StartupTrigger
@@ -57,7 +69,7 @@ public sealed class TopListRefreshTask : IScheduledTask
         yield return new TaskTriggerInfo
         {
             Type = TaskTriggerInfoType.IntervalTrigger,
-            IntervalTicks = TimeSpan.FromHours(hours).Ticks
+            IntervalTicks = TimeSpan.FromHours(ResolveIntervalHours()).Ticks
         };
     }
 }
