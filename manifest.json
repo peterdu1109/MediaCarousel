@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/icon.png",
     "versions": [
       {
+        "version": "3.13.0.0",
+        "changelog": "Nouveautes :\n- Chiffre du rang a cote de l'affiche, au format Netflix",
+        "targetAbi": "10.11.11.0",
+        "sourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/3.13.0/JellyfinCarouselPlugin.zip",
+        "checksum": "d06f96c537b15a714e6687e5a03d8501",
+        "timestamp": "2026-09-03T00:17:10Z"
+      },
+      {
         "version": "3.12.2.0",
         "changelog": "- Corrections et ajustements divers",
         "targetAbi": "10.11.11.0",
