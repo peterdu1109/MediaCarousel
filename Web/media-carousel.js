@@ -914,18 +914,33 @@
      * vit à l'intérieur, aurait rendu chaque affiche classée deux pixels trop étroite.
      */
     function measurePosterWidth(container) {
-        var reference = container.querySelector('.card:not(.mc-ranked) .cardScalable');
+        // La référence doit avoir la MÊME FORME que nos cartes classées. Prendre la
+        // première carte venue ne marche pas : nos rangées sont insérées juste après
+        // « Mes médias », dont les vignettes de bibliothèque sont au format PAYSAGE et
+        // précèdent donc tout le reste dans le DOM. Leur largeur, copiée sur une affiche
+        // 2:3, la gonflait de moitié — et le chiffre, qui se calcule à partir d'elle,
+        // d'autant. « Continuer à regarder » pose le même piège.
+        var candidats = container.querySelectorAll(
+            '.overflowPortraitCard:not(.mc-ranked) .cardScalable');
 
-        if (!reference) {
-            return;
-        }
+        for (var i = 0; i < candidats.length; i++) {
+            var boite = candidats[i].getBoundingClientRect();
 
-        var width = reference.getBoundingClientRect().width;
+            // Une carte encore masquée mesure zéro : mieux vaut garder le repli que
+            // publier une largeur nulle, qui ferait disparaître toutes les affiches.
+            if (boite.width <= 0) {
+                continue;
+            }
 
-        // Une carte encore masquée mesure zéro : mieux vaut garder le repli que publier
-        // une largeur nulle, qui ferait disparaître toutes les affiches classées.
-        if (width > 0) {
-            container.style.setProperty('--mc-measured', (Math.round(width * 100) / 100) + 'px');
+            // Second barrage, au cas où un thème réutiliserait la classe pour autre
+            // chose : une affiche est haute d'une fois et demie sa largeur.
+            var rapport = boite.height / boite.width;
+
+            if (rapport > 1.3 && rapport < 1.7) {
+                container.style.setProperty(
+                    '--mc-measured', (Math.round(boite.width * 100) / 100) + 'px');
+                return;
+            }
         }
     }
 

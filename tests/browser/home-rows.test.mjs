@@ -244,6 +244,20 @@ const result = await page.evaluate(() => {
     })(),
     accentDefault: getComputedStyle(rows[0]).getPropertyValue('--mc-accent').trim(),
     genreBox: measure(rows[7].querySelector('.cardImageContainer')),
+    // La largeur publiee dans `--mc-measured`, et les deux formes en presence.
+    mesuree: getComputedStyle(document.querySelector('.sections'))
+      .getPropertyValue('--mc-measured').trim(),
+    afficheNativePortrait: Math.round(document.querySelector(
+      '#nativeReference .cardScalable').getBoundingClientRect().width * 100) / 100,
+    // Le piege : une carte PAYSAGE, native, placee AVANT nos rangees dans le DOM.
+    piegePaysage: (() => {
+      const b = document.querySelector('.overflowBackdropCard .cardScalable');
+      const r = document.querySelector('.mc-row');
+      if (!b || !r) return null;
+      const avant = b.compareDocumentPosition(r) & Node.DOCUMENT_POSITION_FOLLOWING;
+      return { present: !!avant,
+        largeur: Math.round(b.getBoundingClientRect().width * 100) / 100 };
+    })(),
     // Les vignettes de studio prennent la forme paysage native, pas un format maison.
     tileIsBackdrop: rows[6].querySelector('.mc-tile').classList.contains('overflowBackdropCard'),
     shapeClasses: rows[0].querySelector('.card').className.indexOf('overflowPortraitCard') !== -1
@@ -928,6 +942,20 @@ check('ROUTAGE: une serie ouvre sa fiche, pas la liste de ses saisons',
 // Un studio n'est le parent de rien : `parentId` donnait une page vide.
 check('ROUTAGE: un studio ouvre une liste filtree par studioId',
   result.studioHref === '#/list?studioId=s1&serverId=server-1', result.studioHref);
+// Ce test tient la CAUSE du defaut, pas seulement son symptome. La largeur de
+// reference doit etre relevee sur une carte de MEME FORME. « Mes medias » place ses
+// vignettes de bibliotheque — au format paysage — avant nos rangees dans le DOM :
+// prendre la premiere carte venue gonflait l'affiche de moitie au bureau et la
+// DOUBLAIT presque sur telephone, ou Jellyfin serre bien plus les affiches 2:3 que
+// les vignettes paysage.
+check('MESURE: le piege est bien present dans la page — une carte paysage avant nos rangees',
+  result.piegePaysage !== null && result.piegePaysage.present === true, result.piegePaysage);
+check('MESURE: la carte paysage est nettement plus large qu une affiche — le piege mord',
+  result.piegePaysage.largeur > result.afficheNativePortrait * 1.3,
+  [result.piegePaysage.largeur, result.afficheNativePortrait]);
+check('MESURE: la reference relevee est une AFFICHE, pas la vignette paysage',
+  Math.abs(parseFloat(result.mesuree) - result.afficheNativePortrait) < 0.5,
+  [result.mesuree, result.afficheNativePortrait]);
 check('PARITE: nos affiches ont la taille exacte d une affiche native',
   JSON.stringify(result.box) === JSON.stringify(result.nativeBox), [result.box, result.nativeBox]);
 check('PARITE: le libelle a la taille exacte du libelle natif',

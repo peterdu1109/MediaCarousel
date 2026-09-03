@@ -17,9 +17,13 @@
     <div class="sections homeSectionsContainer">
       <div class="verticalSection section0">
         <h2 class="sectionTitle">Mes médias</h2>
+        <!-- Les vignettes de bibliotheque sont de vraies cartes NATIVES, au format
+             PAYSAGE, et elles precedent nos rangees dans le DOM. C'est le decor reel :
+             une fixture ou « Mes medias » ne contient que des div nus laissait croire
+             que la premiere carte de la page etait forcement une affiche 2:3. -->
         <div class="itemsContainer">
-          <div class="card" data-type="CollectionFolder" data-id="lib1">Films</div>
-          <div class="card" data-type="CollectionFolder" data-id="lib2">Séries</div>
+          <div class="card overflowBackdropCard card-hoverable" data-type="CollectionFolder" data-id="lib1"><div class="cardBox cardBox-bottompadded"><div class="cardScalable"><div class="cardPadder cardPadder-overflowBackdrop"></div><div class="cardImageContainer coveredImage cardContent"></div></div><div class="cardFooter cardFooter-transparent"><div class="cardText cardTextCentered cardText-first"><bdi>Films</bdi></div></div></div></div>
+          <div class="card overflowBackdropCard card-hoverable" data-type="CollectionFolder" data-id="lib2"><div class="cardBox cardBox-bottompadded"><div class="cardScalable"><div class="cardPadder cardPadder-overflowBackdrop"></div><div class="cardImageContainer coveredImage cardContent"></div></div><div class="cardFooter cardFooter-transparent"><div class="cardText cardTextCentered cardText-first"><bdi>Séries</bdi></div></div></div></div>
         </div>
       </div>
       <div class="verticalSection section1"><h2 class="sectionTitle">Continuer à regarder</h2></div>
