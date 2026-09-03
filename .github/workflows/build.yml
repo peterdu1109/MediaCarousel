@@ -170,16 +170,16 @@ jobs:
           # change pas d'une version a l'autre : le repeter a chaque release noie les
           # quelques lignes qu'on vient vraiment lire. Il vit dans le README.
           N=/tmp/notes.md
-          cat > "$N" <<EOF
-# Media Carousel v$V
-
-$NOTES
-
----
-
-Jellyfin 10.11.11 ou plus recent. Installation et configuration :
-[README](https://github.com/peterdu1109/MediaCarousel#readme).
-EOF
+          {
+            echo "# Media Carousel v$V"
+            echo
+            echo "$NOTES"
+            echo
+            echo "---"
+            echo
+            echo "Jellyfin 10.11.11 ou plus recent. Installation et configuration :"
+            echo "[README](https://github.com/peterdu1109/MediaCarousel#readme)."
+          } > "$N"
 
           gh release delete "$V" --yes --cleanup-tag 2>/dev/null || true
           gh release create "$V" \
