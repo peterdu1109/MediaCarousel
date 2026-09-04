@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/icon.png",
     "versions": [
       {
+        "version": "3.13.3.0",
+        "changelog": "Corrections :\n- Dedupliquer les titres, la source en produit",
+        "targetAbi": "10.11.11.0",
+        "sourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/3.13.3/JellyfinCarouselPlugin.zip",
+        "checksum": "117fd752c39933edce370fc4d325c6bd",
+        "timestamp": "2026-09-04T07:08:32Z"
+      },
+      {
         "version": "3.13.2.0",
         "changelog": "Corrections :\n- Reparer le workflow, casse par les notes de release raccourcies\n- Remettre le chiffre a 100 %, la proportion validee\n- Cinq defauts releves par l'audit du plugin\n- Caler la carte classee sur son contenu, thème compris",
         "targetAbi": "10.11.11.0",
