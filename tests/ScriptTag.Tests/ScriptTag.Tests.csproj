@@ -21,6 +21,7 @@
     <Compile Include="../../Services/TopListAccumulator.cs" />
     <Compile Include="../../Services/PosterProxy.cs" />
     <Compile Include="../../Services/PlaybackDate.cs" />
+    <Compile Include="../../Services/TrendingKey.cs" />
   </ItemGroup>
 
 </Project>

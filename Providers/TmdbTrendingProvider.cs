@@ -8,6 +8,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using JellyfinCarouselPlugin.Configuration;
+using JellyfinCarouselPlugin.Services;
 using MediaBrowser.Common.Net;
 using Microsoft.Extensions.Logging;
 
@@ -190,14 +191,10 @@ public sealed class TmdbTrendingProvider : ITrendingProvider
                 ? popularityElement.GetDouble()
                 : 0d;
 
-            // Un titre déjà retenu sur une page précédente n'est pas ajouté une seconde
-            // fois. Faute d'identifiant, on retombe sur le nom et l'année : deux œuvres
-            // homonymes de la même année sont assez rares pour que le risque soit moindre
-            // que celui d'un doublon visible dans la rangée.
-            var cle = tmdbId ?? (title.Trim().ToLowerInvariant() + '|'
-                + ReadString(element, isMovie ? "release_date" : "first_air_date"));
+            var year = ParseYear(ReadString(element, isMovie ? "release_date" : "first_air_date"));
 
-            if (!seen.Add(cle))
+            // Un titre déjà retenu sur une page précédente n'est pas ajouté une seconde fois.
+            if (!seen.Add(TrendingKey.For(tmdbId, isMovie, title, year)))
             {
                 continue;
             }
@@ -207,7 +204,7 @@ public sealed class TmdbTrendingProvider : ITrendingProvider
             titles.Add(new TrendingTitle(
                 titles.Count + 1,
                 title,
-                ParseYear(ReadString(element, isMovie ? "release_date" : "first_air_date")),
+                year,
                 tmdbId,
                 ImdbId: null,
                 isMovie,

@@ -235,6 +235,43 @@ var duneRank = capped.Rank(10).Single();
 Check("TOP: le plafond borne le score a 3", Math.Abs(duneRank.Score - 3) < 0.001);
 Check("TOP: TotalPlays conserve les 10 lectures reelles", duneRank.TotalPlays == 10);
 
+// Le Top mondial affichait deux fois la meme serie, a deux rangs consecutifs. Une liste
+// « tendances » est recalculee en continu par TMDB : entre la requete de la page 1 et celle
+// de la page 2, elle s'est reordonnee, et un titre qui a recule d'un rang reapparait sur la
+// page suivante. Sans deduplication, il entre deux fois dans le classement.
+var page1 = TrendingKey.For("12345", isMovie: false, "Rick et Morty", 2013);
+var page2 = TrendingKey.For("12345", isMovie: false, "Rick et Morty", 2013);
+Check("DOUBLON: le meme titre revu sur une autre page donne la MEME cle",
+    page1 == page2);
+
+// TMDB numerote films et series independamment : l'identifiant 42 designe deux oeuvres
+// differentes selon le type. Les confondre masquerait un titre legitime.
+Check("DOUBLON: meme identifiant, type different -> deux cles distinctes",
+    TrendingKey.For("42", isMovie: true, "Ambigu", 2020)
+        != TrendingKey.For("42", isMovie: false, "Ambigu", 2020));
+
+// Sans identifiant, la cle retombe sur le nom normalise et l'annee.
+Check("DOUBLON: sans identifiant, la casse et les espaces ne separent pas",
+    TrendingKey.For(null, false, "  Rick ET Morty  ", 2013)
+        == TrendingKey.For("", false, "rick et morty", 2013));
+Check("DOUBLON: sans identifiant, deux annees differentes restent distinctes",
+    TrendingKey.For(null, true, "Dune", 1984) != TrendingKey.For(null, true, "Dune", 2021));
+Check("DOUBLON: une annee absente ne fusionne pas avec une annee connue",
+    TrendingKey.For(null, true, "Dune", null) != TrendingKey.For(null, true, "Dune", 2021));
+
+// Le filtrage lui-meme : cinq titres dont deux doublons doivent en laisser trois.
+var flux = new[]
+{
+    ("1", false, "Rick et Morty", (int?)2013),
+    ("2", false, "Severance", (int?)2022),
+    ("1", false, "Rick et Morty", (int?)2013),
+    (null, true, "Dune", (int?)2021),
+    (null, true, "dune", (int?)2021)
+};
+var vus = new HashSet<string>(StringComparer.Ordinal);
+var retenus = flux.Where(t => vus.Add(TrendingKey.For(t.Item1, t.Item2, t.Item3, t.Item4))).Count();
+Check("DOUBLON: cinq titres dont deux repetitions en laissent trois", retenus == 3);
+
 // Jellyfin ecrit ses dates en UTC mais EF Core sur SQLite les relit en Unspecified.
 // `ToUniversalTime()` les traiterait alors comme LOCALES et les decalerait du fuseau du
 // serveur : une lecture de 1 h du matin a Paris ressortait a 23 h la veille, donc un jour

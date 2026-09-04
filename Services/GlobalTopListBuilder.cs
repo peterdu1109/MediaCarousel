@@ -103,11 +103,7 @@ public sealed class GlobalTopListBuilder
 
             var matched = index.TryResolve(title, out var itemId);
 
-            var cle = !string.IsNullOrEmpty(title.TmdbId)
-                ? (title.IsMovie ? "m:" : "s:") + title.TmdbId
-                : (title.Title ?? string.Empty).Trim().ToLowerInvariant() + "|" + title.Year;
-
-            if (!retenus.Add(cle))
+            if (!retenus.Add(TrendingKey.For(title.TmdbId, title.IsMovie, title.Title, title.Year)))
             {
                 continue;
             }
