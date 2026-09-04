@@ -101,11 +101,18 @@ public sealed class TmdbTrendingProvider : ITrendingProvider
         // réalité à vingt candidats, et la rangée arrivait incomplète sans que rien ne le
         // signale.
         var titles = new List<TrendingTitle>();
+
+        // Les identifiants deja retenus, pour toutes les pages de ce type de media. Une
+        // liste « tendances » est recalculee en continu par TMDB : entre la requête de la
+        // page 1 et celle de la page 2, elle a pu se réordonner, et un titre qui a reculé
+        // d'un rang réapparaît alors sur la page suivante. Le classement affichait ce titre
+        // deux fois, avec la même affiche et le même rang à un près.
+        var seen = new HashSet<string>(StringComparer.Ordinal);
         var totalPages = 1;
 
         for (var page = 1; page <= totalPages && page <= MaxPages && titles.Count < request.Limit; page++)
         {
-            var reported = await FetchPageAsync(path, page, isMovie, mediaType, request, titles, cancellationToken)
+            var reported = await FetchPageAsync(path, page, isMovie, mediaType, request, titles, seen, cancellationToken)
                 .ConfigureAwait(false);
 
             // Zéro signale une réponse inexploitable : inutile d'insister sur les suivantes.
@@ -131,6 +138,7 @@ public sealed class TmdbTrendingProvider : ITrendingProvider
         string mediaType,
         TrendingRequest request,
         List<TrendingTitle> titles,
+        HashSet<string> seen,
         CancellationToken cancellationToken)
     {
         var url = BaseUrl + path + "?language=" + Uri.EscapeDataString(request.Language)
@@ -181,6 +189,18 @@ public sealed class TmdbTrendingProvider : ITrendingProvider
                              && popularityElement.ValueKind == JsonValueKind.Number
                 ? popularityElement.GetDouble()
                 : 0d;
+
+            // Un titre déjà retenu sur une page précédente n'est pas ajouté une seconde
+            // fois. Faute d'identifiant, on retombe sur le nom et l'année : deux œuvres
+            // homonymes de la même année sont assez rares pour que le risque soit moindre
+            // que celui d'un doublon visible dans la rangée.
+            var cle = tmdbId ?? (title.Trim().ToLowerInvariant() + '|'
+                + ReadString(element, isMovie ? "release_date" : "first_air_date"));
+
+            if (!seen.Add(cle))
+            {
+                continue;
+            }
 
             var posterPath = ReadString(element, "poster_path");
 

@@ -89,11 +89,35 @@ public sealed class GlobalTopListBuilder
         var index = LibraryTitleIndex.Build(_libraryManager, excludedLibraries, config.ExcludeChannelContent);
         var entries = new List<TopListEntry>(size);
 
+        // Dernier filet contre les doublons. La source en produit — une liste « tendances »
+        // se réordonne entre deux pages, et le même titre revient — et deux entrées peuvent
+        // aussi se rapporter au MÊME élément local, par exemple un film et sa série
+        // homonymes rapprochés du même titre de la bibliothèque. Une rangée classée qui
+        // affiche deux fois la même affiche se remarque immédiatement.
+        var retenus = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var elements = new HashSet<Guid>();
+
         foreach (var title in titles)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
             var matched = index.TryResolve(title, out var itemId);
+
+            var cle = !string.IsNullOrEmpty(title.TmdbId)
+                ? (title.IsMovie ? "m:" : "s:") + title.TmdbId
+                : (title.Title ?? string.Empty).Trim().ToLowerInvariant() + "|" + title.Year;
+
+            if (!retenus.Add(cle))
+            {
+                continue;
+            }
+
+            // Deux titres externes distincts rapprochés du même élément local feraient
+            // apparaître deux fois la même affiche.
+            if (matched && !elements.Add(itemId))
+            {
+                continue;
+            }
             if (!matched && config.GlobalTopLibraryOnly)
             {
                 continue;
@@ -103,7 +127,7 @@ public sealed class GlobalTopListBuilder
             {
                 Rank = entries.Count + 1,
                 ItemId = matched ? itemId : Guid.Empty,
-                Name = title.Title,
+                Name = title.Title ?? string.Empty,
                 ProductionYear = title.Year,
                 Score = title.Popularity,
                 TmdbId = title.TmdbId,
