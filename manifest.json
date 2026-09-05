@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/icon.png",
     "versions": [
       {
+        "version": "3.13.4.0",
+        "changelog": "Corrections :\n- Mesurer l'affiche sans dependre des sections natives",
+        "targetAbi": "10.11.11.0",
+        "sourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/3.13.4/JellyfinCarouselPlugin.zip",
+        "checksum": "3871f6f9a3b9b75988450bcab816649d",
+        "timestamp": "2026-09-05T10:47:00Z"
+      },
+      {
         "version": "3.13.3.0",
         "changelog": "Corrections :\n- Dedupliquer les titres, la source en produit",
         "targetAbi": "10.11.11.0",
