@@ -473,6 +473,24 @@ si l'administrateur supprime la collection, elle est recréée au recalcul suiva
   première carte venue gonflait l'affiche de moitié au bureau et la DOUBLAIT presque sur
   téléphone. D'où le filtre sur `.overflowPortraitCard`, doublé d'un contrôle du rapport de
   la boîte.
+- **Chaque rangée classée emporte son propre étalon**, la « bande sonde ». Chercher la
+  référence dans la page était une COURSE : sur un serveur où seules des rangées classées
+  sont activées, aucune de nos rangées ne fournit d'affiche non classée, et la seule
+  référence possible vient d'une section native — qui se remplit par sa propre requête.
+  Quand notre rendu passait devant, la mesure n'avait pas lieu ; et comme elle n'était
+  tentée qu'une fois et que `render()` refuse de rejouer tant qu'une rangée est en place,
+  **plus rien ne rattrapait jusqu'au rechargement de la page**. Mesuré : 167 px au lieu de
+  113, soit +48 %, et la rangée apparaissait « en petit » une fois sur deux. La sonde est
+  une bande jumelle de la vraie — mêmes classes `itemsContainer scrollX`, donc mêmes règles
+  de thème et même boîte de contenu, sans quoi le pourcentage de `--cardWidth` se
+  résoudrait sur une autre base. `height:0` la retire de la page sans la retirer de la mise
+  en page ; `align-items:flex-start` est obligatoire, car le `stretch` par défaut lui
+  donnerait la hauteur nulle de sa bande et le contrôle de proportion 2:3 la rejetterait.
+  Une position absolue ne conviendrait pas : le pourcentage se résoudrait alors contre la
+  boîte de **padding**, plus large que la vraie. `ensureMeasured()` complète le dispositif —
+  un relevé qui échoue est retenté au lieu d'abandonner en silence. Le banc joue la course
+  dans les deux sens (`COURSE:`) et vérifie que la sonde n'ajoute ni hauteur, ni carte
+  visible, ni nœud d'accessibilité (`SONDE:`).
 - **La hauteur du chiffre est un réglage**, `RankNumberScale`, **100 % par défaut** — la
   proportion de Netflix, et le rendu validé à l'écran. Le prix est qu'une rangée classée
   occupe près du double d'une rangée ordinaire : sur téléphone une seule carte tient. Le

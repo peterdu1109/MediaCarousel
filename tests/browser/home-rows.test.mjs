@@ -955,6 +955,96 @@ const reduced = await calm.evaluate(() => {
 });
 await calm.close();
 
+// ---------------------------------------------------------------------------
+// COURSE : la mesure ne doit pas dependre de l'arrivee des sections natives.
+//
+// Configuration reelle d'un serveur ou SEULES les rangees classees sont activees :
+// aucune de nos rangees ne fournit alors d'affiche non classee, et les seules
+// references possibles sont les cartes des sections natives, qui se remplissent
+// par leur propre requete. Quand notre rendu gagnait cette course, la mesure
+// n'avait pas lieu, ne se rejouait jamais, et les affiches gardaient le repli
+// theorique jusqu'au rechargement de la page — le defaut « la rangee apparait
+// en petit ». La sonde embarquee doit rendre le resultat identique dans les
+// deux sens de la course.
+// ---------------------------------------------------------------------------
+const CARTE_NATIVE = '<div class="card overflowPortraitCard card-hoverable">'
+  + '<div class="cardBox cardBox-bottompadded"><div class="cardScalable">'
+  + '<div class="cardPadder cardPadder-overflowPortrait"></div>'
+  + '<div class="cardImageContainer coveredImage cardContent"></div></div>'
+  + '<div class="cardFooter cardFooter-transparent">'
+  + '<div class="cardText cardTextCentered cardText-first"><bdi>x</bdi></div>'
+  + '<div class="cardText cardTextCentered cardText-secondary"><bdi>2024</bdi></div>'
+  + '</div></div></div>';
+
+async function courseDeMesure(referenceAvantLeRendu) {
+  const vue = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  vue.on('pageerror', e => errors.push('pageerror(course): ' + e.message));
+  await vue.goto('file://' + path.join(here, 'home.html'));
+  await vue.addStyleTag({ path: path.join(here, 'theme-excerpt.css') });
+
+  const remplirNative = () => vue.evaluate((carte) => {
+    document.querySelector('#homeTab .homeSectionsContainer .section2').innerHTML =
+      '<h2 class="sectionTitle">Derniers films</h2>'
+      + '<div is="emby-scroller" class="emby-scroller scrollX">'
+      + '<div class="itemsContainer scrollSlider">' + carte.repeat(6) + '</div></div>';
+  }, CARTE_NATIVE);
+
+  if (referenceAvantLeRendu) { await remplirNative(); }
+
+  // Seules les deux rangees classees sont activees.
+  await vue.addInitScript(() => { window.__seulementClassees = true; });
+  await vue.evaluate(() => {
+    const r = n => Array.from({ length: n }, (_, i) => ({
+      Rank: i + 1, Name: 'Film ' + (i + 1), ProductionYear: 2020,
+      Item: { Id: 'c' + i, Name: 'Film', ServerId: 'server-1', Type: 'Movie', IsFolder: false, ImageTags: { Primary: 't' } }
+    }));
+    window.ApiClient = {
+      getCurrentUserId: () => 'user-1', serverId: () => 'server-1',
+      getUrl: (p, q) => p + '?' + new URLSearchParams(q || {}).toString(),
+      getImageUrl: (id) => 'img://' + id,
+      getJSON: (url) => url.includes('ClientOptions')
+        ? Promise.resolve({
+            EnableHomeRows: true, ShowLocalRow: true, ShowGlobalRow: true,
+            ShowAllTimeRow: false, ShowStudioRow: false, ShowGenreRows: false,
+            ShowReturningRow: false, ShowNeverPlayedRow: false, ShowBecauseRow: false,
+            LocalRowTitle: 'Top 10 sur ce serveur', GlobalRowTitle: 'Top 10 mondial',
+            LocalRowSize: 10, GlobalRowSize: 10, RankNumberScale: 100
+          })
+        : url.includes('Top/') ? Promise.resolve({ Items: r(10) }) : Promise.resolve({ Items: [] })
+    };
+  });
+  await vue.evaluate(script);
+  await vue.waitForSelector('.mc-ranked', { timeout: 8000 });
+  await vue.waitForTimeout(400);
+
+  if (!referenceAvantLeRendu) { await remplirNative(); await vue.waitForTimeout(1200); }
+
+  const releve = await vue.evaluate(() => {
+    const c = document.querySelector('#homeTab .homeSectionsContainer');
+    const classee = document.querySelector('.mc-ranked .mc-rank-col .cardScalable');
+    const native = document.querySelector('.section2 .overflowPortraitCard .cardScalable');
+    const bande = document.querySelector('.mc-row .mc-strip');
+    const sonde = document.querySelector('.mc-row .mc-probe-strip');
+    return {
+      mesuree: c.style.getPropertyValue('--mc-measured') || '',
+      affiche: classee ? classee.getBoundingClientRect().width : null,
+      native: native ? native.getBoundingClientRect().width : null,
+      // La sonde ne doit ni occuper de hauteur, ni entrer dans la bande visible.
+      // Tolerant a l'absence : ce test doit ECHOUER proprement si la sonde
+      // disparait, pas exploser sur un null et masquer les autres verdicts.
+      hauteurSonde: sonde ? sonde.getBoundingClientRect().height : null,
+      cartesVisibles: bande.querySelectorAll('.card').length,
+      sondeMasquee: sonde ? sonde.getAttribute('aria-hidden') === 'true' : false,
+      sondeHorsBande: bande.querySelector('.mc-probe') === null
+    };
+  });
+  await vue.close();
+  return releve;
+}
+
+const coursePerdue = await courseDeMesure(false);
+const courseGagnee = await courseDeMesure(true);
+
 await browser.close();
 
 let failed = 0;
@@ -1196,6 +1286,23 @@ check('TIZEN: le contour de focus tient sur :focus seul',
   styling.hasPlainFocusRule === true, styling.hasPlainFocusRule);
 check('TIZEN: le retrait au clic souris est isole dans une regle ecartable',
   styling.focusVisibleOnlyGuard === true, styling.focusVisibleOnlyGuard);
+
+check('COURSE: la mesure a lieu meme si les sections natives arrivent APRES nous',
+  coursePerdue.mesuree !== '', coursePerdue);
+check('COURSE: course perdue ou gagnee, l affiche fait la meme largeur',
+  Math.abs(coursePerdue.affiche - courseGagnee.affiche) < 0.5,
+  [coursePerdue.affiche, courseGagnee.affiche]);
+check('COURSE: l affiche classee egale la carte native, dans les deux sens',
+  Math.abs(coursePerdue.affiche - coursePerdue.native) < 0.5
+  && Math.abs(courseGagnee.affiche - courseGagnee.native) < 0.5,
+  [coursePerdue.affiche, coursePerdue.native, courseGagnee.affiche, courseGagnee.native]);
+check('SONDE: elle n ajoute aucune hauteur a la rangee',
+  coursePerdue.hauteurSonde === 0, coursePerdue.hauteurSonde);
+check('SONDE: elle n entre pas dans la bande visible, qui garde ses 10 cartes',
+  coursePerdue.cartesVisibles === 10 && coursePerdue.sondeHorsBande === true,
+  [coursePerdue.cartesVisibles, coursePerdue.sondeHorsBande]);
+check('SONDE: elle est retiree de l arbre d accessibilite',
+  coursePerdue.sondeMasquee === true, coursePerdue.sondeMasquee);
 
 check('aucune erreur js', errors.length === 0, errors);
 

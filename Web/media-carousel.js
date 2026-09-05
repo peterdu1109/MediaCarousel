@@ -311,6 +311,38 @@
                que la bande déborde. */
             '.mc-row .mc-strip>.card{flex:0 0 auto;}',
 
+            /* --------------------------------------------------------------
+               Bande sonde : l'etalon de mesure des rangees classees.
+
+               `measurePosterWidth` a besoin d'une affiche NON classee pour
+               relever la largeur que le theme donne aux cartes. Quand les
+               seules rangees activees sont classees, cette affiche ne peut
+               venir que d'une section native — qui se remplit par sa propre
+               requete. Si notre rendu gagne la course, il n'y a rien a
+               mesurer ; et comme la mesure n'avait lieu qu'une fois, plus
+               rien ne rattrapait ensuite : les affiches gardaient le repli
+               theorique jusqu'au rechargement de la page. C'est le defaut
+               « la rangee apparait en petit, un rechargement la remet ».
+
+               Chaque rangee classee emporte donc sa propre reference. Elle
+               vit dans une bande JUMELLE de la vraie — memes classes, donc
+               meme retrait et memes regles de theme — pour que le pourcentage
+               contenu dans `--cardWidth` se resolve contre une boite de
+               contenu identique. Une position absolue ne conviendrait pas :
+               le pourcentage se resoudrait alors contre la boite de PADDING,
+               soit une reference plus large que la vraie.
+
+               `height:0` la retire de la page sans la retirer de la mise en
+               page : les largeurs restent celles d'une vraie carte.
+               `align-items:flex-start` n'est pas cosmetique — etiree par le
+               `stretch` par defaut, la carte prendrait la hauteur nulle de sa
+               bande, et le controle de proportion 2:3 rejetterait l'etalon.
+               -------------------------------------------------------------- */
+            '.mc-row .mc-probe-strip{display:flex;flex-wrap:nowrap;align-items:flex-start;',
+            'height:0;overflow:hidden;pointer-events:none;',
+            'padding-left:calc(var(--mc-side-padding) - .375em);}',
+            '.mc-row .mc-probe-strip>.card{flex:0 0 auto;}',
+
             /* ------------------------------------------------------------------
                Chiffre du rang.
 
@@ -707,11 +739,26 @@
         });
     }
 
+    /**
+     * Bande jumelle portant une seule affiche non classée, invisible.
+     *
+     * Elle sert d'étalon à `measurePosterWidth`. Les classes reprennent celles de la
+     * vraie bande — `itemsContainer` et `scrollX` — parce que ce sont elles que les
+     * thèmes visent : ElegantFin pose son retrait sur `.scrollX`, et une règle du
+     * genre `.itemsContainer .card{width:…}` doit mordre ici exactement comme sur une
+     * carte native. Un étalon soustrait aux règles du thème mentirait.
+     */
+    function probeStrip() {
+        return '<div class="mc-probe-strip itemsContainer scrollX" aria-hidden="true">'
+            + nativeCard({ name: '', ariaHidden: true, cardClass: 'mc-probe' })
+            + '</div>';
+    }
+
     // ------------------------------------------------------------------
     // Rangées
     // ------------------------------------------------------------------
 
-    function buildRow(title, cardsHtml) {
+    function buildRow(title, cardsHtml, withProbe) {
         var section = document.createElement('div');
         var headingId = 'mc-row-title-' + (++sequence);
 
@@ -725,6 +772,8 @@
             + '<h2 id="' + headingId + '" class="sectionTitle sectionTitle-cards">' + escapeHtml(title) + '</h2>'
             + '</div>'
             + '<div class="mc-strip-wrap">'
+            // L'étalon d'abord : il doit exister avant même que la bande soit remplie.
+            + (withProbe ? probeStrip() : '')
             + '<button type="button" class="mc-arrow mc-arrow-prev" tabindex="-1" aria-hidden="true">&#10094;</button>'
             // `scrollX` est la classe que `allowSwipe()` de Jellyfin cherche pour ne pas
             // interpréter un défilement horizontal comme un changement d'onglet ;
@@ -1031,34 +1080,100 @@
      * vit à l'intérieur, aurait rendu chaque affiche classée deux pixels trop étroite.
      */
     function measurePosterWidth(container) {
-        // La référence doit avoir la MÊME FORME que nos cartes classées. Prendre la
-        // première carte venue ne marche pas : nos rangées sont insérées juste après
-        // « Mes médias », dont les vignettes de bibliothèque sont au format PAYSAGE et
-        // précèdent donc tout le reste dans le DOM. Leur largeur, copiée sur une affiche
-        // 2:3, la gonflait de moitié — et le chiffre, qui se calcule à partir d'elle,
-        // d'autant. « Continuer à regarder » pose le même piège.
-        var candidats = container.querySelectorAll(
-            '.overflowPortraitCard:not(.mc-ranked) .cardScalable');
+        var reference = findReference(container);
 
-        for (var i = 0; i < candidats.length; i++) {
-            var boite = candidats[i].getBoundingClientRect();
+        if (!reference) {
+            return false;
+        }
 
-            // Une carte encore masquée mesure zéro : mieux vaut garder le repli que
-            // publier une largeur nulle, qui ferait disparaître toutes les affiches.
-            if (boite.width <= 0) {
-                continue;
-            }
+        publishMetrics(reference, container);
+        observePoster(reference, container);
+        return true;
+    }
 
-            // Second barrage, au cas où un thème réutiliserait la classe pour autre
-            // chose : une affiche est haute d'une fois et demie sa largeur.
-            var rapport = boite.height / boite.width;
+    /**
+     * Choisit l'affiche qui servira d'étalon.
+     *
+     * Notre propre sonde passe EN PREMIER. Elle est posée par la rangée classée
+     * elle-même, donc présente dès l'insertion, alors qu'une carte native dépend d'une
+     * requête qui peut n'avoir pas encore abouti — c'est cette course qui faisait
+     * apparaître les rangées en petit une fois sur deux.
+     *
+     * La référence doit avoir la MÊME FORME que nos cartes classées. Prendre la
+     * première carte venue ne marche pas : nos rangées sont insérées juste après
+     * « Mes médias », dont les vignettes de bibliothèque sont au format PAYSAGE et
+     * précèdent donc tout le reste dans le DOM. Leur largeur, copiée sur une affiche
+     * 2:3, la gonflait de moitié — et le chiffre, qui se calcule à partir d'elle,
+     * d'autant. « Continuer à regarder » pose le même piège.
+     */
+    function findReference(container) {
+        var groupes = [
+            container.querySelectorAll('.mc-probe .cardScalable'),
+            container.querySelectorAll(
+                '.overflowPortraitCard:not(.mc-ranked):not(.mc-probe) .cardScalable')
+        ];
 
-            if (rapport > 1.3 && rapport < 1.7) {
-                publishMetrics(candidats[i], container);
-                observePoster(candidats[i], container);
-                return;
+        for (var g = 0; g < groupes.length; g++) {
+            for (var i = 0; i < groupes[g].length; i++) {
+                var boite = groupes[g][i].getBoundingClientRect();
+
+                // Une carte encore masquée mesure zéro : mieux vaut garder le repli que
+                // publier une largeur nulle, qui ferait disparaître toutes les affiches.
+                if (boite.width <= 0) {
+                    continue;
+                }
+
+                // Second barrage, au cas où un thème réutiliserait la classe pour autre
+                // chose : une affiche est haute d'une fois et demie sa largeur.
+                var rapport = boite.height / boite.width;
+
+                if (rapport > 1.3 && rapport < 1.7) {
+                    return groupes[g][i];
+                }
             }
         }
+
+        return null;
+    }
+
+    /**
+     * Mesure, et réessaie tant que rien n'a pu être relevé.
+     *
+     * La sonde rend l'échec très improbable, mais elle ne le rend pas impossible : une
+     * feuille de thème qui arrive après nous, une rangée encore masquée, et le relevé
+     * tombe à côté. Abandonner en silence, comme le faisait la version précédente,
+     * condamnait la page entière jusqu'à son rechargement — la mesure n'ayant lieu
+     * qu'une fois et `render()` refusant de rejouer tant qu'une rangée est en place.
+     *
+     * Les délais sont courts puis espacés : on rattrape la trame suivante sans faire
+     * travailler un téléviseur pendant plusieurs secondes.
+     */
+    function ensureMeasured(container) {
+        if (measureRetry !== null) {
+            window.clearTimeout(measureRetry);
+            measureRetry = null;
+        }
+
+        if (measurePosterWidth(container)) {
+            return;
+        }
+
+        var restants = MEASURE_RETRIES.slice();
+
+        (function reessayer() {
+            if (!restants.length) {
+                return;
+            }
+
+            measureRetry = window.setTimeout(function () {
+                measureRetry = null;
+                var cible = findSectionsContainer();
+
+                if (!cible || !measurePosterWidth(cible)) {
+                    reessayer();
+                }
+            }, restants.shift());
+        })();
     }
 
     /**
@@ -1082,6 +1197,9 @@
 
     var posterObserver = null;
     var posterObserved = null;
+    var measureRetry = null;
+    /* Délais de reprise de la mesure, en millisecondes. */
+    var MEASURE_RETRIES = [80, 300, 900, 2500];
 
     /**
      * Surveille la carte de référence, et remesure dès que SA taille change.
@@ -1208,7 +1326,7 @@
             row.style.animationDelay = Math.min(index * 55, 400) + 'ms';
         });
 
-        measurePosterWidth(container);
+        ensureMeasured(container);
 
         return findLibrarySection(container);
     }
@@ -1416,7 +1534,8 @@
 
             function addRanked(entries, title) {
                 if (entries.length) {
-                    rows.push(buildRow(title, entries.map(buildRankedCard).join('')));
+                    // `true` : une rangée classée emporte son propre étalon de mesure.
+                    rows.push(buildRow(title, entries.map(buildRankedCard).join(''), true));
                 }
             }
 
