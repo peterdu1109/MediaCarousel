@@ -310,6 +310,29 @@
             /* Une carte native a une largeur fixe ; sans cela, flexbox la comprime dès
                que la bande déborde. */
             '.mc-row .mc-strip>.card{flex:0 0 auto;}',
+            /* --------------------------------------------------------------
+               La bande peut deborder du document.
+
+               En « version pour ordinateur » sur telephone, Chrome pose un
+               document de 980 px et en AFFICHE 1645 : le reste de l'ecran
+               montre ce qui deborde du document. Les rangees de Jellyfin ne
+               rognent pas — leurs cartes debordent de leur conteneur et
+               restent visibles jusqu'au bord de l'ecran. La notre, elle,
+               porte `overflow-x:auto` pour son defilement, et ce reglage
+               DECOUPE net a 980. Mesure sur l'appareil : nos rangees
+               s'arretaient a 59,6 % de la largeur affichee pendant que
+               celles de Jellyfin allaient au bord.
+
+               La largeur cible est donc posee par le script, qui seul connait
+               la largeur reellement affichee. Le repli `auto` garde le
+               comportement normal partout ailleurs.
+               -------------------------------------------------------------- */
+            /* `border-box` avec la largeur : la valeur posee est une largeur
+               EXTERIEURE. Sans cela le retrait lateral du theme — 92 px chez
+               ElegantFin — s'y ajoute, et la bande depassait de 1737 px pour
+               1645 demandes. Sur une largeur `auto`, le modele de boite ne
+               change rien : la regle est donc sans effet partout ailleurs. */
+            '.mc-row .mc-strip{width:var(--mc-strip-width,auto);box-sizing:border-box;}',
 
             /* --------------------------------------------------------------
                Bande sonde : l'etalon de mesure des rangees classees.
@@ -1236,6 +1259,48 @@
         posterObserver.observe(reference);
     }
 
+    /**
+     * Étend la bande jusqu'au bord réellement affiché, quand le navigateur montre
+     * plus large que le document.
+     *
+     * Le critère n'est pas une comparaison de fenêtres — `window.innerWidth` contre
+     * `documentElement.clientWidth` — mais le symptôme lui-même : notre bande
+     * s'arrête-t-elle avant le bord visible ? C'est ce qui se mesure, et c'est ce que
+     * l'utilisateur voit. La marge de 8 px évite de réagir à un arrondi ou à une barre
+     * de défilement, et laisse donc une page ordinaire strictement inchangée.
+     *
+     * Seules les bandes CLASSÉES sont étendues. Leurs cartes portent une largeur en
+     * pixels, posée en ligne : élargir leur conteneur ne les redimensionne pas. Une
+     * carte ordinaire, elle, tient sa largeur d'un pourcentage que le thème résout
+     * contre ce conteneur — l'élargir la ferait grossir et diverger des rangées
+     * natives, soit l'inverse du but recherché.
+     */
+    function stretchStrips(container) {
+        var bandes = container.querySelectorAll('.mc-row .mc-strip');
+
+        for (var i = 0; i < bandes.length; i++) {
+            var bande = bandes[i];
+
+            if (!bande.querySelector('.mc-ranked')) {
+                continue;
+            }
+
+            var boite = bande.getBoundingClientRect();
+            var visible = window.innerWidth - boite.left;
+            var rangee = bande.closest('.mc-row');
+
+            if (!rangee) {
+                continue;
+            }
+
+            if (visible - boite.width > 8) {
+                rangee.style.setProperty('--mc-strip-width', Math.round(visible) + 'px');
+            } else {
+                rangee.style.removeProperty('--mc-strip-width');
+            }
+        }
+    }
+
     function placeRows(container, rows, order, nativeLayout) {
         var byId = {};
 
@@ -1327,6 +1392,7 @@
         });
 
         ensureMeasured(container);
+        stretchStrips(container);
 
         return findLibrarySection(container);
     }
@@ -1808,6 +1874,7 @@
 
                 if (container) {
                     measurePosterWidth(container);
+                    stretchStrips(container);
                 }
             });
         }, { passive: true });

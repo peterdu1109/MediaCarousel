@@ -491,6 +491,22 @@ si l'administrateur supprime la collection, elle est recréée au recalcul suiva
   un relevé qui échoue est retenté au lieu d'abandonner en silence. Le banc joue la course
   dans les deux sens (`COURSE:`) et vérifie que la sonde n'ajoute ni hauteur, ni carte
   visible, ni nœud d'accessibilité (`SONDE:`).
+- **La bande peut déborder du document, et elle le doit.** En « version pour ordinateur »
+  sur téléphone, Chrome pose un document plus étroit que ce qu'il affiche — mesuré sur
+  l'appareil : document 980 px, écran 1645 px, soit **59,6 %**. Les rangées de Jellyfin ne
+  rognent pas : leurs cartes débordent de leur conteneur et restent visibles jusqu'au bord
+  de l'écran. La nôtre porte `overflow-x: auto` pour son défilement, et ce réglage **découpe
+  net** au bord du document : elle s'arrêtait donc à 59,6 % de la largeur affichée, trois
+  cartes visibles au lieu de huit, pendant que les rangées voisines allaient au bord.
+  `stretchStrips()` pose alors une largeur explicite. Le critère n'est **pas** une
+  comparaison `window.innerWidth` / `documentElement.clientWidth` — cet écart est propre au
+  moteur mobile et ne se reproduit pas au banc — mais le symptôme lui-même : la bande
+  s'arrête-t-elle avant le bord visible ? La marge de 8 px laisse une page ordinaire
+  strictement inchangée. `box-sizing: border-box` accompagne la largeur, sinon le retrait
+  latéral du thème s'y ajoute (1737 px pour 1645 demandés). Et **seules les bandes classées**
+  sont étendues : leurs cartes portent une largeur en pixels posée en ligne, donc insensible
+  au conteneur, alors qu'une carte ordinaire tient la sienne d'un pourcentage résolu contre
+  ce même conteneur — l'élargir la ferait grossir et diverger des rangées natives.
 - **La hauteur du chiffre est un réglage**, `RankNumberScale`, **100 % par défaut** — la
   proportion de Netflix, et le rendu validé à l'écran. Le prix est qu'une rangée classée
   occupe près du double d'une rangée ordinaire : sur téléphone une seule carte tient. Le

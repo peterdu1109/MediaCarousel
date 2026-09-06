@@ -1045,6 +1045,80 @@ async function courseDeMesure(referenceAvantLeRendu) {
 const coursePerdue = await courseDeMesure(false);
 const courseGagnee = await courseDeMesure(true);
 
+// ---------------------------------------------------------------------------
+// DEBORDEMENT : la bande doit aller jusqu'au bord REELLEMENT affiche.
+//
+// En « version pour ordinateur » sur telephone, Chrome pose un document plus
+// etroit que ce qu'il affiche : mesure sur l'appareil, document 980 px pour
+// 1645 px montres. Les rangees de Jellyfin ne rognent pas — leurs cartes
+// debordent du conteneur et restent visibles jusqu'au bord de l'ecran. La
+// notre porte `overflow-x:auto` pour son defilement, ce qui DECOUPE net a 980 :
+// elle s'arretait a 59,6 % de la largeur affichee, trois cartes au lieu de huit.
+//
+// On reproduit le symptome — bande plus etroite que la fenetre — et on verifie
+// que l'extension ne touche NI la taille d'affiche, NI la mesure, NI les
+// rangees ordinaires, dont les cartes tiennent leur largeur d'un pourcentage
+// resolu contre ce meme conteneur.
+// ---------------------------------------------------------------------------
+async function debordement(documentEtroit) {
+  const ctx = await browser.newContext({ viewport: { width: 1645, height: 900 }, hasTouch: true });
+  const vue = await ctx.newPage();
+  vue.on('pageerror', e => errors.push('pageerror(debordement): ' + e.message));
+  await vue.goto('file://' + path.join(here, 'home.html'));
+  if (documentEtroit) { await vue.addStyleTag({ content: 'body{width:980px;overflow-x:hidden}' }); }
+  await vue.addStyleTag({ path: path.join(here, 'theme-excerpt.css') });
+  await vue.evaluate(() => {
+    const r = n => Array.from({ length: n }, (_, i) => ({
+      Rank: i + 1, Name: 'Titre ' + (i + 1), ProductionYear: 2020,
+      Item: { Id: 'd' + i, Name: 'Titre', ServerId: 'server-1', Type: 'Movie', IsFolder: false, ImageTags: { Primary: 't' } }
+    }));
+    window.ApiClient = {
+      getCurrentUserId: () => 'user-1', serverId: () => 'server-1',
+      getUrl: (p, q) => p + '?' + new URLSearchParams(q || {}).toString(),
+      getImageUrl: (id) => 'img://' + id,
+      getJSON: (url) => url.includes('ClientOptions')
+        ? Promise.resolve({
+            EnableHomeRows: true, ShowLocalRow: true, ShowGlobalRow: false,
+            ShowAllTimeRow: false, ShowStudioRow: false, ShowGenreRows: false,
+            ShowReturningRow: false, ShowNeverPlayedRow: true, ShowBecauseRow: false,
+            LocalRowTitle: 'Top 10 sur ce serveur', NeverPlayedRowTitle: 'Jamais vu',
+            LocalRowSize: 10, NeverPlayedRowSize: 10, RankNumberScale: 100
+          })
+        : (url.includes('Top/') || url.includes('NeverPlayed'))
+          ? Promise.resolve({ Items: r(10) }) : Promise.resolve({ Items: [] })
+    };
+  });
+  await vue.evaluate(script);
+  await vue.waitForSelector('.mc-ranked', { timeout: 8000 });
+  await vue.waitForTimeout(500);
+  const releve = await vue.evaluate(() => {
+    const bande = document.querySelector('.mc-row .mc-strip');
+    const rb = bande.getBoundingClientRect();
+    const ordinaire = [...document.querySelectorAll('.mc-row')].find(r => !r.querySelector('.mc-ranked'));
+    const poster = document.querySelector('.mc-ranked .mc-rank-col .cardScalable');
+    let visibles = 0;
+    bande.querySelectorAll(':scope > .card').forEach(c => {
+      const r = c.getBoundingClientRect();
+      if (r.left < rb.right && r.right > rb.left) { visibles++; }
+    });
+    return {
+      fenetre: window.innerWidth,
+      finitA: rb.right,
+      cartesVisibles: visibles,
+      affiche: poster.getBoundingClientRect().width,
+      mesuree: document.querySelector('#homeTab .homeSectionsContainer')
+        .style.getPropertyValue('--mc-measured'),
+      bandeOrdinaire: ordinaire
+        ? ordinaire.querySelector('.mc-strip').getBoundingClientRect().width : null
+    };
+  });
+  await vue.close(); await ctx.close();
+  return releve;
+}
+
+const etroit = await debordement(true);
+const large = await debordement(false);
+
 await browser.close();
 
 let failed = 0;
@@ -1303,6 +1377,21 @@ check('SONDE: elle n entre pas dans la bande visible, qui garde ses 10 cartes',
   [coursePerdue.cartesVisibles, coursePerdue.sondeHorsBande]);
 check('SONDE: elle est retiree de l arbre d accessibilite',
   coursePerdue.sondeMasquee === true, coursePerdue.sondeMasquee);
+
+check('DEBORDEMENT: la bande classee va jusqu au bord affiche, pas au bord du document',
+  Math.abs(etroit.finitA - etroit.fenetre) < 4, [etroit.finitA, etroit.fenetre]);
+check('DEBORDEMENT: elle montre alors bien plus de cartes',
+  etroit.cartesVisibles >= 6, etroit.cartesVisibles);
+check('DEBORDEMENT: l affiche garde EXACTEMENT sa taille',
+  Math.abs(etroit.affiche - large.affiche) < 0.5, [etroit.affiche, large.affiche]);
+check('DEBORDEMENT: la mesure de reference n est pas alteree',
+  etroit.mesuree === large.mesuree, [etroit.mesuree, large.mesuree]);
+check('DEBORDEMENT: une rangee ORDINAIRE n est pas etendue (ses cartes sont en pourcentage)',
+  etroit.bandeOrdinaire !== null && etroit.bandeOrdinaire < etroit.fenetre - 100,
+  [etroit.bandeOrdinaire, etroit.fenetre]);
+check('DEBORDEMENT: une page normale reste inchangee',
+  Math.abs(large.finitA - large.fenetre) < 4 && large.bandeOrdinaire > large.fenetre - 100,
+  [large.finitA, large.fenetre, large.bandeOrdinaire]);
 
 check('aucune erreur js', errors.length === 0, errors);
 
