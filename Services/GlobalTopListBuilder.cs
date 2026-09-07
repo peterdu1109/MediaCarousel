@@ -125,7 +125,6 @@ public sealed class GlobalTopListBuilder
                 ItemId = matched ? itemId : Guid.Empty,
                 Name = title.Title ?? string.Empty,
                 ProductionYear = title.Year,
-                Score = title.Popularity,
                 TmdbId = title.TmdbId,
                 ImdbId = title.ImdbId,
                 PosterUrl = title.PosterUrl

@@ -380,9 +380,6 @@
                en frère de `.cardScalable`. Il n'a donc plus rien à déborder, ni aucun
                z-index à arbitrer — ce qui règle du même coup le `contain: strict` de
                `.cardImageContainer`, qui rognait tout ce qu'on y plaçait. */
-            /* La carte prend la largeur de son contenu : le chiffre y ajoute sa part
-               sans qu'aucune formule n'ait a etre ajustee palier par palier. */
-            '.mc-row .mc-ranked{width:auto!important;}',
             /* Alignement par le HAUT, et non par le bas : la colonne contient l'affiche
                ET son libellé, alors que le chiffre doit se caler sur la seule affiche.
                Aligné par le bas, il descendait de toute la hauteur du libellé et venait
@@ -970,36 +967,6 @@
         }
     }
 
-    /**
-     * Indique si les nœuds gérés apparaissent déjà dans le conteneur, dans cet ordre.
-     *
-     * La contiguïté n'est pas exigée : si un autre plugin a glissé sa rangée entre deux des
-     * nôtres, l'ordre reste celui demandé et il vaut mieux le laisser tranquille que de le
-     * déplacer à chaque rendu.
-     */
-    function alreadyOrdered(container, managed) {
-        var present = [];
-        var kids = container.children;
-        var i;
-
-        for (i = 0; i < kids.length; i++) {
-            if (managed.indexOf(kids[i]) !== -1) {
-                present.push(kids[i]);
-            }
-        }
-
-        if (present.length !== managed.length) {
-            return false;
-        }
-
-        for (i = 0; i < managed.length; i++) {
-            if (present[i] !== managed[i]) {
-                return false;
-            }
-        }
-
-        return true;
-    }
 
     /**
      * Décalage entre l'index d'une section dans les préférences du compte et l'index
@@ -1357,14 +1324,6 @@
             // APRÈS les bibliothèques — les placer avant les ferait descendre.
             var library = findLibrarySection(container);
             anchor = library ? library.nextSibling : container.firstChild;
-        }
-
-        // Rien à faire si l'ordre voulu est déjà celui du DOM. Chaque déplacement produit
-        // des mutations dans le conteneur, et d'autres plugins y réagissent pour réinjecter
-        // leur propre contenu : ne bouger que ce qui doit l'être leur évite de repartir
-        // pour rien à chaque retour sur l'accueil.
-        if (alreadyOrdered(container, managed)) {
-            return findLibrarySection(container);
         }
 
         // Placement à déplacement minimal : un nœud déjà à sa place n'est pas touché.

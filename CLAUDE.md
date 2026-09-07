@@ -140,6 +140,12 @@ Détails d'implémentation :
 - Fenêtre d'observation appliquée sur `UserItemData.LastPlayedDate`.
 - Plafond `MaxPlaysCountedPerUser` appliqué au score, `TotalPlays` conservant la valeur brute.
 - Tri final : score, puis nombre de spectateurs distincts, puis dernière lecture.
+- Ces trois grandeurs — score, spectateurs, dernière lecture — **ne sortent pas de
+  `TopListAccumulator`**. Elles servaient aussi de champs de `TopListEntry`, donc étaient
+  recopiées et écrites dans les instantanés sur disque à chaque recalcul ; plus rien ne les
+  relisait depuis leur retrait du contrat d'API. Ne pas les y remettre sans un lecteur.
+  Les anciens instantanés portant encore ces clés se relisent sans erreur, `System.Text.Json`
+  ignorant les propriétés qu'il ne connaît pas.
 
 ### Top du moment et de toujours
 

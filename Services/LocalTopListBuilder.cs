@@ -155,10 +155,6 @@ public sealed class LocalTopListBuilder
                 ItemId = r.ItemId,
                 Name = r.Name,
                 ProductionYear = r.ProductionYear,
-                Score = r.Score,
-                TotalPlays = r.TotalPlays,
-                DistinctViewers = r.DistinctViewers,
-                LastPlayedUtc = r.LastPlayedUtc,
                 TmdbId = r.TmdbId,
                 ImdbId = r.ImdbId
             })

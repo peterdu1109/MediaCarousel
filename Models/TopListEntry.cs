@@ -29,27 +29,6 @@ public sealed class TopListEntry
     public int? ProductionYear { get; set; }
 
     /// <summary>
-    /// Obtient ou définit le score de classement (lectures pondérées pour le Top local,
-    /// score de popularité de la source pour le Top global).
-    /// </summary>
-    public double Score { get; set; }
-
-    /// <summary>
-    /// Obtient ou définit le nombre total de lectures comptabilisées (Top local).
-    /// </summary>
-    public int TotalPlays { get; set; }
-
-    /// <summary>
-    /// Obtient ou définit le nombre d'utilisateurs distincts ayant lu le titre (Top local).
-    /// </summary>
-    public int DistinctViewers { get; set; }
-
-    /// <summary>
-    /// Obtient ou définit la date de dernière lecture, tous utilisateurs confondus (Top local).
-    /// </summary>
-    public DateTime? LastPlayedUtc { get; set; }
-
-    /// <summary>
     /// Obtient ou définit l'identifiant TMDB, si connu.
     /// </summary>
     public string? TmdbId { get; set; }

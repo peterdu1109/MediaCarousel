@@ -109,7 +109,7 @@ public sealed class LibraryRowBuilder
             .Where(item => !played.Contains(item.Id)
                 && !LibraryFilter.IsExcluded(item, excludedLibraries, config.ExcludeChannelContent))
             .Take(size)
-            .Select((item, index) => ToEntry(item, index + 1, item.CommunityRating ?? 0))
+            .Select((item, index) => ToEntry(item, index + 1))
             .ToArray();
 
         _logger.LogInformation(
@@ -185,7 +185,7 @@ public sealed class LibraryRowBuilder
                 continue;
             }
 
-            entries.Add(ToEntry(series, entries.Count + 1, 0));
+            entries.Add(ToEntry(series, entries.Count + 1));
         }
 
         _logger.LogInformation(
@@ -197,13 +197,12 @@ public sealed class LibraryRowBuilder
         return new TopListSnapshot(TopListKind.ReturningSeries, "Jellyfin", entries);
     }
 
-    private static TopListEntry ToEntry(BaseItem item, int rank, double score) => new()
+    private static TopListEntry ToEntry(BaseItem item, int rank) => new()
     {
         Rank = rank,
         ItemId = item.Id,
         Name = item.Name ?? string.Empty,
         ProductionYear = item.ProductionYear,
-        Score = score,
         TmdbId = item.GetProviderId(MetadataProvider.Tmdb),
         ImdbId = item.GetProviderId(MetadataProvider.Imdb)
     };
