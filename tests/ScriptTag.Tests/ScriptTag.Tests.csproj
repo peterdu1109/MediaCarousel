@@ -22,6 +22,9 @@
     <Compile Include="../../Services/PosterProxy.cs" />
     <Compile Include="../../Services/PlaybackDate.cs" />
     <Compile Include="../../Services/TrendingKey.cs" />
+    <Compile Include="../../Services/UserPreferenceRules.cs" />
+    <Compile Include="../../Configuration/UserRowPreferences.cs" />
+    <Compile Include="../../Api/ClientOptionsDto.cs" />
   </ItemGroup>
 
 </Project>

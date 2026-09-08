@@ -382,6 +382,24 @@ public class PluginConfiguration : BasePluginConfiguration
     public string HighlightColor { get; set; } = "#775BF4";
 
     /// <summary>
+    /// Obtient ou définit une valeur indiquant si chaque compte peut régler ses propres rangées.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Les réglages de cette page valent pour tout le serveur. Quand cette case est cochée,
+    /// ils ne sont plus qu'un <b>défaut</b> : chaque utilisateur peut choisir ses rangées,
+    /// leur ordre et sa couleur depuis un panneau ouvert sur sa propre page d'accueil. Ce
+    /// qu'il ne touche pas continue de suivre cette page — activer une rangée ici la fait
+    /// donc apparaître chez tous ceux qui n'ont rien décidé à son sujet.
+    /// </para>
+    /// <para>
+    /// Décocher n'efface rien : les choix déjà enregistrés sont simplement ignorés, et
+    /// reprennent effet si la case est recochée.
+    /// </para>
+    /// </remarks>
+    public bool AllowUserPreferences { get; set; } = true;
+
+    /// <summary>
     /// Obtient ou définit une valeur indiquant si les sections natives de Jellyfin
     /// (derniers ajouts, reprise de lecture, prochainement…) sont masquées sur la page
     /// d'accueil, pour ne laisser que les bibliothèques et les rangées du plugin.

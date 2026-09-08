@@ -28,6 +28,16 @@ const stub = () => {
 
   window.ApiClient = {
     getCurrentUserId: () => 'user-1',
+    // Enregistrement des preferences : on retient la requete telle qu'elle part.
+    ajax: (request) => {
+      window.__ajax = window.__ajax || [];
+      window.__ajax.push({
+        type: request.type,
+        url: request.url,
+        body: request.data ? JSON.parse(request.data) : null
+      });
+      return Promise.resolve({});
+    },
     // Disposition native de CE compte : section0 bibliotheques, 1 reprise,
     // 2 derniers ajouts, 3 prochainement.
     getDisplayPreferences: () => {
@@ -55,6 +65,7 @@ const stub = () => {
           ShowAllTimeRow: true, AllTimeRowTitle: 'Les plus regardés de tous les temps', AllTimeRowSize: 10,
           ReturningRowTitle: 'De retour cette semaine', ReturningRowSize: 20,
           NeverPlayedRowTitle: 'Jamais vu', NeverPlayedRowSize: 20,
+          AllowUserPreferences: window.__allowPrefs === true,
           RowOrder: window.__rowOrder,
           ManageNativeSections: window.__manageNatives === true,
           HideNativeSections: window.__hideNative === true,
@@ -680,6 +691,75 @@ const tvLayout = await tvPage.evaluate(() =>
   Array.from(document.querySelector('#homeTab .homeSectionsContainer').children)
     .map(k => k.classList.contains('mc-row') ? 'mc-row' : (k.className.match(/section\d+/) || ['autre'])[0]));
 await tvPage.close();
+
+// Personnalisation par compte. La page de configuration du plugin est reservee aux
+// administrateurs : ce panneau est le seul endroit ou un compte ordinaire peut regler
+// ses rangees, il doit donc s'ouvrir depuis la page d'accueil elle-meme.
+const prefsPage = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+prefsPage.on('pageerror', e => errors.push('pageerror(prefs): ' + e.message));
+await prefsPage.addInitScript(() => { window.__allowPrefs = true; });
+await prefsPage.goto('file://' + path.join(here, 'home.html'));
+await prefsPage.evaluate(stub);
+await prefsPage.evaluate(script);
+await prefsPage.waitForFunction(() => document.querySelectorAll('.mc-row').length === 10, { timeout: 8000 });
+
+const prefs = await prefsPage.evaluate(() => ({
+  boutons: document.querySelectorAll('.mc-prefs-open').length,
+  surNotreRangee: !!document.querySelector('.mc-row .mc-row-header .mc-prefs-open'),
+  panneauAvant: document.querySelectorAll('.mc-prefs').length
+}));
+
+// Ouverture, puis une ligne par rangee ordonnee.
+await prefsPage.click('.mc-prefs-open');
+const ouvert = await prefsPage.evaluate(() => {
+  const items = Array.from(document.querySelectorAll('.mc-prefs li'));
+  return {
+    lignes: items.length,
+    premiere: items[0].getAttribute('data-row'),
+    monterDesactive: items[0].querySelector('.mc-prefs-up').disabled,
+    descendreDesactive: items[items.length - 1].querySelector('.mc-prefs-down').disabled,
+    modal: document.querySelector('.mc-prefs').getAttribute('aria-modal')
+  };
+});
+
+// On decoche la premiere rangee, on descend la deuxieme, puis on enregistre.
+await prefsPage.evaluate(() => {
+  document.querySelector('.mc-prefs li input[type=checkbox]').checked = false;
+  document.querySelectorAll('.mc-prefs li')[1].querySelector('.mc-prefs-down').click();
+});
+await prefsPage.click('.mc-prefs-save');
+await prefsPage.waitForFunction(() => (window.__ajax || []).length === 1, { timeout: 4000 });
+
+const enregistre = await prefsPage.evaluate(() => {
+  const call = window.__ajax[0];
+  return {
+    methode: call.type,
+    route: call.url,
+    premiereMasquee: call.body.ShowLocalRow,
+    ordre: call.body.RowOrder,
+    couleur: call.body.HighlightColor,
+    echelle: call.body.RankNumberScale,
+    ferme: document.querySelectorAll('.mc-prefs').length === 0
+  };
+});
+
+// Reinitialisation : le compte revient aux reglages du serveur.
+await prefsPage.waitForSelector('.mc-prefs-open');
+await prefsPage.click('.mc-prefs-open');
+await prefsPage.click('.mc-prefs-reset');
+await prefsPage.waitForFunction(() => (window.__ajax || []).length === 2, { timeout: 4000 });
+const reinitialise = await prefsPage.evaluate(() => window.__ajax[1].type);
+
+// Sans l'autorisation du serveur, aucun bouton n'est propose.
+const sansPrefs = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+sansPrefs.on('pageerror', e => errors.push('pageerror(sansprefs): ' + e.message));
+await sansPrefs.goto('file://' + path.join(here, 'home.html'));
+await sansPrefs.evaluate(stub);
+await sansPrefs.evaluate(script);
+await sansPrefs.waitForFunction(() => document.querySelectorAll('.mc-row').length === 10, { timeout: 8000 });
+const prefsInterdites = await sansPrefs.evaluate(() => document.querySelectorAll('.mc-prefs-open').length);
+await sansPrefs.close();
+await prefsPage.close();
 
 // Un theme clair : la couleur est lue sur la page, pas sur un media query que les
 // themes Jellyfin ne declenchent jamais.
@@ -1316,6 +1396,26 @@ check('NATIF: le decalage des interfaces televiseur est rattrape',
   tvLayout.indexOf('section2') < tvLayout.indexOf('mc-row')
     && tvLayout.indexOf('section1') > tvLayout.lastIndexOf('mc-row'),
   tvLayout);
+
+check('PREFS: un seul bouton, sur une rangee du plugin',
+  prefs.boutons === 1 && prefs.surNotreRangee === true, prefs);
+check('PREFS: rien n est ouvert avant le clic', prefs.panneauAvant === 0, prefs);
+check('PREFS: une ligne par rangee ordonnee', ouvert.lignes === 8, ouvert);
+check('PREFS: le panneau est une vraie boite de dialogue', ouvert.modal === 'true', ouvert);
+check('PREFS: les extremites ne peuvent pas sortir de la liste',
+  ouvert.monterDesactive === true && ouvert.descendreDesactive === true, ouvert);
+check('PREFS: l enregistrement part en POST sur notre route',
+  enregistre.methode === 'POST' && enregistre.route.indexOf('MediaCarousel/UserPreferences') !== -1,
+  enregistre);
+check('PREFS: la rangee decochee part a false', enregistre.premiereMasquee === false, enregistre);
+check('PREFS: l ordre du panneau est celui envoye',
+  enregistre.ordre === 'local,global,alltime,returning,neverplayed,because,studios,genres',
+  enregistre.ordre);
+check('PREFS: couleur et echelle accompagnent l envoi',
+  /^#[0-9a-f]{3,8}$/i.test(enregistre.couleur) && enregistre.echelle > 0, enregistre);
+check('PREFS: le panneau se ferme apres enregistrement', enregistre.ferme === true, enregistre);
+check('PREFS: la reinitialisation part en DELETE', reinitialise === 'DELETE', reinitialise);
+check('PREFS: sans autorisation du serveur, aucun bouton', prefsInterdites === 0, prefsInterdites);
 
 check('VISUEL: silhouettes en place avant le chargement differe',
   beforeScroll.skeletons === 6 && beforeScroll.skeletonHidden === 'true', beforeScroll);

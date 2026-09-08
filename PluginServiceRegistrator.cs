@@ -27,6 +27,10 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton<TopListRefreshService>();
         serviceCollection.AddSingleton<RefreshHealth>();
 
+        // Les préférences sont lues à chaque chargement de la page d'accueil de chaque
+        // compte : elles vivent en mémoire, donc le service doit être unique.
+        serviceCollection.AddSingleton<UserPreferenceStore>();
+
         // `GetDefaultTriggers()` n'est lu qu'à la première installation de la tâche : sans ce
         // service, le réglage « intervalle de recalcul » n'avait plus aucun effet ensuite.
         serviceCollection.AddHostedService<RefreshScheduleSynchronizer>();

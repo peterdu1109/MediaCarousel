@@ -185,6 +185,7 @@ l'ouverture de la page d'accueil.
 |---|---|---|
 | Afficher les rangées | ✅ | Interrupteur principal du rendu sur l'accueil |
 | Ordre des rangées | Top serveur, De tous les temps, Top mondial, De retour, Jamais vu, Parce que…, Studios, Genres | Réorganisable avec les flèches ▲▼ |
+| Laisser chaque utilisateur régler ses rangées | ✅ | Les réglages de la page deviennent un défaut : chacun choisit ses rangées, leur ordre, sa couleur et la taille du chiffre depuis un bouton posé sur sa propre page d'accueil. Ce qu'il ne touche pas continue de suivre la page |
 | Ordonner aussi les sections de Jellyfin | ❌ | Ajoute « Continuer de regarder », « À suivre »… à la liste, sous leurs noms Jellyfin. Attention : cet ordre est global et remplace alors l'arrangement propre à chaque utilisateur |
 | Titre — Top du serveur | `Top 10 sur ce serveur` | Titre de la rangée |
 | Titre — Top mondial | `Top 10 mondial` | Titre de la rangée |

@@ -102,4 +102,13 @@ public sealed class ClientOptionsDto
     /// doivent être masquées sur la page d'accueil.
     /// </summary>
     public bool HideNativeSections { get; set; }
+
+    /// <summary>
+    /// Obtient ou définit une valeur indiquant si l'appelant peut régler ses propres rangées.
+    /// </summary>
+    /// <remarks>
+    /// Les autres champs de ce contrat sont déjà fusionnés avec les choix de l'appelant :
+    /// celui-ci ne sert qu'à décider si le bouton de personnalisation est proposé.
+    /// </remarks>
+    public bool AllowUserPreferences { get; set; }
 }

@@ -50,9 +50,11 @@ MediaCarousel/
 │   ├── PluginStatusDto.cs             # Contrat de la page de configuration
 │   ├── ClientOptionsDto.cs            # Réglages d'affichage, lisibles sans droits admin
 │   ├── AssetsController.cs            # Sert media-carousel.js depuis les ressources
+│   ├── UserPreferencesController.cs   # GET/POST/DELETE des choix propres à un compte
 │   └── PosterController.cs            # Relaie et met en cache les affiches TMDB
 ├── Configuration/
 │   ├── PluginConfiguration.cs         # Modèle de config + enums
+│   ├── UserRowPreferences.cs          # Choix d'affichage d'un compte (tout nullable)
 │   └── configPage.html                # UI admin, ressource embarquée
 ├── Models/
 │   ├── TopListKind.cs                 # Local | Global | NeverPlayed | ReturningSeries
@@ -88,6 +90,8 @@ MediaCarousel/
 │   ├── CollectionSynchronizer.cs            # Matérialisation en BoxSet
 │   ├── TopListRefreshService.cs             # Orchestration, verrou, tolérance aux pannes
 │   ├── RefreshHealth.cs                     # Bilan du dernier recalcul : durée, échecs
+│   ├── UserPreferenceStore.cs               # Persistance des préférences par compte
+│   ├── UserPreferenceRules.cs               # Validation et fusion de ces préférences
 │   ├── ScriptTag.cs                         # Balise script : insertion, retrait, migration
 │   └── IndexHtmlTransformer.cs              # Callback FileTransformation (réflexion)
 └── Web/
@@ -263,6 +267,42 @@ Les **titres** d'une rangée de genre ne sont pas précalculés : le script les 
 de Jellyfin (`/Items?GenreIds=…`), une requête indexée, paginée et déjà filtrée par utilisateur —
 exactement ce que fait la page d'accueil native pour ses propres rangées. Le chargement est différé
 par `IntersectionObserver` pour ne pas déclencher toutes les requêtes au premier rendu.
+
+### Réglages du serveur, choix de chacun
+
+La page de configuration décide pour tout le serveur. Quand `AllowUserPreferences` est
+activé — **par défaut** — ces réglages ne sont plus qu'un **défaut** : chaque compte peut
+choisir ses rangées, leur ordre, sa couleur d'accentuation, la taille du chiffre et le
+masquage des sections natives.
+
+**Chaque champ de `UserRowPreferences` est nullable, et c'est tout le contrat.**
+`null` signifie « je n'ai rien choisi, prends la valeur de l'administrateur ». Sans cette
+distinction, une préférence enregistrée figerait la valeur du jour : un administrateur qui
+active une nouvelle rangée ne la verrait apparaître chez personne, puisque tous les comptes
+porteraient un « faux » explicite hérité d'un panneau ouvert des mois plus tôt.
+
+Ce que ces préférences **ne** couvrent pas : tailles de rangées, titres, fenêtre
+d'observation, source externe. Ceux-là décident de ce qui est *calculé*, une seule fois pour
+tout le serveur ; les préférences ne décident que de ce qui est *montré*. Un utilisateur qui
+pourrait changer une taille demanderait un recalcul rien que pour lui.
+
+La fusion a lieu dans `ClientOptions` (`UserPreferenceRules.Apply`) : le rendu reçoit des
+valeurs déjà effectives et n'a rien à savoir de tout cela. Le seul champ ajouté au contrat
+est `AllowUserPreferences`, qui décide si le bouton de personnalisation est proposé.
+
+**Les préférences vivent dans leur propre fichier**, `user-preferences.json`, à côté des
+instantanés. Écrire dans `MediaCarousel.xml` demanderait `UpdateConfiguration`, qui réécrit
+toute la configuration et notifie le serveur : un utilisateur qui coche une case
+déclencherait la même mécanique qu'une modification administrateur, sur un fichier que
+plusieurs comptes toucheraient en même temps. Tout est gardé en mémoire — ces valeurs sont
+lues à chaque chargement de la page d'accueil de chaque utilisateur.
+
+**Le panneau vit sur la page d'accueil**, pas dans le tableau de bord : la page de
+configuration du plugin est réservée aux administrateurs, un compte ordinaire ne peut pas
+l'ouvrir. Un bouton est posé dans l'en-tête de la **première rangée du plugin** — jamais
+dans celui d'une section native, que Jellyfin reconstruit quand bon lui semble. Le panneau
+n'emprunte ni `dialogHelper` ni `emby-checkbox` : ces composants doivent avoir été
+enregistrés par le client, ce qui n'est garanti sur aucune page.
 
 ### Persistance
 
@@ -637,7 +677,7 @@ dotnet run --project tests/ScriptTag.Tests -c Release
 cd tests/browser && npm install && node home-rows.test.mjs && node config-page.test.mjs
 ```
 
-Trois suites sans framework — 265 assertions — exécutées en CI avant la publication ; voir
+Trois suites sans framework — 325 assertions — exécutées en CI avant la publication ; voir
 `tests/README.md`. L'une charge un extrait des règles d'ElegantFin **après** les nôtres pour
 vérifier que la cohabitation tient.
 Les deux suites navigateur chargent le vrai `media-carousel.js` et le vrai `configPage.html`
@@ -886,6 +926,15 @@ d'eux le déclare `0`, sans unité. La valeur reste valide pour `margin-right` m
 valeur initiale, sans le moindre message. Aucune de nos règles ne lit plus ce jeton :
 l'espacement entre cartes est celui que le thème applique lui-même à `.itemsContainer`, et c'est
 son affaire. Un test le vérifie en injectant `--itemColumnGap:0`.
+
+**Rien de ce qu'un utilisateur envoie n'est enregistré tel quel :** `UserPreferenceRules.Sanitize`
+écarte les identifiants de rangées inconnus et les doublons, refuse une couleur qui ne soit
+pas `/^#[0-9a-fA-F]{3,8}$/`, et borne l'échelle du chiffre entre 25 et 200. Ces trois valeurs
+finissent respectivement dans des sélecteurs, dans une feuille de styles construite par
+concaténation, et dans une longueur CSS. Le contrôleur enregistre le résultat de la
+validation, jamais l'objet reçu. Le compte concerné est **toujours celui du jeton**, jamais
+un paramètre : accepter un identifiant laisserait n'importe qui lire et réécrire les
+préférences d'un autre.
 
 **La couleur d'accent est validée avant d'entrer dans le CSS :** `HighlightColor` est concaténée
 dans la feuille de styles construite par `buildCss`. `safeAccent` n'accepte que

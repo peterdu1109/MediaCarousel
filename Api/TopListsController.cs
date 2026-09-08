@@ -36,6 +36,7 @@ public class TopListsController : ControllerBase
     private readonly IUserManager _userManager;
     private readonly IDtoService _dtoService;
     private readonly TopListRefreshService _refreshService;
+    private readonly UserPreferenceStore _preferences;
     private readonly ILogger<TopListsController> _logger;
 
     /// <summary>
@@ -46,6 +47,7 @@ public class TopListsController : ControllerBase
     /// <param name="userManager">Gestionnaire d'utilisateurs.</param>
     /// <param name="dtoService">Service de conversion en DTO.</param>
     /// <param name="refreshService">Service de rafraîchissement.</param>
+    /// <param name="preferences">Préférences propres à chaque compte.</param>
     /// <param name="logger">Journal.</param>
     public TopListsController(
         ITopListStore store,
@@ -53,6 +55,7 @@ public class TopListsController : ControllerBase
         IUserManager userManager,
         IDtoService dtoService,
         TopListRefreshService refreshService,
+        UserPreferenceStore preferences,
         ILogger<TopListsController> logger)
     {
         _store = store;
@@ -60,6 +63,7 @@ public class TopListsController : ControllerBase
         _userManager = userManager;
         _dtoService = dtoService;
         _refreshService = refreshService;
+        _preferences = preferences;
         _logger = logger;
     }
 
@@ -144,7 +148,7 @@ public class TopListsController : ControllerBase
             return Ok(new ClientOptionsDto());
         }
 
-        return Ok(new ClientOptionsDto
+        var options = new ClientOptionsDto
         {
             EnableHomeRows = config.EnableHomeRows,
             ShowLocalRow = config.EnableLocalTop,
@@ -175,8 +179,24 @@ public class TopListsController : ControllerBase
             BecauseRowSize = config.BecauseRowSize,
             RowOrder = config.RowOrder,
             ManageNativeSections = config.ManageNativeSections,
-            HideNativeSections = config.HideNativeHomeSections
-        });
+            HideNativeSections = config.HideNativeHomeSections,
+            AllowUserPreferences = config.AllowUserPreferences
+        };
+
+        // Les réglages de l'administrateur ne sont qu'un défaut dès que la personnalisation
+        // est ouverte : ce que ce compte a choisi passe par-dessus, le reste suit le serveur.
+        // La fusion a lieu ici pour que le rendu n'ait rien à savoir de tout cela.
+        if (!config.AllowUserPreferences)
+        {
+            return Ok(options);
+        }
+
+        var claim = User.Claims
+            .FirstOrDefault(c => string.Equals(c.Type, UserIdClaim, StringComparison.OrdinalIgnoreCase))?.Value;
+
+        return Guid.TryParse(claim, out var own)
+            ? Ok(UserPreferenceRules.Apply(options, _preferences.Get(own)))
+            : Ok(options);
     }
 
     /// <summary>

@@ -572,6 +572,23 @@
                             <div id="groupHome">
                                 <div class="checkboxContainer">
                                     <label class="emby-checkbox-label">
+                                        <input is="emby-checkbox" type="checkbox" id="AllowUserPreferences"
+                                               aria-describedby="hintUserPrefs" />
+                                        <span>Laisser chaque utilisateur régler ses rangées</span>
+                                    </label>
+                                    <div class="fieldDescription" id="hintUserPrefs">
+                                        Les réglages de cette page deviennent un <b>défaut</b>. Chacun peut alors
+                                        choisir ses rangées, leur ordre, sa couleur et la taille du chiffre depuis
+                                        un bouton posé sur sa propre page d'accueil — la page de configuration du
+                                        plugin, elle, reste réservée aux administrateurs. Ce qu'un compte ne touche
+                                        pas continue de suivre cette page : une rangée activée ici apparaît chez
+                                        tous ceux qui n'ont rien décidé à son sujet. Décocher n'efface aucun choix,
+                                        il est seulement ignoré.
+                                    </div>
+                                </div>
+
+                                <div class="checkboxContainer">
+                                    <label class="emby-checkbox-label">
                                         <input is="emby-checkbox" type="checkbox" id="HideNativeHomeSections"
                                                aria-describedby="hintHideNative" />
                                         <span>Masquer les sections natives de Jellyfin</span>
@@ -716,6 +733,7 @@
                     'EnableStudioRow', 'EnableGenreRows', 'EnableReturningRow', 'EnableNeverPlayedRow',
                     'EnableBecauseRow', 'EnableAllTimeRow',
                     'EnableHomeRows', 'HideNativeHomeSections', 'ManageNativeSections', 'SyncCollections',
+                    'AllowUserPreferences',
                     'ExcludeChannelContent'
                 ];
                 var numbers = [

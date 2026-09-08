@@ -461,6 +461,50 @@
                doit primer sur le `display` du thème. */
             '.mc-hidden-native{display:none!important;}',
 
+            /* ------------------------------------------------------------------
+               Panneau de personnalisation.
+
+               Il ne réutilise aucun composant de jellyfin-web : `dialogHelper` et
+               `emby-checkbox` attendent d'être enregistrés par le client, ce qui n'est
+               garanti sur aucune page. Tout est donc en HTML nu, stylé ici.
+               ------------------------------------------------------------------ */
+            '.mc-prefs-open{margin-left:auto;border:0;background:transparent;color:inherit;',
+            'cursor:pointer;font-size:1.1em;line-height:1;padding:.2em .4em;border-radius:4px;',
+            'opacity:.55;transition:opacity var(--mc-dur) var(--mc-ease);}',
+            '.mc-prefs-open:hover,.mc-prefs-open:focus{opacity:1;}',
+            '.mc-prefs-open:focus{outline:2px solid var(--mc-accent);outline-offset:2px;}',
+
+            '.mc-prefs-backdrop{position:fixed;left:0;right:0;top:0;bottom:0;z-index:1000;',
+            'background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;',
+            'padding:1em;}',
+            '.mc-prefs{background:#1c1c1f;color:#fff;border-radius:8px;padding:1.2em;',
+            'width:100%;max-width:420px;max-height:86vh;overflow-y:auto;',
+            'box-shadow:0 12px 40px rgba(0,0,0,.6);}',
+            '.mc-prefs h2{margin:0 0 .2em;font-size:1.2em;}',
+            '.mc-prefs .mc-prefs-hint{margin:0 0 1em;opacity:.7;font-size:.85em;line-height:1.35;}',
+            '.mc-prefs ul{list-style:none;margin:0 0 1em;padding:0;}',
+            '.mc-prefs li{display:flex;align-items:center;padding:.3em 0;}',
+            '.mc-prefs li label{flex:1 1 auto;display:flex;align-items:center;cursor:pointer;',
+            'min-width:0;}',
+            '.mc-prefs li label span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}',
+            '.mc-prefs li input[type=checkbox]{margin:0 .6em 0 0;flex:0 0 auto;}',
+            '.mc-prefs .mc-prefs-move{flex:0 0 auto;margin-left:.3em;border:0;border-radius:4px;',
+            'background:rgba(255,255,255,.12);color:#fff;cursor:pointer;width:2em;height:2em;',
+            'line-height:1;}',
+            '.mc-prefs .mc-prefs-move[disabled]{opacity:.3;cursor:default;}',
+            '.mc-prefs .mc-prefs-field{display:flex;align-items:center;',
+            'justify-content:space-between;margin-bottom:.8em;}',
+            '.mc-prefs .mc-prefs-field input[type=color]{width:3em;height:2em;padding:0;border:0;',
+            'background:transparent;}',
+            '.mc-prefs .mc-prefs-actions{display:flex;flex-wrap:wrap;margin-top:1.2em;}',
+            '.mc-prefs .mc-prefs-actions button{margin-right:.5em;margin-top:.4em;border:0;',
+            'border-radius:4px;padding:.55em 1em;cursor:pointer;font-size:.95em;}',
+            '.mc-prefs .mc-prefs-save{background:var(--mc-accent);color:#fff;}',
+            '.mc-prefs .mc-prefs-reset,.mc-prefs .mc-prefs-close{',
+            'background:rgba(255,255,255,.12);color:#fff;}',
+            '.mc-prefs .mc-prefs-actions button:focus{outline:2px solid var(--mc-accent);',
+            'outline-offset:2px;}',
+
             /* Flèches de défilement : confort souris, masquées au clavier et au tactile. */
             '.mc-row .mc-arrow{position:absolute;top:0;bottom:0;width:3.2vw;min-width:34px;max-width:72px;',
             'border:0;cursor:pointer;background:var(--mc-scrim);color:#fff;font-size:1.5em;line-height:1;',
@@ -1744,6 +1788,321 @@
             });
     }
 
+    // ------------------------------------------------------------------
+    // Panneau de personnalisation
+    //
+    // La page de configuration du plugin vit dans le tableau de bord : elle est réservée
+    // aux administrateurs. Ce panneau est donc le seul endroit où un compte ordinaire peut
+    // régler ses propres rangées, et c'est pour cela qu'il vit ici plutôt que là-bas.
+    //
+    // Ce qu'il montre est déjà la valeur EFFECTIVE de ce compte : le serveur a fusionné ses
+    // choix avec les réglages de l'administrateur avant de répondre. Enregistrer fige donc
+    // ce qui est affiché ; « Réinitialiser » efface tout et rend le compte au serveur.
+    // ------------------------------------------------------------------
+
+    var ROW_LABELS = {
+        local: 'Top du serveur',
+        alltime: 'Les plus regardés de tous les temps',
+        global: 'Top mondial',
+        returning: 'De retour cette semaine',
+        neverplayed: 'Jamais vu',
+        because: 'Parce que tu as regardé…',
+        studios: 'Par studio',
+        genres: 'Par genre',
+        'native:smalllibrarytiles': 'Jellyfin — Mes médias',
+        'native:librarybuttons': 'Jellyfin — Mes médias (petit)',
+        'native:activerecordings': 'Jellyfin — Enregistrements actifs',
+        'native:resume': 'Jellyfin — Continuer de regarder',
+        'native:resumeaudio': 'Jellyfin — Reprendre l’écoute',
+        'native:resumebook': 'Jellyfin — Reprendre la lecture',
+        'native:livetv': 'Jellyfin — TV en direct',
+        'native:nextup': 'Jellyfin — À suivre',
+        'native:latestmedia': 'Jellyfin — Médias récemment ajoutés'
+    };
+
+    /* Rangée du plugin -> champ de ClientOptions qui décide de son affichage. Les entrées
+       natives n'y figurent pas : leur visibilité ne dépend pas de nous. */
+    var ROW_TOGGLES = {
+        local: 'ShowLocalRow',
+        alltime: 'ShowAllTimeRow',
+        global: 'ShowGlobalRow',
+        returning: 'ShowReturningRow',
+        neverplayed: 'ShowNeverPlayedRow',
+        because: 'ShowBecauseRow',
+        studios: 'ShowStudioRow',
+        genres: 'ShowGenreRows'
+    };
+
+    function sendPreferences(method, body) {
+        var request = {
+            type: method,
+            url: window.ApiClient.getUrl('MediaCarousel/UserPreferences')
+        };
+
+        if (body) {
+            request.data = JSON.stringify(body);
+            request.contentType = 'application/json';
+        }
+
+        return window.ApiClient.ajax(request);
+    }
+
+    /**
+     * Rejoue un rendu complet après un changement de préférences.
+     *
+     * Les réglages et les listes sont mémorisés : sans cette remise à zéro, le panneau
+     * enregistrerait le choix et la page continuerait d'afficher l'ancien.
+     */
+    function rerender() {
+        options = null;
+        cache = {};
+
+        var container = findSectionsContainer();
+
+        if (container) {
+            var rows = container.querySelectorAll('.' + ROW_CLASS);
+            for (var i = 0; i < rows.length; i++) {
+                rows[i].parentNode.removeChild(rows[i]);
+            }
+
+            // Une section masquée au rendu précédent doit réapparaître si le compte vient
+            // de décocher le masquage : sinon elle resterait invisible jusqu'au prochain
+            // rechargement de la page.
+            var hidden = container.querySelectorAll('.mc-hidden-native');
+            for (var j = 0; j < hidden.length; j++) {
+                hidden[j].classList.remove('mc-hidden-native');
+            }
+        }
+
+        render();
+    }
+
+    function closePreferences() {
+        var open = document.querySelector('.mc-prefs-backdrop');
+        if (open) {
+            open.parentNode.removeChild(open);
+        }
+    }
+
+    /**
+     * Construit le panneau à partir des valeurs effectives du compte.
+     */
+    function openPreferences(opts) {
+        closePreferences();
+
+        var order = rowOrder(opts.RowOrder, opts.ManageNativeSections === true);
+        var backdrop = document.createElement('div');
+        var html = '<div class="mc-prefs" role="dialog" aria-modal="true"'
+            + ' aria-labelledby="mc-prefs-title" tabindex="-1">'
+            + '<h2 id="mc-prefs-title">Mes rangées</h2>'
+            + '<p class="mc-prefs-hint">Ces choix ne valent que pour ce compte.'
+            + ' « Réinitialiser » les efface et vous rend aux réglages du serveur.</p>'
+            + '<ul>';
+
+        order.forEach(function (id, index) {
+            var label = ROW_LABELS[id] || id;
+            var toggle = ROW_TOGGLES[id];
+            // Une section native est déplaçable mais pas masquable ici : c'est Jellyfin
+            // qui décide de sa présence, dans les préférences du compte.
+            var checked = toggle ? (opts[toggle] !== false) : true;
+
+            html += '<li data-row="' + escapeHtml(id) + '">'
+                + '<label>'
+                + '<input type="checkbox"' + (checked ? ' checked' : '')
+                + (toggle ? '' : ' disabled')
+                + ' aria-label="' + escapeHtml('Afficher : ' + label) + '">'
+                + '<span>' + escapeHtml(label) + '</span>'
+                + '</label>'
+                + '<button type="button" class="mc-prefs-move mc-prefs-up"'
+                + ' aria-label="' + escapeHtml('Monter : ' + label) + '"'
+                + (index === 0 ? ' disabled' : '') + '>&#9650;</button>'
+                + '<button type="button" class="mc-prefs-move mc-prefs-down"'
+                + ' aria-label="' + escapeHtml('Descendre : ' + label) + '"'
+                + (index === order.length - 1 ? ' disabled' : '') + '>&#9660;</button>'
+                + '</li>';
+        });
+
+        html += '</ul>'
+            + '<div class="mc-prefs-field">'
+            + '<label for="mc-prefs-color">Couleur d’accentuation</label>'
+            + '<input type="color" id="mc-prefs-color" value="'
+            + escapeHtml(safeAccent(opts.HighlightColor)) + '">'
+            + '</div>'
+            + '<div class="mc-prefs-field">'
+            + '<label for="mc-prefs-scale">Taille du chiffre</label>'
+            + '<input type="range" id="mc-prefs-scale" min="25" max="200" step="5" value="'
+            + normalizeRankScale(opts.RankNumberScale) + '">'
+            + '</div>'
+            + '<div class="mc-prefs-field">'
+            + '<label for="mc-prefs-hide">Masquer les sections de Jellyfin</label>'
+            + '<input type="checkbox" id="mc-prefs-hide"'
+            + (opts.HideNativeSections ? ' checked' : '') + '>'
+            + '</div>'
+            + '<div class="mc-prefs-actions">'
+            + '<button type="button" class="mc-prefs-save">Enregistrer</button>'
+            + '<button type="button" class="mc-prefs-reset">Réinitialiser</button>'
+            + '<button type="button" class="mc-prefs-close">Fermer</button>'
+            + '</div>'
+            + '</div>';
+
+        backdrop.className = 'mc-prefs-backdrop';
+        backdrop.innerHTML = html;
+        document.body.appendChild(backdrop);
+
+        wirePreferences(backdrop, order);
+
+        var dialog = backdrop.querySelector('.mc-prefs');
+        if (dialog) {
+            dialog.focus();
+        }
+    }
+
+    /**
+     * Un seul écouteur sur le panneau : les lignes sont réordonnées par déplacement de
+     * nœuds, des écouteurs posés par bouton survivraient mal à ce remaniement.
+     */
+    function wirePreferences(backdrop, order) {
+        backdrop.addEventListener('click', function (event) {
+            // Un clic hors du panneau le ferme, comme n'importe quelle boîte de dialogue.
+            if (event.target === backdrop) {
+                closePreferences();
+                return;
+            }
+
+            var move = event.target.closest ? event.target.closest('.mc-prefs-move') : null;
+
+            if (move && !move.disabled) {
+                moveRow(backdrop, move);
+                return;
+            }
+
+            if (event.target.classList.contains('mc-prefs-close')) {
+                closePreferences();
+                return;
+            }
+
+            if (event.target.classList.contains('mc-prefs-reset')) {
+                sendPreferences('DELETE').then(function () {
+                    closePreferences();
+                    rerender();
+                }, function (error) {
+                    log('réinitialisation impossible', error);
+                });
+                return;
+            }
+
+            if (event.target.classList.contains('mc-prefs-save')) {
+                sendPreferences('POST', collectPreferences(backdrop)).then(function () {
+                    closePreferences();
+                    rerender();
+                }, function (error) {
+                    log('enregistrement impossible', error);
+                });
+            }
+        });
+
+        backdrop.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape') {
+                closePreferences();
+            }
+        });
+
+        // `order` n'est utile qu'à la construction ; le DOM porte l'ordre courant ensuite.
+        void order;
+    }
+
+    function moveRow(backdrop, button) {
+        var item = button.closest('li');
+        var up = button.classList.contains('mc-prefs-up');
+        var sibling = up ? item.previousElementSibling : item.nextElementSibling;
+
+        if (!sibling) {
+            return;
+        }
+
+        if (up) {
+            item.parentNode.insertBefore(item, sibling);
+        } else {
+            item.parentNode.insertBefore(sibling, item);
+        }
+
+        refreshMoveButtons(backdrop);
+        var same = item.querySelector(up ? '.mc-prefs-up' : '.mc-prefs-down');
+        if (same && !same.disabled) {
+            same.focus();
+        }
+    }
+
+    /**
+     * Les extrémités ne peuvent pas se déplacer plus loin : leurs boutons sont désactivés.
+     */
+    function refreshMoveButtons(backdrop) {
+        var items = backdrop.querySelectorAll('.mc-prefs li');
+
+        for (var i = 0; i < items.length; i++) {
+            items[i].querySelector('.mc-prefs-up').disabled = i === 0;
+            items[i].querySelector('.mc-prefs-down').disabled = i === items.length - 1;
+        }
+    }
+
+    /**
+     * Lit le panneau et en fait des préférences.
+     *
+     * Tout ce que le panneau montre devient un choix EXPLICITE : le compte cesse de suivre
+     * l'administrateur sur ces points-là, et le reste — titres, tailles, source externe —
+     * continue de le suivre. C'est « Réinitialiser » qui rend le compte au serveur.
+     */
+    function collectPreferences(backdrop) {
+        var items = backdrop.querySelectorAll('.mc-prefs li');
+        var ids = [];
+        var preferences = {
+            RowOrder: '',
+            HighlightColor: backdrop.querySelector('#mc-prefs-color').value,
+            RankNumberScale: parseInt(backdrop.querySelector('#mc-prefs-scale').value, 10),
+            HideNativeSections: backdrop.querySelector('#mc-prefs-hide').checked
+        };
+
+        for (var i = 0; i < items.length; i++) {
+            var id = items[i].getAttribute('data-row');
+            var toggle = ROW_TOGGLES[id];
+
+            ids.push(id);
+
+            if (toggle) {
+                preferences[toggle] = items[i].querySelector('input[type=checkbox]').checked;
+            }
+        }
+
+        preferences.RowOrder = ids.join(',');
+        return preferences;
+    }
+
+    /**
+     * Pose le bouton d'ouverture dans l'en-tête de la première rangée du plugin.
+     *
+     * Une seule fois, et sur une rangée à nous : l'en-tête d'une section native appartient
+     * à Jellyfin, qui la reconstruit quand bon lui semble.
+     */
+    function attachPreferencesButton(row, opts) {
+        var header = row && row.querySelector('.mc-row-header');
+
+        if (!header || header.querySelector('.mc-prefs-open')) {
+            return;
+        }
+
+        var button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'mc-prefs-open';
+        button.title = 'Personnaliser mes rangées';
+        button.setAttribute('aria-label', 'Personnaliser mes rangées');
+        button.innerHTML = '&#9881;';
+        button.addEventListener('click', function () {
+            openPreferences(opts);
+        });
+
+        header.appendChild(button);
+    }
+
     function render() {
         if (rendering || !ready()) {
             return Promise.resolve();
@@ -1783,6 +2142,10 @@
 
                 if (opts.HideNativeSections) {
                     hideNativeSections(target, librarySection);
+                }
+
+                if (opts.AllowUserPreferences) {
+                    attachPreferencesButton(collected.rows[0], opts);
                 }
 
                 return null;

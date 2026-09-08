@@ -1,3 +1,5 @@
+using JellyfinCarouselPlugin.Api;
+using JellyfinCarouselPlugin.Configuration;
 using JellyfinCarouselPlugin.Services;
 
 // Vérifie l'insertion de la balise script dans index.html : idempotence, migration depuis
@@ -420,6 +422,63 @@ Check("PROXY: un hote etranger ne produit aucun nom",
     !PosterProxy.TryGetFileName("https://mechant.test/t/p/w342/abc123.jpg", out _));
 Check("PROXY: un hote qui imite le prefixe est refuse",
     !PosterProxy.TryGetFileName("https://image.tmdb.org.mechant.test/t/p/w342/abc.jpg", out _));
+
+// ----------------------------------------------------------------------------
+// Preferences par compte : validation de ce qui vient du client, puis fusion.
+// ----------------------------------------------------------------------------
+
+Check("PREFS: des preferences vides valent aucune preference",
+    UserPreferenceRules.Sanitize(new UserRowPreferences()) is null);
+Check("PREFS: null reste null", UserPreferenceRules.Sanitize(null) is null);
+
+// La couleur part dans une feuille de styles construite par concatenation.
+Check("PREFS: une couleur valide est conservee",
+    UserPreferenceRules.Sanitize(new UserRowPreferences { HighlightColor = "#ABCDEF" })?.HighlightColor == "#ABCDEF");
+Check("PREFS: une couleur qui ferme la regle est ecartee",
+    UserPreferenceRules.Sanitize(new UserRowPreferences { HighlightColor = "red;} body{display:none} .x{color:red" }) is null);
+Check("PREFS: une couleur sans diese est ecartee",
+    UserPreferenceRules.Sanitize(new UserRowPreferences { HighlightColor = "775BF4" }) is null);
+
+// L'ordre pilote des selecteurs : seuls les identifiants connus passent.
+Check("PREFS: un identifiant inconnu est ecarte",
+    UserPreferenceRules.Sanitize(new UserRowPreferences { RowOrder = "local,inconnue,genres" })?.RowOrder == "local,genres");
+Check("PREFS: un doublon est ecarte",
+    UserPreferenceRules.Sanitize(new UserRowPreferences { RowOrder = "local,local,genres" })?.RowOrder == "local,genres");
+Check("PREFS: les sections natives sont acceptees",
+    UserPreferenceRules.Sanitize(new UserRowPreferences { RowOrder = "native:nextup,local" })?.RowOrder == "native:nextup,local");
+Check("PREFS: un ordre entierement inconnu ne laisse rien",
+    UserPreferenceRules.Sanitize(new UserRowPreferences { RowOrder = "aaa,bbb" }) is null);
+
+// L'echelle est une longueur CSS : hors bornes, le chiffre disparait ou avale l'affiche.
+Check("PREFS: une echelle demesuree est bornee",
+    UserPreferenceRules.Sanitize(new UserRowPreferences { RankNumberScale = 9000 })?.RankNumberScale == 200);
+Check("PREFS: une echelle negative est bornee",
+    UserPreferenceRules.Sanitize(new UserRowPreferences { RankNumberScale = -5 })?.RankNumberScale == 25);
+
+// La fusion : null ne doit RIEN ecraser, sinon un compte cesserait de suivre le serveur
+// pour des reglages auxquels il n'a jamais touche.
+var serveur = new ClientOptionsDto
+{
+    EnableHomeRows = true,
+    ShowLocalRow = true,
+    ShowGenreRows = true,
+    HighlightColor = "#775BF4",
+    RowOrder = "local,genres",
+    RankNumberScale = 100
+};
+
+UserPreferenceRules.Apply(serveur, null);
+Check("PREFS: aucune preference ne change rien",
+    serveur.ShowLocalRow && serveur.HighlightColor == "#775BF4");
+
+UserPreferenceRules.Apply(serveur, new UserRowPreferences { ShowGenreRows = false });
+Check("PREFS: un choix explicite l'emporte", !serveur.ShowGenreRows);
+Check("PREFS: le reste continue de suivre le serveur",
+    serveur.ShowLocalRow && serveur.RowOrder == "local,genres" && serveur.RankNumberScale == 100);
+
+UserPreferenceRules.Apply(serveur, new UserRowPreferences { HighlightColor = "#000000", RankNumberScale = 55 });
+Check("PREFS: couleur et echelle sont reprises",
+    serveur.HighlightColor == "#000000" && serveur.RankNumberScale == 55);
 
 Console.WriteLine(failed == 0 ? "\nTous les tests passent." : $"\n{failed} echec(s).");
 return failed;
