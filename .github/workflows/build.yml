@@ -26,7 +26,9 @@ jobs:
       - name: Commits en attente depuis la derniere version
         id: pending
         run: |
-          LAST_TAG=$(git tag --sort=-version:refname | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | head -1 || true)
+          # Tag le plus proche dans l'ascendance de HEAD, et non le plus haut du depot : la ligne
+          # Jellyfin 12 publie ses propres tags, et le 4.0.1 a meme ete pose sur main par erreur.
+          LAST_TAG=$(git describe --tags --abbrev=0 --match '[0-9]*.[0-9]*.[0-9]*' --exclude '*-*' 2>/dev/null || true)
           if [ -z "$LAST_TAG" ]; then
             RANGE=""
           else
@@ -69,7 +71,9 @@ jobs:
           CURRENT=$(echo "$RAW_VER" | cut -d. -f1-3)
           IFS='.' read -r MAJ MIN PAT <<< "$CURRENT"
 
-          LAST_TAG=$(git tag --sort=-version:refname | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | head -1 || true)
+          # Tag le plus proche dans l'ascendance de HEAD, et non le plus haut du depot : la ligne
+          # Jellyfin 12 publie ses propres tags, et le 4.0.1 a meme ete pose sur main par erreur.
+          LAST_TAG=$(git describe --tags --abbrev=0 --match '[0-9]*.[0-9]*.[0-9]*' --exclude '*-*' 2>/dev/null || true)
           if [ -z "$LAST_TAG" ]; then
             COMMITS=$(git log --no-merges --pretty=format:"%s" | head -20)
           else
@@ -156,7 +160,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           V=${{ steps.ver.outputs.version }}
-          LAST_TAG=$(git tag --sort=-version:refname | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | grep -v "^${V}$" | head -1 || true)
+          # HEAD est le commit de bump, le tag de cette version n'existe pas encore.
+          LAST_TAG=$(git describe --tags --abbrev=0 --match '[0-9]*.[0-9]*.[0-9]*' --exclude '*-*' 2>/dev/null || true)
           if [ -z "$LAST_TAG" ]; then
             RAW=$(git log --no-merges --pretty=format:"%s" | grep -v "\[skip ci\]" | head -30)
           else

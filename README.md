@@ -4,8 +4,8 @@
   <h1>Media Carousel</h1>
   <p><strong>Le Top 10 de ton serveur Jellyfin, calculé automatiquement.</strong></p>
 
-  [![Jellyfin](https://img.shields.io/badge/Jellyfin-10.11.11%2B-00a4dc?style=flat-square)](https://jellyfin.org/)
-  [![.NET](https://img.shields.io/badge/.NET-9.0-512BD4?style=flat-square)](https://dotnet.microsoft.com/)
+  [![Jellyfin](https://img.shields.io/badge/Jellyfin-10.11.x%20%7C%2012.x-00a4dc?style=flat-square)](https://jellyfin.org/)
+  [![.NET](https://img.shields.io/badge/.NET-9.0%20%7C%2010.0-512BD4?style=flat-square)](https://dotnet.microsoft.com/)
   [![Version](https://img.shields.io/badge/dynamic/json?url=https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/manifest.json&query=%24%5B0%5D.versions%5B0%5D.version&label=Version&color=brightgreen&style=flat-square)](https://github.com/peterdu1109/MediaCarousel/releases)
   [![Licence](https://img.shields.io/badge/Licence-MIT-green?style=flat-square)](LICENSE)
 </div>
@@ -55,11 +55,17 @@ demande à réduire les animations.
 Les mises à jour suivantes se font toutes seules.
 
 1. **Tableau de bord → Extensions → Dépôts → +**
-2. Colle cette adresse :
-   ```
-   https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/manifest.json
-   ```
-3. **Extensions → Catalogue** → installe **Media Carousel**
+2. Colle l'adresse **correspondant à ta version de Jellyfin** — un même build ne peut pas viser les deux :
+   - Jellyfin **10.11.x**
+     ```
+     https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/manifest.json
+     ```
+   - Jellyfin **12.x**
+     ```
+     https://raw.githubusercontent.com/peterdu1109/MediaCarousel/refs/heads/jellyfin-12/repository-12.json
+     ```
+3. **Extensions → Catalogue** → installe **Media Carousel** — le canal Jellyfin 12 le liste sous
+   **Media Carousel (Jellyfin 12)**
 4. Redémarre Jellyfin
 
 ### Manuellement
@@ -67,7 +73,9 @@ Les mises à jour suivantes se font toutes seules.
 Télécharge le ZIP depuis la [page des versions](https://github.com/peterdu1109/MediaCarousel/releases),
 décompresse-le dans `plugins/MediaCarousel/`, puis redémarre Jellyfin.
 
-> **Prérequis : Jellyfin 10.11.11 ou plus récent.**
+> **Prérequis : Jellyfin 10.11.11 ou plus récent, ou Jellyfin 12.**
+> Sur Jellyfin 12, n'utilise **pas** l'adresse 10.11 : ses versions 3.x s'installent, apparaissent
+> « Actives », puis échouent sur chaque rangée — Jellyfin 12 a modifié une méthode qu'elles appellent.
 
 ---
 
