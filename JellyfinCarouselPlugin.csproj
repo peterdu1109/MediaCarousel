@@ -2,8 +2,8 @@
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
-    <AssemblyVersion>3.14.0.0</AssemblyVersion>
-    <FileVersion>3.14.0.0</FileVersion>
+    <AssemblyVersion>4.0.0.0</AssemblyVersion>
+    <FileVersion>4.0.0.0</FileVersion>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <!-- Les symboles de debogage ne sont pas lus par Jellyfin. -->
     <DebugType>none</DebugType>
