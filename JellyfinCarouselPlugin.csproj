@@ -23,19 +23,19 @@
       Jellyfin.Data et Jellyfin.Database.Implementations arrivent transitivement mais sont déclarés
       explicitement pour que ExcludeAssets s'applique aussi à eux.
     -->
-    <PackageReference Include="Jellyfin.Controller" Version="12.1.0">
+    <PackageReference Include="Jellyfin.Controller" Version="12.0.0">
       <PrivateAssets>all</PrivateAssets>
       <ExcludeAssets>runtime</ExcludeAssets>
     </PackageReference>
-    <PackageReference Include="Jellyfin.Model" Version="12.1.0">
+    <PackageReference Include="Jellyfin.Model" Version="12.0.0">
       <PrivateAssets>all</PrivateAssets>
       <ExcludeAssets>runtime</ExcludeAssets>
     </PackageReference>
-    <PackageReference Include="Jellyfin.Data" Version="12.1.0">
+    <PackageReference Include="Jellyfin.Data" Version="12.0.0">
       <PrivateAssets>all</PrivateAssets>
       <ExcludeAssets>runtime</ExcludeAssets>
     </PackageReference>
-    <PackageReference Include="Jellyfin.Database.Implementations" Version="12.1.0">
+    <PackageReference Include="Jellyfin.Database.Implementations" Version="12.0.0">
       <PrivateAssets>all</PrivateAssets>
       <ExcludeAssets>runtime</ExcludeAssets>
     </PackageReference>

@@ -1,0 +1,30 @@
+[
+  {
+    "category": "General",
+    "guid": "191bd290-1054-4b55-a137-46c72181266b",
+    "name": "Media Carousel (Jellyfin 12)",
+    "description": "🚀 JELLYFIN 12 — Media Carousel built for Jellyfin 12.0 and newer. File Transformation is optional: without it the plugin writes its script tag into index.html, as on 10.11. For Jellyfin 10.11.x use the regular repository.\n\nNetflix-style home rows for Jellyfin: a Top 10 of your server computed from real playback, a worldwide Top 10 from TMDB or Trakt, plus library rows — never watched, back this week, by studio, by genre.\n\n🚀 JELLYFIN 12 — Media Carousel compilé pour Jellyfin 12.0 et plus récent. File Transformation est facultatif : sans lui, le plugin inscrit sa balise dans index.html, comme en 10.11. Pour Jellyfin 10.11.x, utilisez le dépôt standard.\n\nDes rangées d'accueil façon Netflix pour Jellyfin : un Top 10 du serveur calculé sur les lectures réelles, un Top 10 mondial depuis TMDB ou Trakt, et des rangées tirées de la bibliothèque — jamais vu, de retour cette semaine, par studio, par genre.",
+    "owner": "peterdu1109",
+    "overview": "🚀 Jellyfin 12 channel for Media Carousel. On Jellyfin 10.11.x use the main repository.\n🚀 Canal Jellyfin 12 pour Media Carousel. Sur Jellyfin 10.11.x, utilisez le dépôt principal.",
+    "supportUrl": "https://github.com/peterdu1109/MediaCarousel",
+    "imageUrl": "https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/icon.png",
+    "versions": [
+      {
+        "version": "4.0.1.0",
+        "changelog": "<a style='color:white;text-decoration:none' href=\"https://github.com/peterdu1109/MediaCarousel/releases/tag/4.0.1\">📋 <span style='text-decoration:underline'>Release Notes v4.0.1</span></a>",
+        "targetAbi": "12.1.0.0",
+        "sourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/4.0.1/JellyfinCarouselPlugin.zip",
+        "checksum": "b797f3c3aa205eb1ded148c8fe0bce7a",
+        "timestamp": "2026-09-19T15:29:52Z"
+      },
+      {
+        "version": "4.0.0.0",
+        "changelog": "<a style='color:white;text-decoration:none' href=\"https://github.com/peterdu1109/MediaCarousel/releases/tag/4.0.0\">📋 <span style='text-decoration:underline'>Release Notes v4.0.0</span></a>",
+        "targetAbi": "12.1.0.0",
+        "sourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/4.0.0/JellyfinCarouselPlugin.zip",
+        "checksum": "d271ba8cdd255d7c7c516faf83a25b34",
+        "timestamp": "2026-09-19T13:28:28Z"
+      }
+    ]
+  }
+]

@@ -9,6 +9,14 @@ on:
 permissions:
   contents: write
 
+# Ligne Jellyfin 12, au format de NotifySync : son propre catalogue, ses tags suffixes,
+# et le PLANCHER 12.0 comme targetAbi — compile contre 12.0.0, le build se charge sur
+# 12.0 comme sur 12.1, alors qu'une DLL compilee contre 12.1 ne se charge pas sur 12.0.
+env:
+  CATALOG: repository-12.json
+  TAG_SUFFIX: -jf12
+  TARGET_ABI: 12.0.0.0
+
 jobs:
   # Y a-t-il quelque chose a publier ? Sans cette porte, le passage horaire
   # sortirait une version identique a la precedente toutes les heures.
@@ -26,7 +34,11 @@ jobs:
       - name: Commits en attente depuis la derniere version
         id: pending
         run: |
-          LAST_TAG=$(git tag --sort=-version:refname | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | head -1 || true)
+          # Tag le plus proche dans l'ascendance de HEAD, et non le plus haut du depot :
+          # les lignes 10.11 et 12 partagent le meme espace de tags, et prendre le plus
+          # haut faisait lire a chacune les versions de l'autre.
+          LAST_TAG=$(git describe --tags --abbrev=0 --match "*${TAG_SUFFIX}" 2>/dev/null \
+            || git describe --tags --abbrev=0 --match '[0-9]*.[0-9]*.[0-9]*' 2>/dev/null || true)
           if [ -z "$LAST_TAG" ]; then
             RANGE=""
           else
@@ -65,11 +77,15 @@ jobs:
         id: ver
         run: |
           # Lire la version (peut etre 1.2.0 ou 1.2.0.0), normaliser en 3 parties
-          RAW_VER=$(python3 -c "import json; d=json.load(open('manifest.json')); print(d[0]['versions'][0]['version'])")
+          RAW_VER=$(python3 -c "import json; d=json.load(open('$CATALOG')); print(d[0]['versions'][0]['version'])")
           CURRENT=$(echo "$RAW_VER" | cut -d. -f1-3)
           IFS='.' read -r MAJ MIN PAT <<< "$CURRENT"
 
-          LAST_TAG=$(git tag --sort=-version:refname | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | head -1 || true)
+          # Tag le plus proche dans l'ascendance de HEAD, et non le plus haut du depot :
+          # les lignes 10.11 et 12 partagent le meme espace de tags, et prendre le plus
+          # haut faisait lire a chacune les versions de l'autre.
+          LAST_TAG=$(git describe --tags --abbrev=0 --match "*${TAG_SUFFIX}" 2>/dev/null \
+            || git describe --tags --abbrev=0 --match '[0-9]*.[0-9]*.[0-9]*' 2>/dev/null || true)
           if [ -z "$LAST_TAG" ]; then
             COMMITS=$(git log --no-merges --pretty=format:"%s" | head -20)
           else
@@ -92,14 +108,13 @@ jobs:
 
           TODAY=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-          # Meme mise en forme que les notes de release, en version compacte :
-          # Jellyfin affiche ce champ tel quel dans son catalogue d'extensions.
-          CHANGELOG=$(printf '%s\n' "$COMMITS" | python3 .github/scripts/release_notes.py --flat)
+          # Format NotifySync : le catalogue affiche un lien vers les notes de la release.
+          CHANGELOG="<a style='color:white;text-decoration:none' href=\"https://github.com/peterdu1109/MediaCarousel/releases/tag/${NEW}${TAG_SUFFIX}\">📋 <span style='text-decoration:underline'>Release Notes v${NEW}</span></a>"
 
           # Prépendre une nouvelle entrée — ne jamais écraser l'historique
-          jq --arg v "$NEW_FULL" --arg chg "$CHANGELOG" --arg ts "$TODAY" \
-            '.[0].versions = [{"version":$v,"changelog":$chg,"targetAbi":"12.1.0.0","sourceUrl":"","checksum":"","timestamp":$ts}] + .[0].versions' \
-            manifest.json > manifest.tmp && mv manifest.tmp manifest.json
+          jq --arg v "$NEW_FULL" --arg chg "$CHANGELOG" --arg ts "$TODAY" --arg abi "$TARGET_ABI" \
+            '.[0].versions = [{"version":$v,"changelog":$chg,"targetAbi":$abi,"sourceUrl":"","checksum":"","timestamp":$ts}] + .[0].versions' \
+            "$CATALOG" > catalog.tmp && mv catalog.tmp "$CATALOG"
 
           sed -i "s|<AssemblyVersion>.*</AssemblyVersion>|<AssemblyVersion>${NEW_FULL}</AssemblyVersion>|" JellyfinCarouselPlugin.csproj
           sed -i "s|<FileVersion>.*</FileVersion>|<FileVersion>${NEW_FULL}</FileVersion>|" JellyfinCarouselPlugin.csproj
@@ -132,18 +147,18 @@ jobs:
         run: |
           V=${{ steps.ver.outputs.version }}
           MD5=$(md5sum JellyfinCarouselPlugin.zip | awk '{print $1}')
-          URL="https://github.com/peterdu1109/MediaCarousel/releases/download/${V}/JellyfinCarouselPlugin.zip"
-          jq --arg url "$URL" --arg md5 "$MD5" '.[0].versions[0].sourceUrl=$url | .[0].versions[0].checksum=$md5' manifest.json > manifest.tmp
-          mv manifest.tmp manifest.json
+          URL="https://github.com/peterdu1109/MediaCarousel/releases/download/${V}${TAG_SUFFIX}/JellyfinCarouselPlugin.zip"
+          jq --arg url "$URL" --arg md5 "$MD5" '.[0].versions[0].sourceUrl=$url | .[0].versions[0].checksum=$md5' "$CATALOG" > catalog.tmp
+          mv catalog.tmp "$CATALOG"
 
       - name: Commit version bump
         run: |
           git config user.name "peterdu1109"
           git config user.email "peter1109@hotmail.fr"
-          git add manifest.json JellyfinCarouselPlugin.csproj
+          git add "$CATALOG" JellyfinCarouselPlugin.csproj
           git diff --cached --quiet || git commit -m "chore: bump ${{ steps.ver.outputs.version }} [skip ci]"
           # Sur la branche de portage, le bump doit rester sur la branche : le
-          # pousser sur main y ferait entrer la ligne 12.1, que main ne construit
+          # pousser sur main y ferait entrer la ligne 12, que main ne construit
           # pas, et le catalogue que lit un serveur 10.11 annoncerait une version
           # batie pour un autre socle.
           git push origin "HEAD:${GITHUB_REF_NAME}"
@@ -160,7 +175,14 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           V=${{ steps.ver.outputs.version }}
-          LAST_TAG=$(git tag --sort=-version:refname | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | grep -v "^${V}$" | head -1 || true)
+          TAG="${V}${TAG_SUFFIX}"
+          # HEAD est le commit de bump et le nouveau tag n'existe pas encore : on obtient
+          # bien la version precedente de CETTE ligne.
+          # Tag le plus proche dans l'ascendance de HEAD, et non le plus haut du depot :
+          # les lignes 10.11 et 12 partagent le meme espace de tags, et prendre le plus
+          # haut faisait lire a chacune les versions de l'autre.
+          LAST_TAG=$(git describe --tags --abbrev=0 --match "*${TAG_SUFFIX}" 2>/dev/null \
+            || git describe --tags --abbrev=0 --match '[0-9]*.[0-9]*.[0-9]*' 2>/dev/null || true)
           if [ -z "$LAST_TAG" ]; then
             RAW=$(git log --no-merges --pretty=format:"%s" | grep -v "\[skip ci\]" | head -30)
           else
@@ -175,25 +197,28 @@ jobs:
           # quelques lignes qu'on vient vraiment lire. Il vit dans le README.
           N=/tmp/notes.md
           {
-            echo "# Media Carousel v$V"
+            echo "# Media Carousel v$V — Jellyfin 12"
             echo
             echo "$NOTES"
             echo
             echo "---"
             echo
-            echo "Jellyfin 12.1 ou plus recent. Installation et configuration :"
-            echo "[README](https://github.com/peterdu1109/MediaCarousel#readme)."
+            echo "Jellyfin 12.0 ou plus recent. Installation :"
+            echo "[README de la ligne 12](https://github.com/peterdu1109/MediaCarousel/tree/jellyfin-12#readme)."
           } > "$N"
 
-          gh release delete "$V" --yes --cleanup-tag 2>/dev/null || true
-          # Tant que la ligne 12.1 vit sur une branche, sa release ne doit pas
+          gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
+          # Tant que la ligne 12 vit sur une branche, sa release ne doit pas
           # passer « latest » devant la version que les serveurs 10.11 utilisent.
           PRERELEASE=""
           if [ "${GITHUB_REF_NAME}" != "main" ]; then
             PRERELEASE="--prerelease"
           fi
 
-          gh release create "$V" $PRERELEASE \
-            --title "Media Carousel v${V}" \
+          # --target est indispensable : sans lui, gh pose un tag neuf sur la branche PAR
+          # DEFAUT. La 4.0.1 s'est ainsi retrouvee taguee sur le source 10.11 de main.
+          gh release create "$TAG" $PRERELEASE \
+            --target "$(git rev-parse HEAD)" \
+            --title "Media Carousel v${V} — Jellyfin 12" \
             --notes-file "$N" \
             JellyfinCarouselPlugin.zip

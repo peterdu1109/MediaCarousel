@@ -12,15 +12,27 @@ consomme l'API du plugin et insère deux rangées façon Netflix sous les biblio
 d'accueil. Il ne calcule rien, ne remplace pas la page d'accueil et ne masque aucune section native.
 
 - **Plugin GUID :** `191bd290-1054-4b55-a137-46c72181266b` — dans `Plugin.cs`, `manifest.json`, `build.yaml`, `configPage.html`
-- **Cible :** Jellyfin **12.1+** (ABI `12.1.0.0`), .NET 10.0, paquets NuGet Jellyfin 12.1.0
+- **Cible :** Jellyfin **12.0+** (ABI `12.0.0.0`), .NET 10.0, compilé contre les paquets NuGet Jellyfin **12.0.0** — le plancher
 - **Stack :** C# uniquement. Pas de Node, pas de npm, pas de TypeScript, pas de build frontend.
 
-> **Le passage à 12.1 rompt avec 10.11, et il le fallait.** Jellyfin 12.1 est compilé pour
-> **.NET 10** : ses paquets NuGet ne publient plus que `net10.0`, donc le plugin ne peut plus
-> viser `net9.0` sans renoncer à s'y charger. Un assembly `net10.0` ne se charge pas davantage
-> sur un serveur 10.11, qui tourne en .NET 9. Il n'y a donc pas de version unique possible :
-> **les serveurs 10.11 restent sur la 3.14.0**, la dernière publiée pour eux, et le catalogue
-> ne leur proposera plus les suivantes — c'est exactement le rôle du `targetAbi`.
+> **Pourquoi une ligne séparée pour Jellyfin 12.** Ce n'est **pas** que le build 10.11 refuserait
+> de se charger : un assembly `net9.0` se charge très bien sur le runtime .NET 10 d'un serveur 12,
+> et ses 112 types passent. Ce qui casse, c'est l'API. Jellyfin 12 a ajouté un cinquième paramètre
+> optionnel, `bool skipVisibilityCheck`, à `IDtoService.GetBaseItemDtos`. Un paramètre optionnel
+> n'existe qu'à la compilation : la 3.x, compilée contre 10.11, référence la surcharge à quatre
+> paramètres, qui n'existe plus. Chaque appel lève `MissingMethodException` — c'est-à-dire chaque
+> rangée, puisque `TopListsController` et `CatalogController` passent tous deux par là. Le plugin
+> s'installe, apparaît « Actif », et n'affiche rien. Constaté au banc de liaison contre un vrai
+> serveur 12.1 ; l'erreur d'une note antérieure (« net9 ne s'y charge plus ») est corrigée ici.
+>
+> Dans l'autre sens, un assembly `net10.0` ne se charge pas sur un serveur 10.11 (.NET 9). Il faut
+> donc deux builds, et comme `targetAbi` est un **plancher** et non une fourchette, deux dépôts :
+> un serveur 12 qui lirait `manifest.json` se verrait proposer la 3.x, puisque 10.11 ≤ 12.
+>
+> **Compiler contre le plancher, éprouver contre le plafond.** Le build est compilé contre les
+> paquets **12.0.0** et annonce `targetAbi 12.0.0.0` : il se charge sur 12.0 comme sur 12.1 (banc de
+> liaison : 0 erreur contre un serveur 12.1). Compilé contre 12.1, il référencerait les assemblages
+> 12.1.0.0 et ne se chargerait pas sur un serveur 12.0 — c'était le cas des 4.0.0 et 4.0.1.
 >
 > Le code n'a pas eu besoin d'être touché : la migration compile sans une seule erreur ni un
 > seul avertissement. Les points qui auraient pu casser ont été vérifiés un à un sur le tag
@@ -43,7 +55,8 @@ MediaCarousel/
 ├── Plugin.cs                          # BasePlugin<PluginConfiguration> + IHasWebPages
 ├── PluginServiceRegistrator.cs        # Enregistrement DI de tous les services
 ├── JellyfinCarouselPlugin.csproj      # net10.0, références compile-time uniquement
-├── manifest.json                      # Catalogue Jellyfin (mis à jour par la CI)
+├── manifest.json                      # Catalogue Jellyfin 10.11 — identique à main, jamais touché ici
+├── repository-12.json                 # Catalogue Jellyfin 12, format NotifySync (mis à jour par la CI)
 ├── build.yaml                         # Métadonnées du registre (maintenu à la main)
 ├── Api/
 │   ├── TopListsController.cs          # GET Top/*, Rows/*, ClientOptions ; POST Top/Refresh
@@ -721,9 +734,20 @@ Reste à valider à la main sur une instance Jellyfin : l'injection du script et
 
 ### CI/CD (`.github/workflows/build.yml`)
 
-Sur push `main` : bump de version d'après les commits conventionnels → `dotnet build -c Release` →
-ZIP → mise à jour de `manifest.json` (`sourceUrl`, checksum, `targetAbi` `12.1.0.0`) → commit
-`[skip ci]` → release GitHub.
+Lancée **à la main** sur cette branche (`gh workflow run build.yml --ref jellyfin-12`) : le
+déclencheur automatique ne vise que `main`. Bump de version d'après les commits conventionnels →
+build contre les paquets 12.0.0 → ZIP → entrée prépendue à **`repository-12.json`** (`targetAbi`
+`12.0.0.0`, changelog = lien vers les notes, comme NotifySync) → commit `[skip ci]` poussé sur
+**cette branche** → release GitHub en pré-version, taguée **`X.Y.Z-jf12`** et titrée
+« Media Carousel vX.Y.Z — Jellyfin 12 ».
+
+Trois règles, chacune venue d'un défaut constaté :
+
+- **`--target "$(git rev-parse HEAD)"`** à la création de la release. Sans lui, `gh` pose un tag
+  neuf sur la branche par défaut : la 4.0.1 s'est retrouvée taguée sur le source 10.11 de `main`.
+- **La dernière version se lit avec `git describe`**, le tag le plus proche dans l'ascendance, et
+  non avec le plus haut tag du dépôt : les deux lignes partagent un espace de tags.
+- **Le suffixe `-jf12`** tient les tags de cette ligne hors du motif `^X.Y.Z$` qu'utilise `main`.
 
 ---
 
