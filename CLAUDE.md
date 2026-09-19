@@ -12,19 +12,15 @@ consomme l'API du plugin et insère deux rangées façon Netflix sous les biblio
 d'accueil. Il ne calcule rien, ne remplace pas la page d'accueil et ne masque aucune section native.
 
 - **Plugin GUID :** `191bd290-1054-4b55-a137-46c72181266b` — dans `Plugin.cs`, `manifest.json`, `build.yaml`, `configPage.html`
-- **Cible :** Jellyfin **12.1+** (ABI `12.1.0.0`), .NET 10.0, paquets NuGet Jellyfin 12.1.0
+- **Cible :** Jellyfin **10.11.11+** (ABI `10.11.11.0`), .NET 9.0, paquets NuGet Jellyfin 10.11.11
 - **Stack :** C# uniquement. Pas de Node, pas de npm, pas de TypeScript, pas de build frontend.
 
-> **Le passage à 12.1 rompt avec 10.11, et il le fallait.** Jellyfin 12.1 est compilé pour
-> **.NET 10** : ses paquets NuGet ne publient plus que `net10.0`, donc le plugin ne peut plus
-> viser `net9.0` sans renoncer à s'y charger. Un assembly `net10.0` ne se charge pas davantage
-> sur un serveur 10.11, qui tourne en .NET 9. Il n'y a donc pas de version unique possible :
-> **les serveurs 10.11 restent sur la 3.14.0**, la dernière publiée pour eux, et le catalogue
-> ne leur proposera plus les suivantes — c'est exactement le rôle du `targetAbi`.
->
-> Le code n'a pas eu besoin d'être touché : la migration compile sans une seule erreur ni un
-> seul avertissement. Les points qui auraient pu casser ont été vérifiés un à un sur le tag
-> `v12.1` plutôt que supposés — voir « Ce qui a été vérifié sur 12.1 ».
+> **Plancher technique et `targetAbi` ne coïncident pas.** La seule API utilisée qui soit plus
+> récente que 10.11.8 est `IUserManager.GetUsers()` — `IUserManager.Users` (propriété) est devenu
+> une méthode en 10.11.9 — donc le code se chargerait sur 10.11.9 et 10.11.10. Le `targetAbi`
+> publié est malgré tout `10.11.11.0` : c'est la version contre laquelle le plugin est compilé et
+> testée. Conséquence assumée : **le plugin disparaît du catalogue des serveurs en 10.11.9 et
+> 10.11.10.** Abaisser la valeur dans `manifest.json` suffit à les rouvrir.
 
 > **Pourquoi un script frontend est inévitable :** les sections de la page d'accueil de Jellyfin
 > sont l'énumération fermée `HomeSectionType` (`None`, `SmallLibraryTiles`, `LibraryButtons`,
@@ -42,7 +38,7 @@ d'accueil. Il ne calcule rien, ne remplace pas la page d'accueil et ne masque au
 MediaCarousel/
 ├── Plugin.cs                          # BasePlugin<PluginConfiguration> + IHasWebPages
 ├── PluginServiceRegistrator.cs        # Enregistrement DI de tous les services
-├── JellyfinCarouselPlugin.csproj      # net10.0, références compile-time uniquement
+├── JellyfinCarouselPlugin.csproj      # net9.0, références compile-time uniquement
 ├── manifest.json                      # Catalogue Jellyfin (mis à jour par la CI)
 ├── build.yaml                         # Métadonnées du registre (maintenu à la main)
 ├── Api/
@@ -271,34 +267,6 @@ Les **titres** d'une rangée de genre ne sont pas précalculés : le script les 
 de Jellyfin (`/Items?GenreIds=…`), une requête indexée, paginée et déjà filtrée par utilisateur —
 exactement ce que fait la page d'accueil native pour ses propres rangées. Le chargement est différé
 par `IntersectionObserver` pour ne pas déclencher toutes les requêtes au premier rendu.
-
-### Ce qui a été vérifié sur 12.1
-
-Le plugin s'appuie sur des détails internes de `jellyfin-web` et du serveur : compiler sans
-erreur ne prouve rien de tout cela. Chacun a été relu sur le tag `v12.1` :
-
-| Ce dont nous dépendons | État en 12.1 |
-|---|---|
-| `.section{N}` purement positionnel, type lu dans `CustomPrefs.homesection{i}` | inchangé |
-| `MAX_SECTIONS = 10`, `MAX_SECTIONS_TV = 11`, prepend des bibliothèques en interface téléviseur | inchangé — nos dix positions et `nativeOffset` restent justes |
-| `DEFAULT_SECTIONS` | complété à **dix** entrées (trois `none` ajoutés) ; notre repli par index reste correct |
-| `allowSwipe()` teste `scrollX` / `animatedScrollX` | inchangé — le correctif du balayage mobile tient |
-| Classes de carte `cardBox`, `cardScalable`, `cardPadder`, `cardImageContainer`, `cardFooter`, `cardText` | inchangées |
-| `overflowPortraitCard` / `overflowBackdropCard` | inchangées, mais **composées** (`` `${shape}Card` `` dans `utils/builder.ts`) et non plus écrites en toutes lettres : une recherche littérale dans `cardBuilder.js` ne les trouve plus, ce n'est pas leur disparition |
-| `OrderMapper` déréférence `query.User` pour `PlayCount` | inchangé — la règle « pas de tri par lecture sans utilisateur » tient |
-| `HomeSectionType` | énumération identique ; le fichier a migré de `src/types/` vers `src/constants/` |
-
-**Ce qui n'a pas été revérifié :** le défaut d'`ItemCounts` de `GetItemValues`
-(`BaseItemRepository` est devenu une classe `partial` éclatée en 12.1, la méthode n'est plus
-dans le fichier principal). Sans importance pour le code — le plugin recompte de toute façon,
-et il le devrait même si Jellyfin corrigeait le calcul, pour la ventilation par bibliothèque —
-mais la mention « vérifié sur v10.11.11 » dans le code et la documentation ne vaut que pour
-10.11.11.
-
-**Et la feuille de test `jellyfin-card.css` reste celle de jellyfin-web 10.11.9.** Les noms de
-classes sont confirmés identiques, leurs *valeurs* ne le sont pas : la parité mesurée par le
-banc est donc une parité avec 10.11.9, pas avec 12.1. Le rendu réel sur un serveur 12.1 reste
-à regarder.
 
 ### Réglages du serveur, choix de chacun
 
@@ -678,7 +646,7 @@ Utilisés par la CI pour le versionnage sémantique (`!` ou `BREAKING CHANGE` �
 dotnet build -c Release
 ```
 
-Sortie dans `bin/Release/net10.0/` : **uniquement** `JellyfinCarouselPlugin.dll` et `deps.json`.
+Sortie dans `bin/Release/net9.0/` : **uniquement** `JellyfinCarouselPlugin.dll` et `deps.json`.
 
 - `CopyLocalLockFileAssemblies=false` et `ExcludeAssets=runtime` : aucune dépendance Jellyfin
   ou EF Core n'est empaquetée, le serveur fournit tout à l'exécution.
@@ -692,7 +660,7 @@ Ces trois règles ramènent le ZIP de 84 Ko à 50 Ko.
 ### Package
 
 ```bash
-cd bin/Release/net10.0 && zip -r ../../../JellyfinCarouselPlugin.zip .
+cd bin/Release/net9.0 && zip -r ../../../JellyfinCarouselPlugin.zip .
 ```
 
 ### Test
@@ -722,7 +690,7 @@ Reste à valider à la main sur une instance Jellyfin : l'injection du script et
 ### CI/CD (`.github/workflows/build.yml`)
 
 Sur push `main` : bump de version d'après les commits conventionnels → `dotnet build -c Release` →
-ZIP → mise à jour de `manifest.json` (`sourceUrl`, checksum, `targetAbi` `12.1.0.0`) → commit
+ZIP → mise à jour de `manifest.json` (`sourceUrl`, checksum, `targetAbi` `10.11.11.0`) → commit
 `[skip ci]` → release GitHub.
 
 ---

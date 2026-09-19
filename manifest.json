@@ -9,14 +9,6 @@
     "imageUrl": "https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/icon.png",
     "versions": [
       {
-        "version": "4.0.0.0",
-        "changelog": "Attention avant de mettre a jour :\n- Cibler Jellyfin 12.1, en .NET 10",
-        "targetAbi": "12.1.0.0",
-        "sourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/4.0.0/JellyfinCarouselPlugin.zip",
-        "checksum": "d271ba8cdd255d7c7c516faf83a25b34",
-        "timestamp": "2026-09-19T13:28:28Z"
-      },
-      {
         "version": "3.14.0.0",
         "changelog": "Nouveautes :\n- Configuration — Reglages du serveur par defaut, choix propres a chacun",
         "targetAbi": "10.11.11.0",
