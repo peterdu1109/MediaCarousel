@@ -142,7 +142,11 @@ jobs:
           git config user.email "peter1109@hotmail.fr"
           git add manifest.json JellyfinCarouselPlugin.csproj
           git diff --cached --quiet || git commit -m "chore: bump ${{ steps.ver.outputs.version }} [skip ci]"
-          git push origin main
+          # Sur la branche de portage, le bump doit rester sur la branche : le
+          # pousser sur main y ferait entrer la ligne 12.1, que main ne construit
+          # pas, et le catalogue que lit un serveur 10.11 annoncerait une version
+          # batie pour un autre socle.
+          git push origin "HEAD:${GITHUB_REF_NAME}"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -182,7 +186,14 @@ jobs:
           } > "$N"
 
           gh release delete "$V" --yes --cleanup-tag 2>/dev/null || true
-          gh release create "$V" \
+          # Tant que la ligne 12.1 vit sur une branche, sa release ne doit pas
+          # passer « latest » devant la version que les serveurs 10.11 utilisent.
+          PRERELEASE=""
+          if [ "${GITHUB_REF_NAME}" != "main" ]; then
+            PRERELEASE="--prerelease"
+          fi
+
+          gh release create "$V" $PRERELEASE \
             --title "Media Carousel v${V}" \
             --notes-file "$N" \
             JellyfinCarouselPlugin.zip
