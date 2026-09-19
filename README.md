@@ -4,7 +4,7 @@
   <h1>Media Carousel</h1>
   <p><strong>Le Top 10 de ton serveur Jellyfin, calculé automatiquement.</strong></p>
 
-  [![Jellyfin](https://img.shields.io/badge/Jellyfin-10.11.11%2B-00a4dc?style=flat-square)](https://jellyfin.org/)
+  [![Jellyfin](https://img.shields.io/badge/Jellyfin-12.1%2B-00a4dc?style=flat-square)](https://jellyfin.org/)
   [![.NET](https://img.shields.io/badge/.NET-9.0-512BD4?style=flat-square)](https://dotnet.microsoft.com/)
   [![Version](https://img.shields.io/badge/dynamic/json?url=https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/manifest.json&query=%24%5B0%5D.versions%5B0%5D.version&label=Version&color=brightgreen&style=flat-square)](https://github.com/peterdu1109/MediaCarousel/releases)
   [![Licence](https://img.shields.io/badge/Licence-MIT-green?style=flat-square)](LICENSE)
@@ -67,7 +67,7 @@ Les mises à jour suivantes se font toutes seules.
 Télécharge le ZIP depuis la [page des versions](https://github.com/peterdu1109/MediaCarousel/releases),
 décompresse-le dans `plugins/MediaCarousel/`, puis redémarre Jellyfin.
 
-> **Prérequis : Jellyfin 10.11.11 ou plus récent.**
+> **Prérequis : Jellyfin 12.1 ou plus récent.** Les serveurs 10.11 doivent rester sur la 3.14.0.
 
 ---
 
@@ -342,7 +342,7 @@ autorisées).
 
 ```bash
 dotnet build -c Release
-cd bin/Release/net9.0 && zip -r ../../../JellyfinCarouselPlugin.zip .
+cd bin/Release/net10.0 && zip -r ../../../JellyfinCarouselPlugin.zip .
 ```
 
 Le paquet ne contient que l'assembly du plugin (**50 Ko**) : les dépendances sont fournies par le
