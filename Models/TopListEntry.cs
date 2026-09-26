@@ -45,6 +45,16 @@ public sealed class TopListEntry
     public string? PosterUrl { get; set; }
 
     /// <summary>
+    /// Obtient ou définit le type TMDB du titre, <c>movie</c> ou <c>tv</c> (Top mondial).
+    /// </summary>
+    /// <remarks>
+    /// L'identifiant TMDB seul est ambigu : films et séries sont numérotés séparément, et le
+    /// 1399 d'une série n'est pas le 1399 d'un film. Une demande à Seerr a besoin des deux.
+    /// Un instantané antérieur n'en porte pas : aucun bouton jusqu'au prochain recalcul.
+    /// </remarks>
+    public string? MediaType { get; set; }
+
+    /// <summary>
     /// Obtient une valeur indiquant si le titre existe dans la bibliothèque locale.
     /// </summary>
     public bool IsInLibrary => ItemId != Guid.Empty;

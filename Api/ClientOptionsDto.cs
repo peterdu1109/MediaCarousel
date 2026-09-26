@@ -111,4 +111,14 @@ public sealed class ClientOptionsDto
     /// celui-ci ne sert qu'à décider si le bouton de personnalisation est proposé.
     /// </remarks>
     public bool AllowUserPreferences { get; set; }
+
+    /// <summary>
+    /// Obtient ou définit une valeur indiquant si les titres absents du Top mondial peuvent
+    /// être demandés à Seerr.
+    /// </summary>
+    /// <remarks>
+    /// Vrai seulement si l'intégration est activée ET complète — adresse et clé. Ni l'une ni
+    /// l'autre ne sont publiées : les demandes passent par le serveur.
+    /// </remarks>
+    public bool SeerrRequests { get; set; }
 }

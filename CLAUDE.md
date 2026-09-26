@@ -68,6 +68,7 @@ MediaCarousel/
 │   ├── ClientOptionsDto.cs            # Réglages d'affichage, lisibles sans droits admin
 │   ├── AssetsController.cs            # Sert media-carousel.js depuis les ressources
 │   ├── UserPreferencesController.cs   # GET/POST/DELETE des choix propres à un compte
+│   ├── SeerrController.cs             # POST Seerr/Status, Seerr/Request ; Seerr/Test (admin)
 │   └── PosterController.cs            # Relaie et met en cache les affiches TMDB
 ├── Configuration/
 │   ├── PluginConfiguration.cs         # Modèle de config + enums
@@ -109,6 +110,8 @@ MediaCarousel/
 │   ├── RefreshHealth.cs                     # Bilan du dernier recalcul : durée, échecs
 │   ├── UserPreferenceStore.cs               # Persistance des préférences par compte
 │   ├── UserPreferenceRules.cs               # Validation et fusion de ces préférences
+│   ├── SeerrRules.cs                        # Seerr sans Jellyfin : comptes, statuts, demande
+│   ├── SeerrClient.cs                       # Appels à Seerr, caches des comptes et des états
 │   ├── ScriptTag.cs                         # Balise script : insertion, retrait, migration
 │   └── IndexHtmlTransformer.cs              # Callback FileTransformation (réflexion)
 └── Web/
@@ -193,6 +196,39 @@ deux indépendamment), IMDb, et titre normalisé + année en dernier recours.
 
 Sur-échantillonnage `size × 5` quand `GlobalTopLibraryOnly` est actif, pour remplir les places
 après filtrage.
+
+### Demandes à Seerr
+
+Un titre du Top mondial absent de la bibliothèque porte un bouton « Demander », qui passe la
+demande à Seerr (Jellyseerr, Overseerr et leur successeur partagent l'API `/api/v1`). Le
+fonctionnement et les libellés sont ceux de Jellyfin Enhanced : un serveur qui l'utilise déjà
+retrouve les mêmes mots pour le même geste.
+
+- **La clé d'administration ne quitte jamais le serveur.** Le navigateur parle à
+  `SeerrController`, qui parle à Seerr. Chaque demande part avec `X-Api-User`, l'identifiant du
+  compte Seerr lié au compte Jellyfin (`jellyfinUserId`, sans tirets) : Seerr applique alors les
+  droits et les quotas de l'utilisateur, pas ceux de l'administrateur.
+- **Le serveur ne relaie que ce qu'il a publié.** `Status` et `Request` n'acceptent que les
+  titres absents de l'instantané Global. Sans cette liste blanche, tout compte connecté pourrait
+  faire demander n'importe quel titre au nom de n'importe qui — ou sonder Seerr à travers Jellyfin.
+- **Le type de média fait partie de l'identité.** TMDB numérote films et séries séparément :
+  `TopListEntry.MediaType` (`movie` ou `tv`) accompagne l'identifiant. Un instantané antérieur n'en
+  porte pas, donc pas de bouton jusqu'au recalcul suivant.
+- **Caches** : association des comptes 10 min (1 min si le compte est introuvable, le temps
+  qu'un administrateur l'importe), état d'un titre 1 min. Les états sont lus par lots de 20.
+- **Réponses de `Request`** : 200 avec l'état ; 404 compte absent de Seerr ; 403 droits
+  insuffisants ; 502 Seerr injoignable ou incohérent (le corps précise `offline` ou `error`) ; 503
+  intégration désactivée. Le 403 est sans danger : le seul gestionnaire d'échec de jellyfin-web,
+  `appRouter.onRequestFail` (lu dans le bundle 12.1), ne réagit qu'à un 403 portant
+  `X-Application-Error-Code: ParentalControl`, qu'il renvoie à l'écran de connexion.
+
+Côté client, le bouton est une **surimpression dans `.cardScalable`**, jamais un élément sous la
+carte : la carte garde la hauteur de ses voisines, et la rangée celle des rangées natives. Il
+reste masqué tant que l'état n'est pas connu. Un état illisible masque le bouton, sans afficher
+d'erreur : l'accueil est la page la plus vue du serveur, une panne de Seerr ne doit pas le couvrir
+de rouge. Une erreur ne s'affiche qu'en réponse à un clic, sur le bouton concerné. Une erreur
+passagère (« Seerr hors ligne », « Erreur ») rend la main au bout de 4 s ; « Utilisateur non
+trouvé » et « Pas de permission » restent affichés, puisqu'un nouvel essai échouerait pareil.
 
 ### Jamais vu et de retour cette semaine
 
@@ -653,6 +689,10 @@ si l'administrateur supprime la collection, elle est recréée au recalcul suiva
   chaque appelant — visibilité, contrôle parental — un compte voyait ceux du précédent pendant
   cinq minutes, et ses réglages personnels jusqu'au rechargement. `scopeMemoryToUser()` oublie
   tout quand le compte change, et le compte fait partie de la clé de `loadCached`.
+- **Le bouton Seerr est `aria-disabled`, jamais `disabled`.** Un bouton désactivé perd le focus :
+  la télécommande qui vient de le presser ne serait plus nulle part. Le clic sur un bouton inerte
+  est ignoré par le script. Dans le banc, Playwright refuse de cliquer un bouton `aria-disabled` :
+  le test d'un clic ignoré passe `{ force: true }`.
 - **Le script n'abandonne jamais l'attente.** Il observe la page dès son chargement, connecté ou
   non ; `render()` attend lui-même qu'un compte soit connecté. L'ancienne attente cessait au bout
   de trente secondes : quiconque passait plus longtemps sur l'écran de connexion n'avait aucune
@@ -756,7 +796,7 @@ dotnet run --project tests/ScriptTag.Tests -c Release
 cd tests/browser && npm install && node home-rows.test.mjs && node config-page.test.mjs
 ```
 
-Trois suites sans framework — 349 assertions — exécutées en CI avant la publication ; voir
+Trois suites sans framework — 405 assertions — exécutées en CI avant la publication ; voir
 `tests/README.md`. L'une charge un extrait des règles d'ElegantFin **après** les nôtres pour
 vérifier que la cohabitation tient.
 Les deux suites navigateur chargent le vrai `media-carousel.js` et le vrai `configPage.html`
@@ -813,11 +853,16 @@ L'avertissement de doublon vit **hors des onglets** : il compare `GlobalRowTitle
 Affichage) à `GlobalCollectionName` (onglet Rafraîchissement), deux onglets différents. Le placer
 dans l'un des deux le rendrait invisible depuis l'autre.
 
+Le groupe Seerr vit **dans** celui du Top mondial, sans `data-toggles`. `applyToggle` réactive
+tous les champs d'un groupe : rallumer le Top mondial réactiverait les champs d'un Seerr resté
+décoché. Et `refreshTabStates` compte les `data-toggles` d'un onglet : un Seerr coché sous un Top
+mondial éteint ferait croire l'onglet actif. `applySeerrToggle` gère donc les deux cases.
+
 **`pageshow` revient à chaque retour sur la page** : jellyfin-web réaffiche alors la même page,
 gardée en cache, sans relancer son script. Les écouteurs se posent une seule fois, sous la garde
 `wired`. Seul l'état relu de la configuration se réapplique à chaque affichage (`applyToggles`,
-`renderRowOrder`). Un écouteur anonyme posé à chaque affichage s'ajoute aux précédents : c'est
-ainsi que « Descendre » faisait reculer une rangée de deux places.
+`applySeerrToggle`, `renderRowOrder`). Un écouteur anonyme posé à chaque affichage s'ajoute aux
+précédents : c'est ainsi que « Descendre » faisait reculer une rangée de deux places.
 
 ## Ajouter une source de tendances
 

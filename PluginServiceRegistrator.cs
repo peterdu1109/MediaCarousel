@@ -31,6 +31,9 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         // compte : elles vivent en mémoire, donc le service doit être unique.
         serviceCollection.AddSingleton<UserPreferenceStore>();
 
+        // Garde en mémoire l'association des comptes et l'état des titres : un singleton.
+        serviceCollection.AddSingleton<SeerrClient>();
+
         // `GetDefaultTriggers()` n'est lu qu'à la première installation de la tâche : sans ce
         // service, le réglage « intervalle de recalcul » n'avait plus aucun effet ensuite.
         serviceCollection.AddHostedService<RefreshScheduleSynchronizer>();

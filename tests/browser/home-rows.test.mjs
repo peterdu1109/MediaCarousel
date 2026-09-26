@@ -1414,6 +1414,223 @@ const exempleApplique = await doc.evaluate(() => ({
 }));
 await doc.close();
 
+// ---------------------------------------------------------------------------
+// SEERR — le bouton « Demander » des titres absents du Top mondial.
+//
+// Le faux serveur repond comme SeerrController : l'etat d'un lot de titres sous la forme
+// { MediaType, TmdbId, State, Error }, et une demande refusee REJETTE avec la reponse,
+// comme le fait `ApiClient.ajax` sur un statut d'erreur.
+// ---------------------------------------------------------------------------
+const serveurSeerr = () => {
+  window.__appels = [];
+  window.__clicsDocument = 0;
+  document.addEventListener('click', () => { window.__clicsDocument++; });
+  const absent = (rang, nom, type, tmdb) =>
+    ({ Rank: rang, Name: nom, ProductionYear: 2024, TmdbId: tmdb, MediaType: type, PosterUrl: null, Item: null });
+  window.__global = window.__global || [
+    absent(1, 'Inception', 'movie', '27205'),
+    {
+      Rank: 2, Name: 'Present', TmdbId: '603', MediaType: 'movie',
+      Item: { Id: 'p1', Name: 'Present', ServerId: 'server-1', Type: 'Movie', IsFolder: false, ImageTags: { Primary: 't' } }
+    },
+    absent(3, 'Game of Thrones', 'tv', '1399'),
+    // Classement calcule avant cette version : pas de type, donc pas de bouton.
+    absent(4, 'Ancien classement', null, '680'),
+    absent(5, 'Chernobyl', 'tv', '87108'),
+    absent(6, 'Fight Club', 'movie', '550')
+  ];
+  // `null` : Seerr n'a pas pu repondre pour ce titre.
+  window.__etats = window.__etats || { 'movie:27205': 'request', 'tv:1399': 'pending', 'tv:87108': 'available', 'movie:550': null };
+  window.ApiClient = {
+    getCurrentUserId: () => 'user-1',
+    serverId: () => 'server-1',
+    getUrl: (p, q) => p + '?' + new URLSearchParams(q || {}).toString(),
+    getImageUrl: (id) => 'img://' + id,
+    getJSON: (url) => {
+      if (url.includes('ClientOptions')) {
+        return Promise.resolve({
+          EnableHomeRows: true, ShowGlobalRow: true, GlobalRowTitle: 'Top 10 mondial', GlobalRowSize: 30,
+          RankNumberScale: 100, HighlightColor: '#775BF4', SeerrRequests: window.__seerr !== false
+        });
+      }
+      if (url.includes('Top/Global')) { return Promise.resolve({ Items: window.__global }); }
+      return Promise.resolve({ Items: [] });
+    },
+    ajax: (req) => {
+      const route = req.url.split('?')[0];
+      const corps = req.data ? JSON.parse(req.data) : null;
+      window.__appels.push({ type: req.type, route, corps, dataType: req.dataType });
+      if (route === 'MediaCarousel/Seerr/Status') {
+        const reponse = corps.map((t) => {
+          const etat = window.__etats[t.MediaType + ':' + t.TmdbId];
+          return { MediaType: t.MediaType, TmdbId: t.TmdbId, State: etat || null, Error: etat ? null : 'offline' };
+        });
+        return new Promise((resolve) => setTimeout(() => resolve(reponse), window.__lenteur || 0));
+      }
+      if (route === 'MediaCarousel/Seerr/Request') {
+        return new Promise((resolve, reject) => setTimeout(() => {
+          if (window.__refus === 404) { reject({ status: 404 }); return; }
+          if (window.__refus === 'hors-ligne') {
+            reject({ status: 502, json: () => Promise.resolve({ Error: 'offline' }) });
+            return;
+          }
+          resolve({ MediaType: corps.MediaType, TmdbId: corps.TmdbId, State: 'pending', Error: null });
+        }, 150));
+      }
+      return Promise.resolve({});
+    }
+  };
+};
+
+async function pageSeerr(reglages = {}) {
+  const vue = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  vue.on('pageerror', e => errors.push('pageerror(seerr): ' + e.message));
+  await vue.goto('file://' + path.join(here, 'home.html'));
+  await vue.evaluate((r) => { Object.assign(window, r); }, reglages);
+  await vue.evaluate(serveurSeerr);
+  await vue.evaluate(script);
+  await vue.waitForSelector('.mc-ranked');
+  return vue;
+}
+
+const etatSeerr = (tmdb, etat) =>
+  `document.querySelector('.mc-seerr[data-tmdb="${tmdb}"]')`
+  + ` && document.querySelector('.mc-seerr[data-tmdb="${tmdb}"]').getAttribute('data-state') === '${etat}'`;
+
+const seerr = await pageSeerr();
+await seerr.waitForFunction(etatSeerr('27205', 'request'));
+const seerrVu = await seerr.evaluate(() => {
+  const bouton = (tmdb) => document.querySelector('.mc-seerr[data-tmdb="' + tmdb + '"]');
+  const vu = (b) => b && {
+    etat: b.getAttribute('data-state'), texte: b.textContent, inerte: b.getAttribute('aria-disabled'),
+    visible: getComputedStyle(b).visibility, fond: getComputedStyle(b).backgroundColor,
+    nom: b.getAttribute('aria-label')
+  };
+  const carteAbsente = bouton('27205').closest('.card');
+  const affiche = carteAbsente.querySelector('.cardScalable').getBoundingClientRect();
+  const zone = bouton('27205').getBoundingClientRect();
+  const statuts = window.__appels.filter(a => a.route === 'MediaCarousel/Seerr/Status');
+  return {
+    boutons: document.querySelectorAll('.mc-seerr').length,
+    surPresent: document.querySelectorAll('.mc-ranked:not(.mc-unavailable) .mc-seerr').length,
+    ancien: document.querySelectorAll('.mc-seerr[data-tmdb="680"]').length,
+    demander: vu(bouton('27205')),
+    attente: vu(bouton('1399')),
+    disponible: vu(bouton('87108')),
+    illisible: vu(bouton('550')),
+    dansAffiche: bouton('27205').parentElement.classList.contains('cardScalable')
+      && zone.left >= affiche.left && zone.right <= affiche.right
+      && zone.top >= affiche.top && zone.bottom <= affiche.bottom,
+    hauteurAbsente: carteAbsente.getBoundingClientRect().height,
+    hauteurPresente: document.querySelector('.mc-ranked:not(.mc-unavailable)').getBoundingClientRect().height,
+    hauteurRangee: document.querySelector('.mc-row').getBoundingClientRect().height,
+    lots: statuts.map(a => a.corps.length),
+    json: statuts.length > 0 && statuts.every(a => a.dataType === 'json' && a.type === 'POST'),
+    identifiantsNumeriques: statuts.length > 0 && statuts[0].corps.every(t => typeof t.TmdbId === 'number')
+  };
+});
+await seerr.screenshot({ path: path.join(process.env.MC_SHOTS || here, 'seerr-rangee.png'), clip: { x: 0, y: 0, width: 1280, height: 520 } });
+
+// Clic : « Demande en cours » le temps de la requete, puis l'etat rendu par Seerr.
+await seerr.click('.mc-seerr[data-tmdb="27205"]');
+const pendantDemande = await seerr.evaluate(() => document.querySelector('.mc-seerr[data-tmdb="27205"]').textContent);
+await seerr.waitForFunction(etatSeerr('27205', 'pending'));
+const apresDemande = await seerr.evaluate(() => {
+  const demandes = window.__appels.filter(a => a.route === 'MediaCarousel/Seerr/Request');
+  return {
+    demandes: demandes.length,
+    corps: demandes[0] && demandes[0].corps,
+    texte: document.querySelector('.mc-seerr[data-tmdb="27205"]').textContent,
+    clicsDocument: window.__clicsDocument,
+    hash: location.hash
+  };
+});
+// Un bouton qui n'est plus « Demander » n'envoie plus rien. `force` : Playwright refuse
+// de cliquer un bouton `aria-disabled`, une souris ou un doigt ne s'en privent pas.
+await seerr.click('.mc-seerr[data-tmdb="27205"]', { force: true });
+await seerr.click('.mc-seerr[data-tmdb="1399"]', { force: true });
+await seerr.waitForTimeout(300);
+const demandesInertes = await seerr.evaluate(() =>
+  window.__appels.filter(a => a.route === 'MediaCarousel/Seerr/Request').length);
+await seerr.close();
+
+// Clavier et telecommande : Entree sur le bouton, et le focus ne s'evanouit pas.
+const clavier = await pageSeerr();
+await clavier.waitForFunction(etatSeerr('27205', 'request'));
+await clavier.focus('.mc-seerr[data-tmdb="27205"]');
+await clavier.keyboard.press('Enter');
+await clavier.waitForFunction(etatSeerr('27205', 'pending'));
+const auClavier = await clavier.evaluate(() => {
+  const bouton = document.querySelector('.mc-seerr[data-tmdb="27205"]');
+  return {
+    demandes: window.__appels.filter(a => a.route === 'MediaCarousel/Seerr/Request').length,
+    focus: document.activeElement === bouton,
+    anneau: getComputedStyle(bouton).boxShadow
+  };
+});
+await clavier.close();
+
+// Refus : un compte absent de Seerr le reste ; une panne passe.
+const inconnu = await pageSeerr({ __refus: 404 });
+const panne = await pageSeerr({ __refus: 'hors-ligne' });
+for (const vue of [inconnu, panne]) {
+  await vue.waitForFunction(etatSeerr('27205', 'request'));
+  await vue.click('.mc-seerr[data-tmdb="27205"]');
+}
+await inconnu.waitForFunction(etatSeerr('27205', 'user-not-found'));
+await panne.waitForFunction(etatSeerr('27205', 'offline'));
+const refus = {
+  inconnu: await inconnu.evaluate(() => {
+    const b = document.querySelector('.mc-seerr[data-tmdb="27205"]');
+    return { texte: b.textContent, titre: b.getAttribute('title'), inerte: b.getAttribute('aria-disabled') };
+  }),
+  panne: await panne.evaluate(() => document.querySelector('.mc-seerr[data-tmdb="27205"]').textContent)
+};
+await panne.waitForTimeout(4300);
+refus.inconnuEnsuite = await inconnu.evaluate(() =>
+  document.querySelector('.mc-seerr[data-tmdb="27205"]').getAttribute('data-state'));
+refus.panneEnsuite = await panne.evaluate(() =>
+  document.querySelector('.mc-seerr[data-tmdb="27205"]').getAttribute('data-state'));
+await inconnu.close();
+await panne.close();
+
+// Integration non configuree : ni bouton, ni appel — et la rangee a la meme hauteur.
+const sansSeerr = await pageSeerr({ __seerr: false });
+await sansSeerr.waitForTimeout(300);
+const sansSeerrVu = await sansSeerr.evaluate(() => ({
+  boutons: document.querySelectorAll('.mc-seerr').length,
+  appels: window.__appels.length,
+  hauteurRangee: document.querySelector('.mc-row').getBoundingClientRect().height
+}));
+await sansSeerr.close();
+
+// Plus de titres qu'un lot n'en accepte.
+const vingtCinq = Array.from({ length: 25 }, (_, i) =>
+  ({ Rank: i + 1, Name: 'Absent ' + i, TmdbId: String(1000 + i), MediaType: 'movie', Item: null }));
+const lot = await pageSeerr({
+  __global: vingtCinq,
+  __etats: Object.fromEntries(vingtCinq.map(e => ['movie:' + e.TmdbId, 'request']))
+});
+await lot.waitForFunction(() => document.querySelectorAll('.mc-seerr[data-state="request"]').length === 25);
+const lotsDecoupes = await lot.evaluate(() =>
+  window.__appels.filter(a => a.route === 'MediaCarousel/Seerr/Status').map(a => a.corps.length));
+await lot.close();
+
+// L'accueil est reconstruit a chaque affichage : l'etat deja connu revient aussitot,
+// sans attendre une reponse de Seerr ralentie a trois secondes.
+const memoire = await pageSeerr();
+await memoire.waitForFunction(etatSeerr('27205', 'request'));
+await memoire.evaluate(() => {
+  window.__lenteur = 3000;
+  document.querySelectorAll('.mc-row').forEach(r => r.remove());
+});
+// `attached` : par defaut, Playwright attend qu'un element soit VISIBLE — donc, ici, que
+// Seerr ait repondu. C'est l'etat a l'insertion qu'il faut lire.
+await memoire.waitForSelector('.mc-seerr', { state: 'attached' });
+const etatAuRetour = await memoire.evaluate(() =>
+  document.querySelector('.mc-seerr[data-tmdb="27205"]').getAttribute('data-state'));
+await memoire.close();
+
 await browser.close();
 
 let failed = 0;
@@ -1739,6 +1956,55 @@ check('DOC: l exemple du README garde les affiches a la taille native',
   Math.abs(exempleApplique.afficheClassee - exempleApplique.afficheNative) < 0.5, exempleApplique);
 check('DOC: l exemple du README laisse le chiffre visible',
   exempleApplique.contourAuRepos !== 'none', exempleApplique);
+
+check('SEERR: un bouton sur chaque titre absent qui a un type et un identifiant TMDB',
+  seerrVu.boutons === 4, seerrVu.boutons);
+check('SEERR: aucun sur un titre de la bibliotheque', seerrVu.surPresent === 0, seerrVu.surPresent);
+check('SEERR: aucun sur un classement calcule avant le type de media', seerrVu.ancien === 0, seerrVu.ancien);
+check('SEERR: les etats sont lus en un seul lot, POST et JSON',
+  JSON.stringify(seerrVu.lots) === '[4]' && seerrVu.json === true, seerrVu);
+check('SEERR: les identifiants partent en nombres, comme le serveur les attend',
+  seerrVu.identifiantsNumeriques === true, seerrVu.identifiantsNumeriques);
+check('SEERR: « Demander » est actif, a la couleur d accentuation',
+  seerrVu.demander.texte === 'Demander' && seerrVu.demander.inerte === 'false'
+    && seerrVu.demander.fond === 'rgb(119, 91, 244)', seerrVu.demander);
+check('SEERR: un titre deja demande attend l approbation, en ambre, sans action',
+  seerrVu.attente.texte === 'En attente d\'approbation' && seerrVu.attente.inerte === 'true'
+    && seerrVu.attente.fond === 'rgb(151, 90, 22)', seerrVu.attente);
+check('SEERR: un titre disponible le dit, en vert',
+  seerrVu.disponible.texte === 'Disponible' && seerrVu.disponible.fond === 'rgb(39, 103, 73)', seerrVu.disponible);
+check('SEERR: un etat illisible masque le bouton plutot que d afficher une erreur',
+  seerrVu.illisible.etat === 'loading' && seerrVu.illisible.visible === 'hidden', seerrVu.illisible);
+check('SEERR: un lecteur d ecran entend le titre avec le libelle',
+  seerrVu.demander.nom === 'Demander : Inception', seerrVu.demander.nom);
+check('SEERR: le bouton est pose dans l affiche', seerrVu.dansAffiche === true, seerrVu.dansAffiche);
+check('SEERR: la carte garde la hauteur d une carte de la bibliotheque',
+  Math.abs(seerrVu.hauteurAbsente - seerrVu.hauteurPresente) < 0.5, [seerrVu.hauteurAbsente, seerrVu.hauteurPresente]);
+check('SEERR: la rangee garde sa hauteur, bouton ou pas',
+  Math.abs(seerrVu.hauteurRangee - sansSeerrVu.hauteurRangee) < 0.5, [seerrVu.hauteurRangee, sansSeerrVu.hauteurRangee]);
+check('SEERR: sans integration configuree, ni bouton ni appel',
+  sansSeerrVu.boutons === 0 && sansSeerrVu.appels === 0, sansSeerrVu);
+check('SEERR: pendant la demande, le bouton le dit', pendantDemande === 'Demande en cours', pendantDemande);
+check('SEERR: la demande part avec le type et l identifiant',
+  apresDemande.demandes === 1 && apresDemande.corps.MediaType === 'movie' && apresDemande.corps.TmdbId === 27205,
+  apresDemande);
+check('SEERR: apres la demande, le titre attend l approbation',
+  apresDemande.texte === 'En attente d\'approbation', apresDemande.texte);
+check('SEERR: le clic ne remonte pas a jellyfin-web et ne navigue pas',
+  apresDemande.clicsDocument === 0 && apresDemande.hash === '', apresDemande);
+check('SEERR: un bouton qui n est plus « Demander » n envoie rien', demandesInertes === 1, demandesInertes);
+check('SEERR: au clavier, Entree demande le titre', auClavier.demandes === 1, auClavier);
+check('SEERR: et le focus reste sur le bouton, pour la telecommande', auClavier.focus === true, auClavier);
+check('SEERR: le focus clavier est entoure', auClavier.anneau.indexOf('rgb(255, 255, 255)') !== -1, auClavier.anneau);
+check('SEERR: un compte absent de Seerr le lit sur le bouton, avec l explication',
+  refus.inconnu.texte === 'Utilisateur non trouvé' && !!refus.inconnu.titre && refus.inconnu.inerte === 'true', refus);
+check('SEERR: ce refus persiste, puisqu un nouvel essai echouerait pareil',
+  refus.inconnuEnsuite === 'user-not-found', refus.inconnuEnsuite);
+check('SEERR: une panne de Seerr le dit', refus.panne === 'Seerr hors ligne', refus.panne);
+check('SEERR: puis rend la main', refus.panneEnsuite === 'request', refus.panneEnsuite);
+check('SEERR: plus de 20 titres partent en plusieurs lots',
+  JSON.stringify(lotsDecoupes) === '[20,5]', lotsDecoupes);
+check('SEERR: un retour sur l accueil montre aussitot l etat connu', etatAuRetour === 'request', etatAuRetour);
 
 check('aucune erreur js', errors.length === 0, errors);
 

@@ -180,7 +180,8 @@ public class TopListsController : ControllerBase
             RowOrder = config.RowOrder,
             ManageNativeSections = config.ManageNativeSections,
             HideNativeSections = config.HideNativeHomeSections,
-            AllowUserPreferences = config.AllowUserPreferences
+            AllowUserPreferences = config.AllowUserPreferences,
+            SeerrRequests = SeerrController.IsConfigured(config)
         };
 
         // Les réglages de l'administrateur ne sont qu'un défaut dès que la personnalisation
@@ -267,7 +268,8 @@ public class TopListsController : ControllerBase
                 ImdbId = entry.ImdbId,
                 // Relayée par le plugin : sans cela, chaque navigateur irait chercher
                 // l'affiche chez TMDB et lui livrerait son adresse IP.
-                PosterUrl = PosterProxy.ToLocalUrl(entry.PosterUrl)
+                PosterUrl = PosterProxy.ToLocalUrl(entry.PosterUrl),
+                MediaType = entry.MediaType
             };
 
             items.Add(dto);

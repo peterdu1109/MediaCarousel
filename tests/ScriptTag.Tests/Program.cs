@@ -495,5 +495,49 @@ UserPreferenceRules.Apply(avecAncienneEchelle, new UserRowPreferences { RankNumb
 Check("PREFS: un 150 deja enregistre est ramene au plafond du rendu",
     avecAncienneEchelle.RankNumberScale == 100);
 
+// SEERR — la regle d'association des comptes, la lecture des statuts et la demande.
+var jellyfinId = Guid.Parse("22ae9f6f-970a-4447-a5f7-02ae3fbeb896");
+Check("SEERR: l'identifiant Jellyfin perd ses tirets, comme Seerr l'enregistre",
+    SeerrRules.NormalizeJellyfinUserId(jellyfinId) == "22ae9f6f970a4447a5f702ae3fbeb896");
+const string comptesSeerr = """
+    {"pageInfo":{"results":3},"results":[
+      {"id":1,"jellyfinUserId":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+      {"id":2,"displayName":"compte local, sans lien Jellyfin"},
+      {"id":7,"jellyfinUserId":"22AE9F6F970A4447A5F702AE3FBEB896"}]}
+    """;
+Check("SEERR: le compte lie est retrouve, casse ignoree",
+    SeerrRules.FindSeerrUserId(comptesSeerr, jellyfinId) == 7);
+Check("SEERR: un identifiant enregistre avec ses tirets est retrouve aussi",
+    SeerrRules.FindSeerrUserId("""{"results":[{"id":9,"jellyfinUserId":"22ae9f6f-970a-4447-a5f7-02ae3fbeb896"}]}""", jellyfinId) == 9);
+Check("SEERR: un compte absent de Seerr ne correspond a personne",
+    SeerrRules.FindSeerrUserId(comptesSeerr, Guid.Parse("11111111-2222-3333-4444-555555555555")) is null);
+Check("SEERR: une reponse sans liste de comptes ne correspond a personne",
+    SeerrRules.FindSeerrUserId("""{"message":"Unauthorized"}""", jellyfinId) is null);
+Check("SEERR: un titre jamais demande n'a pas de mediaInfo, son statut vaut 1",
+    SeerrRules.ReadMediaStatus("""{"id":27205,"title":"Inception"}""") == 1);
+Check("SEERR: le statut est lu dans mediaInfo",
+    SeerrRules.ReadMediaStatus("""{"id":1399,"mediaInfo":{"status":5}}""") == 5);
+Check("SEERR: les sept statuts de Seerr donnent les etats attendus",
+    SeerrRules.ToState(1) == "request" && SeerrRules.ToState(2) == "pending"
+    && SeerrRules.ToState(3) == "processing" && SeerrRules.ToState(4) == "partial"
+    && SeerrRules.ToState(5) == "available" && SeerrRules.ToState(6) == "blocked"
+    && SeerrRules.ToState(7) == "request");
+Check("SEERR: une demande a approuver attend un administrateur",
+    SeerrRules.ReadStateAfterRequest("""{"id":12,"status":1}""") == "pending");
+Check("SEERR: une demande approuvee d'office est en cours d'acquisition",
+    SeerrRules.ReadStateAfterRequest("""{"id":13,"status":2}""") == "processing");
+Check("SEERR: un film se demande sans saisons",
+    SeerrRules.BuildRequestBody("movie", 27205) == """{"mediaType":"movie","mediaId":27205}""");
+Check("SEERR: une serie se demande en entier, comme la demande rapide de Jellyfin Enhanced",
+    SeerrRules.BuildRequestBody("tv", 1399) == """{"mediaType":"tv","mediaId":1399,"seasons":"all"}""");
+Check("SEERR: seuls movie et tv sont des types de media",
+    SeerrRules.IsMediaType("movie") && SeerrRules.IsMediaType("tv")
+    && !SeerrRules.IsMediaType("Movie") && !SeerrRules.IsMediaType("series") && !SeerrRules.IsMediaType(null));
+Check("SEERR: l'adresse perd sa barre finale",
+    SeerrRules.NormalizeBaseUrl(" http://seerr.local:5055/ ") == "http://seerr.local:5055");
+Check("SEERR: seules les adresses http et https sont acceptees",
+    SeerrRules.NormalizeBaseUrl("ftp://seerr") is null && SeerrRules.NormalizeBaseUrl("javascript:alert(1)") is null
+    && SeerrRules.NormalizeBaseUrl("") is null && SeerrRules.NormalizeBaseUrl(null) is null);
+
 Console.WriteLine(failed == 0 ? "\nTous les tests passent." : $"\n{failed} echec(s).");
 return failed;

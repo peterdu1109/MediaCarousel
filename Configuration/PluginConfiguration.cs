@@ -382,6 +382,28 @@ public class PluginConfiguration : BasePluginConfiguration
     public string HighlightColor { get; set; } = "#775BF4";
 
     /// <summary>
+    /// Obtient ou définit une valeur indiquant si un titre du Top mondial absent de la
+    /// bibliothèque peut être demandé à Seerr depuis son affiche.
+    /// </summary>
+    /// <remarks>
+    /// Seerr désigne Jellyseerr, Overseerr et leur successeur, qui partagent la même API. Les
+    /// titres absents ne s'affichent que si « ne garder que les titres présents dans la
+    /// bibliothèque » est décoché. Chaque demande part au nom du compte Seerr de
+    /// l'utilisateur, qui doit donc exister dans Seerr — importé depuis Jellyfin.
+    /// </remarks>
+    public bool EnableSeerrRequests { get; set; }
+
+    /// <summary>
+    /// Obtient ou définit l'adresse de Seerr, telle que le serveur Jellyfin l'atteint.
+    /// </summary>
+    public string SeerrUrl { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Obtient ou définit la clé d'API de Seerr. Elle n'est jamais transmise aux navigateurs.
+    /// </summary>
+    public string SeerrApiKey { get; set; } = string.Empty;
+
+    /// <summary>
     /// Obtient ou définit une valeur indiquant si chaque compte peut régler ses propres rangées.
     /// </summary>
     /// <remarks>
