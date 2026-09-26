@@ -284,6 +284,19 @@ const failedRun = await page.evaluate(() => {
   };
 });
 
+// RETOUR — jellyfin-web reaffiche la meme page, gardee en cache, quand on y revient :
+// `pageshow` repart. Chaque ecouteur pose a l'affichage l'etait une fois de plus, et
+// « Descendre » faisait reculer la rangee de deux places.
+await page.evaluate(() => {
+  document.querySelector('#mediaCarouselConfigPage').dispatchEvent(new Event('pageshow'));
+});
+await page.waitForTimeout(300);
+const ordreRangees = () => page.evaluate(() =>
+  Array.from(document.querySelectorAll('#mcRowOrder .mcCfg-order-name')).map(e => e.textContent));
+const ordreAvantClic = await ordreRangees();
+await page.evaluate(() => document.querySelector('#mcRowOrder li .mcCfg-order-down').click());
+const ordreApresClic = await ordreRangees();
+
 await browser.close();
 
 let failed = 0;
@@ -406,6 +419,9 @@ check('enregistrement : champ replie sous Reglages avances conserve',
 check('retour utilisateur apres enregistrement', feedbackAfterSave.startsWith('Réglages enregistrés'), feedbackAfterSave);
 check('recalcul declenche une seule requete', refresh.calls === 1, refresh.calls);
 check('retour utilisateur apres recalcul', refresh.feedback.startsWith('Recalcul lancé en arrière-plan'), refresh.feedback);
+check('RETOUR: apres un retour sur la page, « Descendre » ne recule la rangee que d une place',
+  ordreApresClic[0] === ordreAvantClic[1] && ordreApresClic[1] === ordreAvantClic[0]
+    && ordreApresClic[2] === ordreAvantClic[2], [ordreAvantClic.slice(0, 3), ordreApresClic.slice(0, 3)]);
 check('aucune erreur js', errors.length === 0, errors);
 
 console.log(failed === 0 ? '\nTous les tests passent.' : '\n' + failed + ' echec(s).');

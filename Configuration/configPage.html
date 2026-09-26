@@ -780,6 +780,7 @@
                 ];
 
                 var status = null;
+                var wired = false;
 
                 function field(id) {
                     return page.querySelector('#' + id);
@@ -1238,12 +1239,19 @@
                     }
                 }
 
+                function applyToggles() {
+                    var toggles = page.querySelectorAll('[data-toggles]');
+
+                    for (var i = 0; i < toggles.length; i++) {
+                        applyToggle(toggles[i]);
+                    }
+                }
+
                 function wireToggles() {
                     var toggles = page.querySelectorAll('[data-toggles]');
 
                     for (var i = 0; i < toggles.length; i++) {
                         (function (input) {
-                            applyToggle(input);
                             input.addEventListener('change', function () {
                                 applyToggle(input);
                                 refreshTabStates();
@@ -1280,10 +1288,19 @@
                         });
                         lists.forEach(function (id) { field(id).value = (config[id] || []).join('\n'); });
 
-                        wireTabs();
-                        wireToggles();
-                        wireRowOrder();
-                        field('ManageNativeSections').addEventListener('change', renderRowOrder);
+                        // `pageshow` revient à chaque retour sur la page : jellyfin-web réaffiche
+                        // alors la même page, gardée en cache. Les écouteurs ne se posent qu'une
+                        // fois — posés deux fois, « Descendre » faisait reculer une rangée de deux
+                        // places. Seul l'état, relu de la configuration, se réapplique.
+                        if (!wired) {
+                            wired = true;
+                            wireTabs();
+                            wireToggles();
+                            wireRowOrder();
+                            field('ManageNativeSections').addEventListener('change', renderRowOrder);
+                        }
+
+                        applyToggles();
                         renderRowOrder();
                         refreshTabStates();
                         refreshDuplicateAlert();

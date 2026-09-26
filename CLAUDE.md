@@ -711,7 +711,7 @@ dotnet run --project tests/ScriptTag.Tests -c Release
 cd tests/browser && npm install && node home-rows.test.mjs && node config-page.test.mjs
 ```
 
-Trois suites sans framework — 348 assertions — exécutées en CI avant la publication ; voir
+Trois suites sans framework — 349 assertions — exécutées en CI avant la publication ; voir
 `tests/README.md`. L'une charge un extrait des règles d'ElegantFin **après** les nôtres pour
 vérifier que la cohabitation tient.
 Les deux suites navigateur chargent le vrai `media-carousel.js` et le vrai `configPage.html`
@@ -756,6 +756,12 @@ deux mécanismes restent ainsi indépendants.
 L'avertissement de doublon vit **hors des onglets** : il compare `GlobalRowTitle` (onglet
 Affichage) à `GlobalCollectionName` (onglet Rafraîchissement), deux onglets différents. Le placer
 dans l'un des deux le rendrait invisible depuis l'autre.
+
+**`pageshow` revient à chaque retour sur la page** : jellyfin-web réaffiche alors la même page,
+gardée en cache, sans relancer son script. Les écouteurs se posent une seule fois, sous la garde
+`wired`. Seul l'état relu de la configuration se réapplique à chaque affichage (`applyToggles`,
+`renderRowOrder`). Un écouteur anonyme posé à chaque affichage s'ajoute aux précédents : c'est
+ainsi que « Descendre » faisait reculer une rangée de deux places.
 
 ## Ajouter une source de tendances
 
