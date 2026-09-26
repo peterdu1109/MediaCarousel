@@ -41,6 +41,21 @@ public static class UserPreferenceRules
         "native:nextup", "native:latestmedia"
     };
 
+    /// <summary>
+    /// Hauteur minimale du chiffre, en pourcentage de l'affiche.
+    /// </summary>
+    /// <remarks>
+    /// Avec <see cref="MaxRankScale"/>, ce sont les bornes du rendu — <c>normalizeRankScale</c>
+    /// de <c>media-carousel.js</c> — et de la page de configuration. Une valeur hors de ces
+    /// bornes serait enregistrée sans rien changer à l'écran.
+    /// </remarks>
+    public const int MinRankScale = 40;
+
+    /// <summary>
+    /// Hauteur maximale du chiffre, en pourcentage de l'affiche.
+    /// </summary>
+    public const int MaxRankScale = 100;
+
     private static readonly Regex ColorPattern = new(
         "^#[0-9a-fA-F]{3,8}$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
@@ -111,7 +126,9 @@ public static class UserPreferenceRules
         options.HideNativeSections = preferences.HideNativeSections ?? options.HideNativeSections;
         options.RowOrder = preferences.RowOrder ?? options.RowOrder;
         options.HighlightColor = preferences.HighlightColor ?? options.HighlightColor;
-        options.RankNumberScale = preferences.RankNumberScale ?? options.RankNumberScale;
+        // Validée ici aussi, et pas seulement à l'enregistrement : le fichier peut porter
+        // une valeur enregistrée par une version antérieure, sous d'autres bornes.
+        options.RankNumberScale = SanitizeScale(preferences.RankNumberScale) ?? options.RankNumberScale;
 
         return options;
     }
@@ -148,8 +165,14 @@ public static class UserPreferenceRules
     }
 
     /// <summary>
-    /// Borne l'échelle du chiffre. En dehors de ces limites, il disparaît ou couvre l'affiche.
+    /// Borne l'échelle du chiffre à ce que le rendu sait afficher.
     /// </summary>
+    /// <remarks>
+    /// Une valeur sous le plancher n'est pas relevée au plancher : elle est ÉCARTÉE. C'est la
+    /// signature du défaut du panneau jusqu'en 3.14.1, dont le curseur, mal initialisé,
+    /// enregistrait 25 dès qu'on validait — sans que personne l'ait choisi. La relever à 40
+    /// figerait ce chiffre réduit ; l'écarter rend le compte au réglage du serveur.
+    /// </remarks>
     private static int? SanitizeScale(int? value)
-        => value.HasValue ? Math.Clamp(value.Value, 25, 200) : null;
+        => value is null || value.Value < MinRankScale ? null : Math.Min(value.Value, MaxRankScale);
 }
