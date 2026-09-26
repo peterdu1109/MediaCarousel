@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Jellyfin.Data.Events;
 using JellyfinCarouselPlugin.ScheduledTasks;
 using MediaBrowser.Model.Plugins;
 using MediaBrowser.Model.Tasks;
@@ -34,7 +35,9 @@ public sealed class RefreshScheduleSynchronizer : IHostedService
 {
     private readonly ITaskManager _taskManager;
     private readonly ILogger<RefreshScheduleSynchronizer> _logger;
+    private readonly object _waitLock = new();
     private EventHandler<BasePluginConfiguration>? _handler;
+    private bool _waitingForTasks;
 
     /// <summary>
     /// Initialise une nouvelle instance de la classe <see cref="RefreshScheduleSynchronizer"/>.
@@ -61,9 +64,20 @@ public sealed class RefreshScheduleSynchronizer : IHostedService
 
         // Au démarrage aussi : c'est ce qui rattrape les installations existantes, dont le
         // déclencheur porte encore la valeur figée à la première installation.
-        Apply();
+        //
+        // Mais à cet instant les tâches planifiées n'existent pas encore : Jellyfin démarre
+        // les services hébergés AVANT de les enregistrer (« Running startup tasks » vient
+        // ensuite — constaté huit démarrages sur huit sur un serveur 12.1). L'application
+        // échouait donc toujours ici, et le réglage n'était repris qu'au prochain
+        // enregistrement de la page de configuration. La première tâche lancée — la nôtre,
+        // que son déclencheur de démarrage exécute aussitôt — signale qu'elles sont en place.
+        if (!Apply(reportMissing: false))
+        {
+            _taskManager.TaskExecuting += OnTaskExecuting;
+            _waitingForTasks = true;
+        }
 
-        _handler = (_, _) => Apply();
+        _handler = (_, _) => Apply(reportMissing: true);
         plugin.ConfigurationChanged += _handler;
 
         return Task.CompletedTask;
@@ -78,10 +92,39 @@ public sealed class RefreshScheduleSynchronizer : IHostedService
             _handler = null;
         }
 
+        StopWaitingForTasks();
         return Task.CompletedTask;
     }
 
-    private void Apply()
+    private void OnTaskExecuting(object? sender, GenericEventArgs<IScheduledTaskWorker> e)
+    {
+        // Toutes les tâches sont enregistrées d'un bloc : dès que l'une s'exécute, la nôtre
+        // est là. On n'insiste pas au-delà, quelle que soit l'issue — une erreur est déjà
+        // consignée, et la retenter à chaque tâche du serveur ne la corrigerait pas.
+        if (Apply(reportMissing: true))
+        {
+            StopWaitingForTasks();
+        }
+    }
+
+    private void StopWaitingForTasks()
+    {
+        lock (_waitLock)
+        {
+            if (_waitingForTasks)
+            {
+                _taskManager.TaskExecuting -= OnTaskExecuting;
+                _waitingForTasks = false;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Applique l'intervalle configuré au déclencheur de la tâche de recalcul.
+    /// </summary>
+    /// <param name="reportMissing">Vrai pour signaler une tâche introuvable dans le journal.</param>
+    /// <returns>Vrai si la tâche a été trouvée, que l'écriture ait réussi ou non.</returns>
+    private bool Apply(bool reportMissing)
     {
         try
         {
@@ -90,8 +133,12 @@ public sealed class RefreshScheduleSynchronizer : IHostedService
 
             if (worker is null)
             {
-                _logger.LogWarning("Tâche de recalcul introuvable : l'intervalle n'a pas pu être appliqué.");
-                return;
+                if (reportMissing)
+                {
+                    _logger.LogWarning("Tâche de recalcul introuvable : l'intervalle n'a pas pu être appliqué.");
+                }
+
+                return false;
             }
 
             var hours = TopListRefreshTask.ResolveIntervalHours();
@@ -102,7 +149,7 @@ public sealed class RefreshScheduleSynchronizer : IHostedService
 
             if (interval is not null && interval.IntervalTicks == ticks)
             {
-                return;
+                return true;
             }
 
             // Les autres déclencheurs sont recopiés à l'identique ; seul celui d'intervalle
@@ -122,12 +169,14 @@ public sealed class RefreshScheduleSynchronizer : IHostedService
             _logger.LogInformation(
                 "Intervalle de recalcul appliqué : toutes les {Hours} heure(s).",
                 hours);
+            return true;
         }
         catch (Exception ex)
         {
             // Un calendrier qu'on n'arrive pas à écrire ne doit pas empêcher le serveur de
             // démarrer : la tâche garde alors son ancien déclencheur.
             _logger.LogError(ex, "Impossible d'appliquer l'intervalle de recalcul.");
+            return true;
         }
     }
 }
