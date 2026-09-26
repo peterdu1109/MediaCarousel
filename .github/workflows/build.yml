@@ -22,6 +22,8 @@ jobs:
   # sortirait une version identique a la precedente toutes les heures.
   check:
     runs-on: ubuntu-latest
+    # Sans plafond, un job bloque tourne six heures — la limite de GitHub.
+    timeout-minutes: 5
     outputs:
       release: ${{ steps.pending.outputs.release }}
 
@@ -61,6 +63,8 @@ jobs:
     needs: check
     if: needs.check.outputs.release == 'true'
     runs-on: ubuntu-latest
+    # Build, installation de Chromium et trois suites de tests : quelques minutes.
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
