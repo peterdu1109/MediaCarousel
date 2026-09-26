@@ -1951,7 +1951,12 @@ check('BARRE: le banc a bien une barre de defilement classique', barreClassique.
 check('BARRE: la bande n est pas etiree sous la barre de defilement',
   barreClassique.etiree === '' && barreClassique.pageDeborde === false, barreClassique);
 check('DOC: chaque variable du README existe dans le script', variablesFantomes.length === 0, variablesFantomes);
-check('DOC: le README contient bien un exemple de Custom CSS', exempleReadme.length > 0, exempleReadme);
+// Sur cette branche, le README renvoie au README principal : lui seul porte la documentation
+// et l'exemple de Custom CSS, verifies sur main contre le meme script. Une copie ici a deja
+// envoye des serveurs Jellyfin 12 vers le mauvais depot.
+check('DOC: le README renvoie au README principal et donne le depot de la ligne 12',
+  readme.includes('github.com/peterdu1109/MediaCarousel#readme')
+    && readme.includes('/jellyfin-12/repository-12.json'), readme.slice(0, 200));
 check('DOC: l exemple du README garde les affiches a la taille native',
   Math.abs(exempleApplique.afficheClassee - exempleApplique.afficheNative) < 0.5, exempleApplique);
 check('DOC: l exemple du README laisse le chiffre visible',
