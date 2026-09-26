@@ -36,6 +36,7 @@ public sealed class RefreshScheduleSynchronizer : IHostedService
     private readonly ITaskManager _taskManager;
     private readonly ILogger<RefreshScheduleSynchronizer> _logger;
     private readonly object _waitLock = new();
+    private readonly object _applyLock = new();
     private EventHandler<BasePluginConfiguration>? _handler;
     private bool _waitingForTasks;
 
@@ -73,8 +74,13 @@ public sealed class RefreshScheduleSynchronizer : IHostedService
         // que son déclencheur de démarrage exécute aussitôt — signale qu'elles sont en place.
         if (!Apply(reportMissing: false))
         {
-            _taskManager.TaskExecuting += OnTaskExecuting;
-            _waitingForTasks = true;
+            // Le drapeau AVANT l'abonnement : un événement arrivé entre les deux trouverait
+            // sinon l'attente levée, et l'intervalle ne serait jamais appliqué.
+            lock (_waitLock)
+            {
+                _waitingForTasks = true;
+                _taskManager.TaskExecuting += OnTaskExecuting;
+            }
         }
 
         _handler = (_, _) => Apply(reportMissing: true);
@@ -101,9 +107,22 @@ public sealed class RefreshScheduleSynchronizer : IHostedService
         // Toutes les tâches sont enregistrées d'un bloc : dès que l'une s'exécute, la nôtre
         // est là. On n'insiste pas au-delà, quelle que soit l'issue — une erreur est déjà
         // consignée, et la retenter à chaque tâche du serveur ne la corrigerait pas.
-        if (Apply(reportMissing: true))
+        //
+        // Les tâches de démarrage partent ENSEMBLE : l'événement arrive sur plusieurs fils au
+        // même instant. Sans ce verrou, chacun réécrivait le déclencheur, et tous sauf un
+        // échouaient sur le fichier que le premier tenait ouvert — six erreurs au journal à
+        // chaque démarrage sur un serveur 12.1, pour un intervalle pourtant bien appliqué.
+        lock (_waitLock)
         {
-            StopWaitingForTasks();
+            if (!_waitingForTasks)
+            {
+                return;
+            }
+
+            if (Apply(reportMissing: true))
+            {
+                StopWaitingForTasks();
+            }
         }
     }
 
@@ -125,6 +144,16 @@ public sealed class RefreshScheduleSynchronizer : IHostedService
     /// <param name="reportMissing">Vrai pour signaler une tâche introuvable dans le journal.</param>
     /// <returns>Vrai si la tâche a été trouvée, que l'écriture ait réussi ou non.</returns>
     private bool Apply(bool reportMissing)
+    {
+        // Un enregistrement de la configuration peut croiser le démarrage : une écriture à la
+        // fois, et la suivante trouve l'intervalle déjà en place.
+        lock (_applyLock)
+        {
+            return ApplyLocked(reportMissing);
+        }
+    }
+
+    private bool ApplyLocked(bool reportMissing)
     {
         try
         {
