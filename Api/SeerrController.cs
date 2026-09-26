@@ -37,6 +37,13 @@ public class SeerrController : ControllerBase
     /// <summary>Un Top mondial compte au plus cent titres ; une page d'accueil en montre bien moins.</summary>
     private const int MaxItems = 20;
 
+    /// <summary>
+    /// Appels simultanés à Seerr au plus, pour un lot. Une rafale de vingt connexions peut être
+    /// refusée par un petit serveur, ou par le proxy placé devant lui : les titres concernés
+    /// perdaient alors leur bouton sans raison — constaté au banc, trois titres sur dix.
+    /// </summary>
+    private const int MaxParallel = 4;
+
     private const string UserIdClaim = "Jellyfin-UserId";
 
     private readonly SeerrClient _seerr;
@@ -81,18 +88,27 @@ public class SeerrController : ControllerBase
             .Take(MaxItems)
             .ToArray();
 
+        using var gate = new SemaphoreSlim(MaxParallel);
         var states = await Task.WhenAll(wanted.Select(async item =>
         {
-            var outcome = await _seerr.GetStateAsync(baseUrl, apiKey, item.MediaType!, item.TmdbId, cancellationToken)
-                .ConfigureAwait(false);
-
-            return new SeerrStateDto
+            await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
             {
-                MediaType = item.MediaType!,
-                TmdbId = item.TmdbId,
-                State = outcome.State,
-                Error = ErrorCode(outcome.Failure)
-            };
+                var outcome = await _seerr.GetStateAsync(baseUrl, apiKey, item.MediaType!, item.TmdbId, cancellationToken)
+                    .ConfigureAwait(false);
+
+                return new SeerrStateDto
+                {
+                    MediaType = item.MediaType!,
+                    TmdbId = item.TmdbId,
+                    State = outcome.State,
+                    Error = ErrorCode(outcome.Failure)
+                };
+            }
+            finally
+            {
+                gate.Release();
+            }
         })).ConfigureAwait(false);
 
         return Ok(states);
