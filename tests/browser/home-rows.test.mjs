@@ -1199,6 +1199,221 @@ async function debordement(documentEtroit) {
 const etroit = await debordement(true);
 const large = await debordement(false);
 
+// ---------------------------------------------------------------------------
+// AUDIT DU 2026-09-25. Chaque scenario rejoue un defaut constate — au banc ou sur un
+// vrai serveur 12.1 — et a ete vu echouer contre le code d'avant son correctif.
+//
+// Le faux serveur est au plus pres du vrai : il FILTRE chaque liste pour l'appelant,
+// borne l'echelle comme UserPreferenceRules et fusionne les preferences enregistrees.
+// ---------------------------------------------------------------------------
+const serveurParCompte = () => {
+  window.__appels = [];
+  window.__prefs = {};
+  const listes = {
+    A: ['Film reserve aux adultes', 'Serie interdite -12', 'Horreur 18+'],
+    B: ['Dessin anime', 'Film famille', 'Documentaire animaux']
+  };
+  const bascules = ['ShowLocalRow', 'ShowAllTimeRow', 'ShowGlobalRow', 'ShowReturningRow',
+    'ShowNeverPlayedRow', 'ShowBecauseRow', 'ShowStudioRow', 'ShowGenreRows'];
+  window.ApiClient = {
+    getCurrentUserId: () => window.__user,
+    serverId: () => 'server-1',
+    getUrl: (p, q) => p + '?' + new URLSearchParams(q || {}).toString(),
+    getImageUrl: (id) => 'img://' + id,
+    getJSON: (url) => {
+      window.__appels.push(window.__user + ' ' + url.split('?')[0]);
+      if (url.includes('ClientOptions')) {
+        const o = {
+          EnableHomeRows: true, ShowLocalRow: true, LocalRowTitle: 'Top 10 du serveur',
+          LocalRowSize: 10, RankNumberScale: 100, AllowUserPreferences: true,
+          HighlightColor: window.__user === 'A' ? '#ff0000' : '#775BF4'
+        };
+        const choix = window.__prefs[window.__user];
+        if (choix) {
+          bascules.forEach((b) => { if (choix[b] != null) { o[b] = choix[b]; } });
+          if (choix.RankNumberScale != null && choix.RankNumberScale >= 40) {
+            o.RankNumberScale = Math.min(choix.RankNumberScale, 100);
+          }
+        }
+        return Promise.resolve(o);
+      }
+      if (url.includes('Top/Local')) {
+        return Promise.resolve({ Items: (listes[window.__user] || []).map((nom, i) => ({
+          Rank: i + 1, Name: nom,
+          Item: { Id: window.__user + i, Name: nom, ServerId: 'server-1', Type: 'Movie', IsFolder: false, ImageTags: { Primary: 't' } }
+        })) });
+      }
+      return Promise.resolve({ Items: [] });
+    },
+    ajax: (req) => {
+      const corps = req.data ? JSON.parse(req.data) : null;
+      window.__appels.push(window.__user + ' ' + req.type + ' ' + req.url.split('?')[0]);
+      if (req.type === 'POST') { window.__prefs[window.__user] = corps; }
+      if (req.type === 'DELETE') { delete window.__prefs[window.__user]; }
+      return Promise.resolve({});
+    }
+  };
+};
+
+async function pageAudit(reglages = {}) {
+  const vue = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  vue.on('pageerror', e => errors.push('pageerror(audit): ' + e.message));
+  if (reglages.horloge) { await vue.clock.install(); }
+  await vue.goto('file://' + path.join(here, 'home.html'));
+  await vue.evaluate((compte) => { window.__user = compte; }, reglages.compte === undefined ? 'A' : reglages.compte);
+  await vue.evaluate(serveurParCompte);
+  await vue.evaluate(script);
+  return vue;
+}
+
+const titresClasses = (vue) => vue.evaluate(() =>
+  Array.from(document.querySelectorAll('.mc-ranked .cardText-first')).map(e => e.textContent));
+
+// BASCULE — jellyfin-web 12.1 deconnecte en NAVIGUANT vers l'ecran de connexion, sans
+// recharger : le script survit d'un compte a l'autre, avec sa memoire.
+const bascule = await pageAudit();
+await bascule.waitForSelector('.mc-ranked');
+const vuParA = await titresClasses(bascule);
+await bascule.evaluate(() => { window.__user = null; document.querySelectorAll('.mc-row').forEach(r => r.remove()); });
+await bascule.waitForTimeout(400);
+await bascule.evaluate(() => {
+  window.__user = 'B';
+  window.__appels = [];
+  document.querySelector('.homeSectionsContainer').appendChild(document.createElement('div'));
+});
+await bascule.waitForSelector('.mc-ranked', { timeout: 5000 });
+await bascule.waitForTimeout(300);
+const vuParB = await titresClasses(bascule);
+const basculeB = await bascule.evaluate(() => ({
+  accent: getComputedStyle(document.querySelector('.mc-row')).getPropertyValue('--mc-accent').trim(),
+  reglagesDemandes: window.__appels.filter(a => a === 'B MediaCarousel/ClientOptions').length,
+  classementDemande: window.__appels.filter(a => a === 'B MediaCarousel/Top/Local').length
+}));
+await bascule.close();
+
+// CURSEUR — enregistrer le panneau sans toucher au curseur ne doit rien changer.
+const curseur = await pageAudit();
+await curseur.waitForSelector('.mc-prefs-open');
+const chiffreAvant = await curseur.evaluate(() => document.querySelector('.mc-ranked .mc-rank').getBoundingClientRect().height);
+await curseur.click('.mc-prefs-open');
+const curseurOuvert = await curseur.evaluate(() => {
+  const c = document.querySelector('#mc-prefs-scale');
+  return { valeur: c.value, min: c.min, max: c.max };
+});
+await curseur.click('.mc-prefs-save');
+await curseur.waitForFunction(() => window.__appels.filter(a => a === 'A MediaCarousel/ClientOptions').length >= 2, { timeout: 5000 });
+await curseur.waitForSelector('.mc-ranked', { timeout: 5000 });
+await curseur.waitForTimeout(400);
+const curseurApres = await curseur.evaluate(() => ({
+  envoye: window.__prefs.A.RankNumberScale,
+  chiffre: document.querySelector('.mc-ranked .mc-rank').getBoundingClientRect().height
+}));
+await curseur.close();
+
+// CONNEXION TARDIVE — l'ecran de connexion reste affiche une minute avant que le compte
+// se connecte. L'horloge est simulee : la minute passe en un instant. `runFor` et non
+// `fastForward` : ce dernier saute dans le temps en declenchant chaque minuterie une
+// seule fois, alors que l'ancienne attente etait une CHAINE de trois cents minuteries —
+// avec lui, ce test passait sur le code defectueux.
+const tardive = await pageAudit({ horloge: true, compte: null });
+await tardive.clock.runFor(60000);
+await tardive.evaluate(() => {
+  window.__user = 'A';
+  document.querySelector('.homeSectionsContainer').appendChild(document.createElement('div'));
+});
+await tardive.clock.runFor(2000);
+await tardive.waitForSelector('.mc-ranked', { timeout: 3000 }).catch(() => {});
+const connexionTardive = await tardive.evaluate(() => document.querySelectorAll('.mc-ranked').length);
+await tardive.close();
+
+// CUL-DE-SAC — un compte qui masque toutes ses rangees doit pouvoir revenir en arriere.
+const culDeSac = await pageAudit();
+await culDeSac.waitForSelector('.mc-prefs-open');
+await culDeSac.click('.mc-prefs-open');
+await culDeSac.evaluate(() => {
+  document.querySelectorAll('.mc-prefs li input[type=checkbox]:not([disabled])').forEach((c) => { c.checked = false; });
+});
+await culDeSac.click('.mc-prefs-save');
+await culDeSac.waitForFunction(() => window.__appels.filter(a => a === 'A MediaCarousel/ClientOptions').length >= 2, { timeout: 5000 });
+await culDeSac.waitForTimeout(600);
+const toutMasque = await culDeSac.evaluate(() => ({
+  rangees: document.querySelectorAll('.mc-row:not(.mc-prefs-only)').length,
+  boutons: document.querySelectorAll('.mc-prefs-open').length
+}));
+let rangeesRevenues = 0;
+if (toutMasque.boutons === 1) {
+  await culDeSac.click('.mc-prefs-open');
+  await culDeSac.evaluate(() => { document.querySelector('.mc-prefs li[data-row="local"] input[type=checkbox]').checked = true; });
+  await culDeSac.click('.mc-prefs-save');
+  await culDeSac.waitForSelector('.mc-ranked', { timeout: 5000 }).catch(() => {});
+  rangeesRevenues = await culDeSac.evaluate(() => document.querySelectorAll('.mc-ranked').length);
+}
+await culDeSac.close();
+
+// NAVIGATION — le panneau ne doit pas survivre a un changement de page.
+const navigation = await pageAudit();
+await navigation.waitForSelector('.mc-prefs-open');
+await navigation.click('.mc-prefs-open');
+await navigation.focus('.mc-prefs-save');
+const panneauStyle = await navigation.evaluate(() => {
+  const enregistrer = getComputedStyle(document.querySelector('.mc-prefs-save'));
+  return {
+    accent: getComputedStyle(document.querySelector('.mc-prefs')).getPropertyValue('--mc-accent').trim(),
+    fondEnregistrer: enregistrer.backgroundColor,
+    contourFocus: enregistrer.outlineStyle
+  };
+});
+await navigation.evaluate(() => { location.hash = '#/details?id=abc'; });
+await navigation.waitForTimeout(300);
+const panneauApresNavigation = await navigation.evaluate(() => !!document.querySelector('.mc-prefs-backdrop'));
+await navigation.close();
+
+// BARRE DE DEFILEMENT — un PC ordinaire, barre verticale classique de 15 px. Le style
+// `::-webkit-scrollbar` la rend deterministe sur tous les systemes, CI Linux comprise.
+const avecBarres = await chromium.launch({
+  ignoreDefaultArgs: ['--hide-scrollbars'],
+  ...(process.env.MC_CHROMIUM ? { executablePath: process.env.MC_CHROMIUM } : {})
+});
+const pc = await avecBarres.newPage({ viewport: { width: 1280, height: 700 } });
+pc.on('pageerror', e => errors.push('pageerror(barre): ' + e.message));
+await pc.goto('file://' + path.join(here, 'home.html'));
+await pc.addStyleTag({ content: 'html{overflow-y:scroll}::-webkit-scrollbar{width:15px;height:15px}' });
+await pc.evaluate(() => { window.__user = 'A'; });
+await pc.evaluate(serveurParCompte);
+await pc.evaluate(script);
+await pc.waitForSelector('.mc-ranked');
+await pc.waitForTimeout(400);
+const barreClassique = await pc.evaluate(() => ({
+  barre: window.innerWidth - document.documentElement.clientWidth,
+  etiree: document.querySelector('.mc-ranked').closest('.mc-row').style.getPropertyValue('--mc-strip-width') || '',
+  pageDeborde: document.documentElement.scrollWidth > document.documentElement.clientWidth
+}));
+await avecBarres.close();
+
+// DOCUMENTATION — l'exemple de Custom CSS du README est applique TEL QUEL.
+const readme = fs.readFileSync(path.join(repo, 'README.md'), 'utf8');
+const variablesDocumentees = [...new Set(readme.match(/--mc-[a-z-]+/g) || [])];
+const variablesFantomes = variablesDocumentees.filter(v => !script.includes(v));
+const blocReadme = (readme.split('**Vous pouvez tout ajuster**')[1] || '').match(/```css\n([\s\S]*?)```/);
+const exempleReadme = blocReadme ? blocReadme[1] : '';
+const doc = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+doc.on('pageerror', e => errors.push('pageerror(doc): ' + e.message));
+await doc.goto('file://' + path.join(here, 'home.html'));
+await doc.addStyleTag({ path: path.join(here, 'theme-excerpt.css') });
+await doc.evaluate(() => { window.__user = 'A'; });
+await doc.evaluate(serveurParCompte);
+await doc.evaluate(script);
+await doc.waitForSelector('.mc-ranked');
+// Le Custom CSS de Jellyfin est charge APRES notre feuille.
+if (exempleReadme) { await doc.addStyleTag({ content: exempleReadme }); }
+await doc.waitForTimeout(400);
+const exempleApplique = await doc.evaluate(() => ({
+  afficheClassee: document.querySelector('.mc-ranked .mc-rank-col .cardScalable').getBoundingClientRect().width,
+  afficheNative: document.querySelector('#nativeReference .cardScalable').getBoundingClientRect().width,
+  contourAuRepos: getComputedStyle(document.querySelector('.mc-ranked .mc-rank-glyph')).stroke
+}));
+await doc.close();
+
 await browser.close();
 
 let failed = 0;
@@ -1412,7 +1627,7 @@ check('PREFS: l ordre du panneau est celui envoye',
   enregistre.ordre === 'local,global,alltime,returning,neverplayed,because,studios,genres',
   enregistre.ordre);
 check('PREFS: couleur et echelle accompagnent l envoi',
-  /^#[0-9a-f]{3,8}$/i.test(enregistre.couleur) && enregistre.echelle > 0, enregistre);
+  /^#[0-9a-f]{3,8}$/i.test(enregistre.couleur) && enregistre.echelle === 100, enregistre);
 check('PREFS: le panneau se ferme apres enregistrement', enregistre.ferme === true, enregistre);
 check('PREFS: la reinitialisation part en DELETE', reinitialise === 'DELETE', reinitialise);
 check('PREFS: sans autorisation du serveur, aucun bouton', prefsInterdites === 0, prefsInterdites);
@@ -1492,6 +1707,38 @@ check('DEBORDEMENT: une rangee ORDINAIRE n est pas etendue (ses cartes sont en p
 check('DEBORDEMENT: une page normale reste inchangee',
   Math.abs(large.finitA - large.fenetre) < 4 && large.bandeOrdinaire > large.fenetre - 100,
   [large.finitA, large.fenetre, large.bandeOrdinaire]);
+
+check('BASCULE: le compte suivant voit SON classement, pas celui du precedent',
+  vuParB.length === 3 && vuParB[0] === 'Dessin anime' && vuParB.join() !== vuParA.join(), [vuParA, vuParB]);
+check('BASCULE: ses reglages sont redemandes au serveur, pas repris de la memoire',
+  basculeB.reglagesDemandes === 1 && basculeB.classementDemande === 1, basculeB);
+check('BASCULE: la couleur personnelle du compte precedent ne le suit pas',
+  basculeB.accent.toLowerCase() === '#775bf4', basculeB.accent);
+check('CURSEUR: il s ouvre sur la valeur en vigueur, en pourcentage',
+  curseurOuvert.valeur === '100' && curseurOuvert.min === '40' && curseurOuvert.max === '100', curseurOuvert);
+check('CURSEUR: enregistrer sans y toucher renvoie 100',
+  curseurApres.envoye === 100, curseurApres);
+check('CURSEUR: enregistrer sans y toucher ne change pas la taille du chiffre',
+  Math.abs(curseurApres.chiffre - chiffreAvant) < 0.5, [chiffreAvant, curseurApres.chiffre]);
+check('CONNEXION: un compte connecte apres une minute a bien ses rangees',
+  connexionTardive === 3, connexionTardive);
+check('CUL-DE-SAC: tout masquer laisse un acces au panneau',
+  toutMasque.rangees === 0 && toutMasque.boutons === 1, toutMasque);
+check('CUL-DE-SAC: et par lui, les rangees reviennent', rangeesRevenues === 3, rangeesRevenues);
+check('NAVIGATION: le panneau se ferme quand on quitte la page', panneauApresNavigation === false, panneauApresNavigation);
+check('PANNEAU: il herite de la couleur d accentuation', panneauStyle.accent.toLowerCase() === '#ff0000', panneauStyle);
+check('PANNEAU: le bouton Enregistrer porte cette couleur', panneauStyle.fondEnregistrer === 'rgb(255, 0, 0)', panneauStyle);
+check('PANNEAU: le bouton qui a le focus est entoure, visible a la telecommande',
+  panneauStyle.contourFocus === 'solid', panneauStyle);
+check('BARRE: le banc a bien une barre de defilement classique', barreClassique.barre === 15, barreClassique);
+check('BARRE: la bande n est pas etiree sous la barre de defilement',
+  barreClassique.etiree === '' && barreClassique.pageDeborde === false, barreClassique);
+check('DOC: chaque variable du README existe dans le script', variablesFantomes.length === 0, variablesFantomes);
+check('DOC: le README contient bien un exemple de Custom CSS', exempleReadme.length > 0, exempleReadme);
+check('DOC: l exemple du README garde les affiches a la taille native',
+  Math.abs(exempleApplique.afficheClassee - exempleApplique.afficheNative) < 0.5, exempleApplique);
+check('DOC: l exemple du README laisse le chiffre visible',
+  exempleApplique.contourAuRepos !== 'none', exempleApplique);
 
 check('aucune erreur js', errors.length === 0, errors);
 

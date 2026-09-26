@@ -304,6 +304,21 @@ dans celui d'une section native, que Jellyfin reconstruit quand bon lui semble. 
 n'emprunte ni `dialogHelper` ni `emby-checkbox` : ces composants doivent avoir été
 enregistrés par le client, ce qui n'est garanti sur aucune page.
 
+Trois règles, chacune venue d'un défaut constaté :
+
+- **Un compte qui masque tout garde un accès.** Le bouton vivant sur une rangée, masquer
+  toutes les rangées le faisait disparaître, sans retour possible sans l'administrateur. Quand
+  toutes les rangées sont masquées, `insertPreferencesEntry` pose un en-tête discret, « Mes
+  rangées », qui porte le bouton.
+- **Le panneau est accroché au corps du document**, hors de toute rangée : le sélecteur des
+  couleurs du plugin inclut donc `.mc-prefs-backdrop`. Sans lui, `--mc-accent` n'y était pas
+  définie, le bouton « Enregistrer » perdait son fond et les contours de focus disparaissaient
+  — invisibles à la télécommande. Et il se ferme sur `hashchange` et `popstate` : sinon, un
+  retour arrière le laissait par-dessus la page suivante.
+- **Le curseur de taille reçoit un pourcentage.** `normalizeRankScale` rend une FRACTION ;
+  donnée telle quelle à un curseur borné à partir de 25, elle y était ramenée, et enregistrer
+  le panneau sans y toucher réduisait le chiffre à 40 % — constaté sur un client réel.
+
 ### Persistance
 
 `SnapshotStorage` écrit chaque instantané en JSON dans `Plugin.Instance.DataFolderPath`, et
@@ -372,7 +387,12 @@ si l'administrateur supprime la collection, elle est recréée au recalcul suiva
   `GetDefaultTriggers()` n'est consulté par Jellyfin qu'à la PREMIÈRE installation de la
   tâche ; ensuite le calendrier vit dans sa configuration. Sans ce service, le réglage ne
   faisait plus rien. Seul le déclencheur d'intervalle est réécrit : un passage quotidien
-  ajouté à la main survit.
+  ajouté à la main survit. **Au démarrage, les tâches n'existent pas encore** : Jellyfin démarre
+  les services hébergés AVANT de les enregistrer (« Running startup tasks » vient ensuite —
+  huit démarrages sur huit sur un serveur 12.1). L'application au démarrage échouait donc
+  toujours, le réglage n'étant repris qu'au prochain enregistrement de la page. Le service
+  s'abonne désormais à `ITaskManager.TaskExecuting` et applique l'intervalle dès que la
+  première tâche s'exécute — la nôtre, que son déclencheur de démarrage lance aussitôt.
 - **Le contrat d'API ne publie que ce que le rendu consomme.** Le score, le nombre de
   lectures, le nombre de spectateurs distincts et la date de dernière lecture en ont été
   retirés : le client ne les lisait pas, et ils décrivent le comportement de visionnage des
@@ -544,11 +564,12 @@ si l'administrateur supprime la collection, elle est recréée au recalcul suiva
   de l'écran. La nôtre porte `overflow-x: auto` pour son défilement, et ce réglage **découpe
   net** au bord du document : elle s'arrêtait donc à 59,6 % de la largeur affichée, trois
   cartes visibles au lieu de huit, pendant que les rangées voisines allaient au bord.
-  `stretchStrips()` pose alors une largeur explicite. Le critère n'est **pas** une
-  comparaison `window.innerWidth` / `documentElement.clientWidth` — cet écart est propre au
-  moteur mobile et ne se reproduit pas au banc — mais le symptôme lui-même : la bande
-  s'arrête-t-elle avant le bord visible ? La marge de 8 px laisse une page ordinaire
-  strictement inchangée. `box-sizing: border-box` accompagne la largeur, sinon le retrait
+  `stretchStrips()` pose alors une largeur explicite, jusqu'au bord **affiché**, lu sur
+  `visualViewport.width`. Surtout pas `window.innerWidth` : il compte la barre de défilement
+  verticale, et ses ~15 px suffisaient à étirer la bande sur **tout PC** — constaté sur un
+  client 12.1 réel, 501 px posés pour une page de 491. `visualViewport` exclut la barre et rend
+  bien la largeur affichée en mode PC sur téléphone (1045 pour un document de 980, mesuré sur
+  l'appareil). Sans lui, aucune extension. La marge de 8 px absorbe les arrondis. `box-sizing: border-box` accompagne la largeur, sinon le retrait
   latéral du thème s'y ajoute (1737 px pour 1645 demandés). Et **seules les bandes classées**
   sont étendues : leurs cartes portent une largeur en pixels posée en ligne, donc insensible
   au conteneur, alors qu'une carte ordinaire tient la sienne d'un pourcentage résolu contre
@@ -581,6 +602,19 @@ si l'administrateur supprime la collection, elle est recréée au recalcul suiva
   sans quoi chaque retour sur l'accueil relancerait les quatre requêtes alors que les classements
   ne sont recalculés que toutes les quelques heures. Un résultat vide n'est jamais mémorisé :
   une panne passagère ne doit pas condamner une rangée pour cinq minutes.
+- **Cette mémoire appartient au compte connecté.** jellyfin-web est une application d'une seule
+  page : sa déconnexion NAVIGUE vers l'écran de connexion au lieu de recharger (lu dans son code,
+  12.1), si bien que le script survit d'un compte à l'autre. Les classements étant filtrés pour
+  chaque appelant — visibilité, contrôle parental — un compte voyait ceux du précédent pendant
+  cinq minutes, et ses réglages personnels jusqu'au rechargement. `scopeMemoryToUser()` oublie
+  tout quand le compte change, et le compte fait partie de la clé de `loadCached`.
+- **Le script n'abandonne jamais l'attente.** Il observe la page dès son chargement, connecté ou
+  non ; `render()` attend lui-même qu'un compte soit connecté. L'ancienne attente cessait au bout
+  de trente secondes : quiconque passait plus longtemps sur l'écran de connexion n'avait aucune
+  rangée jusqu'au rechargement — constaté sur un client 12.1 réel.
+- **Les flèches ne font qu'un fondu.** Décalée de 6 px vers l'extérieur au repos, la flèche
+  « suivant » dépassait du bord de la page et y ajoutait 6 px de défilement horizontal, que seul
+  le `body{overflow-x:hidden}` de jellyfin-web masquait.
 
 ### Intégration à index.html
 
@@ -677,7 +711,7 @@ dotnet run --project tests/ScriptTag.Tests -c Release
 cd tests/browser && npm install && node home-rows.test.mjs && node config-page.test.mjs
 ```
 
-Trois suites sans framework — 325 assertions — exécutées en CI avant la publication ; voir
+Trois suites sans framework — 348 assertions — exécutées en CI avant la publication ; voir
 `tests/README.md`. L'une charge un extrait des règles d'ElegantFin **après** les nôtres pour
 vérifier que la cohabitation tient.
 Les deux suites navigateur chargent le vrai `media-carousel.js` et le vrai `configPage.html`
@@ -929,7 +963,9 @@ son affaire. Un test le vérifie en injectant `--itemColumnGap:0`.
 
 **Rien de ce qu'un utilisateur envoie n'est enregistré tel quel :** `UserPreferenceRules.Sanitize`
 écarte les identifiants de rangées inconnus et les doublons, refuse une couleur qui ne soit
-pas `/^#[0-9a-fA-F]{3,8}$/`, et borne l'échelle du chiffre entre 25 et 200. Ces trois valeurs
+pas `/^#[0-9a-fA-F]{3,8}$/`, et borne l'échelle du chiffre aux bornes du rendu, 40 à 100 —
+une valeur sous 40 est **écartée**, pas relevée : c'est la signature du curseur défectueux
+jusqu'en 3.14.1, et `Apply` l'écarte aussi quand le fichier la porte encore. Ces trois valeurs
 finissent respectivement dans des sélecteurs, dans une feuille de styles construite par
 concaténation, et dans une longueur CSS. Le contrôleur enregistre le résultat de la
 validation, jamais l'objet reçu. Le compte concerné est **toujours celui du jeton**, jamais

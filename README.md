@@ -225,10 +225,11 @@ Le classement étant ordonné, la collection l'est aussi : le rang est préserv�
 
 Le plugin est conçu pour cohabiter, pas pour imposer son style.
 
-**Il adopte les jetons de votre thème.** Si le thème installé en expose (ElegantFin et la
-plupart des autres), les rangées reprennent automatiquement son espacement latéral, sa
-gouttière et son rayon d'arrondi. Les titres réutilisent les classes natives de Jellyfin,
-donc ils héritent exactement du style que le thème donne aux titres de section.
+**Il adopte votre thème.** Les cartes sont de vraies cartes Jellyfin — mêmes classes, même
+balisage que les rangées natives : elles prennent donc la taille, l'arrondi, l'espacement et la
+typographie que votre thème donne aux autres rangées, ElegantFin compris. La taille des affiches
+classées n'est pas un réglage : elle est **mesurée** sur les affiches natives de la page, pour leur
+rester identique au pixel près. Les titres réutilisent eux aussi les classes natives.
 
 **Il ne masque jamais les rangées des autres plugins.** L'option « masquer les sections
 natives » ne vise que les sections construites par Jellyfin ; tout élément ajouté par un
@@ -239,31 +240,25 @@ autre plugin reste intact. De même, la balise `<script>` insérée dans `index.
 
 ```css
 .mc-row {
-    --mc-poster-width: 140px;
-    --mc-poster-height: 210px;
-    --mc-rank-size: 10rem;
-    --mc-rank-outline: rgba(255, 255, 255, .85);
-    --mc-radius: 1em;
+    --mc-accent: #e50914;
+    --mc-rank-stroke: rgba(255, 255, 255, .6);
     --mc-side-padding: 2%;
 }
 ```
 
 | Variable | Défaut | Rôle |
 |---|---|---|
-| `--mc-accent` | réglage du plugin | Contour du chiffre au survol, anneau de focus |
+| `--mc-accent` | réglage du plugin | Couleur du chiffre au survol, contours de focus, bouton de personnalisation |
+| `--mc-rank-stroke` | gris bleuté, éclairci sur un thème clair | **Couleur** du contour du chiffre au repos |
 | `--mc-side-padding` | `--sidePadding` du thème, sinon `3.3%` | Marge latérale des rangées |
-| `--mc-gap` | `--itemColumnGap` du thème, sinon `.7em` | Espace entre les cartes |
-| `--mc-radius` | `--smallRadius` du thème, sinon `5px` | Arrondi des affiches et vignettes |
-| `--mc-poster-width` / `-height` | `120px` / `180px` | Taille des affiches |
-| `--mc-tile-width` / `-height` | `172px` / `104px` | Taille des vignettes de studio |
-| `--mc-rank-size` | `8.5rem` | Taille du chiffre de rang |
-| `--mc-rank-stroke` | `3px` | Épaisseur du contour du chiffre |
-| `--mc-rank-fill` / `--mc-rank-outline` | blanc translucide | Remplissage et contour du chiffre |
-| `--mc-surface` / `--mc-surface-hover` | blanc translucide | Fond des cartes sans image |
-| `--mc-shadow` / `--mc-shadow-hover` | ombre portée | Ombres des affiches |
 
-Ces variables sont redéfinies aux points de rupture mobile : les surcharger sur `.mc-row`
-suffit pour les deux tailles, sauf si vous ciblez vous-même un média.
+La **hauteur du chiffre** se règle dans la page du plugin (« Taille du chiffre du rang »), et chaque
+compte peut la changer pour lui-même si la personnalisation est ouverte.
+
+> **Ne surchargez pas la taille des affiches.** Elle est mesurée sur les affiches natives de la
+> page pour rester identique à celles des autres rangées : l'imposer depuis le Custom CSS les ferait
+> diverger. Pour agrandir ou réduire toutes les affiches, réglez la taille des cartes de votre
+> thème — les rangées du plugin suivent.
 
 ## Téléviseurs Samsung et LG
 
