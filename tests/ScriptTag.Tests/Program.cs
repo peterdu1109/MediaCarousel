@@ -449,11 +449,17 @@ Check("PREFS: les sections natives sont acceptees",
 Check("PREFS: un ordre entierement inconnu ne laisse rien",
     UserPreferenceRules.Sanitize(new UserRowPreferences { RowOrder = "aaa,bbb" }) is null);
 
-// L'echelle est une longueur CSS : hors bornes, le chiffre disparait ou avale l'affiche.
-Check("PREFS: une echelle demesuree est bornee",
-    UserPreferenceRules.Sanitize(new UserRowPreferences { RankNumberScale = 9000 })?.RankNumberScale == 200);
-Check("PREFS: une echelle negative est bornee",
-    UserPreferenceRules.Sanitize(new UserRowPreferences { RankNumberScale = -5 })?.RankNumberScale == 25);
+// L'echelle a les bornes du rendu, 40 a 100 : au-dela, rien ne changerait a l'ecran.
+Check("PREFS: une echelle demesuree est ramenee au plafond du rendu",
+    UserPreferenceRules.Sanitize(new UserRowPreferences { RankNumberScale = 9000 })?.RankNumberScale == 100);
+Check("PREFS: une echelle negative est ecartee",
+    UserPreferenceRules.Sanitize(new UserRowPreferences { RankNumberScale = -5 }) is null);
+// 25 est ce qu'enregistrait le panneau jusqu'en 3.14.1, sans que personne l'ait choisi :
+// relevee a 40, elle figerait un chiffre reduit ; ecartee, le compte suit le serveur.
+Check("PREFS: 25, la valeur du curseur defectueux, est ecartee",
+    UserPreferenceRules.Sanitize(new UserRowPreferences { RankNumberScale = 25 }) is null);
+Check("PREFS: le plancher du rendu est accepte",
+    UserPreferenceRules.Sanitize(new UserRowPreferences { RankNumberScale = 40 })?.RankNumberScale == 40);
 
 // La fusion : null ne doit RIEN ecraser, sinon un compte cesserait de suivre le serveur
 // pour des reglages auxquels il n'a jamais touche.
@@ -479,6 +485,15 @@ Check("PREFS: le reste continue de suivre le serveur",
 UserPreferenceRules.Apply(serveur, new UserRowPreferences { HighlightColor = "#000000", RankNumberScale = 55 });
 Check("PREFS: couleur et echelle sont reprises",
     serveur.HighlightColor == "#000000" && serveur.RankNumberScale == 55);
+
+// Le fichier des preferences peut porter une valeur enregistree sous les anciennes bornes.
+var avecAncienneEchelle = new ClientOptionsDto { RankNumberScale = 100 };
+UserPreferenceRules.Apply(avecAncienneEchelle, new UserRowPreferences { RankNumberScale = 25 });
+Check("PREFS: un 25 deja enregistre n'est plus applique, le serveur reprend la main",
+    avecAncienneEchelle.RankNumberScale == 100);
+UserPreferenceRules.Apply(avecAncienneEchelle, new UserRowPreferences { RankNumberScale = 150 });
+Check("PREFS: un 150 deja enregistre est ramene au plafond du rendu",
+    avecAncienneEchelle.RankNumberScale == 100);
 
 Console.WriteLine(failed == 0 ? "\nTous les tests passent." : $"\n{failed} echec(s).");
 return failed;
