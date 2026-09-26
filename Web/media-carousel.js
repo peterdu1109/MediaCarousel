@@ -39,6 +39,8 @@
 
     var cache = {};
     var options = null;
+    // Compte auquel appartiennent `cache` et `options` : voir scopeMemoryToUser().
+    var memoryUser = null;
     var rendering = false;
     var scheduled = null;
     var sequence = 0;
@@ -49,9 +51,7 @@
     // ------------------------------------------------------------------
 
     function log(message, error) {
-        if (error) {
-            console.error(LOG_PREFIX + ' ' + message, error);
-        }
+        console.error(LOG_PREFIX + ' ' + message, error === undefined ? '' : error);
     }
 
     function escapeHtml(value) {
@@ -259,7 +259,11 @@
         var scale = rankScale || DEFAULT_RANK_SCALE;
 
         return [
-            '.mc-row{',
+            /* Le panneau de personnalisation est accroché au corps du document, hors de
+               toute rangée : sans lui dans ce sélecteur, il n'héritait d'aucune de ces
+               couleurs, et son bouton « Enregistrer » perdait son fond tandis que ses
+               contours de focus disparaissaient — invisibles à la télécommande. */
+            '.mc-row,.mc-prefs-backdrop{',
             '--mc-accent:' + safeAccent(accent) + ';',
             /* Repris du thème quand il l'expose ; sinon la valeur de `.padded-left`. */
             '--mc-side-padding:var(--sidePadding,3.3%);',
@@ -472,6 +476,7 @@
             'cursor:pointer;font-size:1.1em;line-height:1;padding:.2em .4em;border-radius:4px;',
             'opacity:.55;transition:opacity var(--mc-dur) var(--mc-ease);}',
             '.mc-prefs-open:hover,.mc-prefs-open:focus{opacity:1;}',
+            '.mc-row.mc-prefs-only .sectionTitle{opacity:.6;font-size:1em;}',
             '.mc-prefs-open:focus{outline:2px solid var(--mc-accent);outline-offset:2px;}',
 
             '.mc-prefs-backdrop{position:fixed;left:0;right:0;top:0;bottom:0;z-index:1000;',
@@ -510,8 +515,12 @@
             'border:0;cursor:pointer;background:var(--mc-scrim);color:#fff;font-size:1.5em;line-height:1;',
             'opacity:0;transition:opacity var(--mc-dur) var(--mc-ease),transform var(--mc-dur) var(--mc-ease);',
             'z-index:3;}',
-            '.mc-row .mc-arrow-prev{left:0;transform:translate3d(-6px,0,0);}',
-            '.mc-row .mc-arrow-next{right:0;transform:translate3d(6px,0,0);}',
+            /* Fondu seul, sans glissement : décalée de 6 px vers l'extérieur au repos, la
+               flèche « suivant » dépassait du bord de la page, invisible mais comptée dans
+               sa largeur défilable — 6 px de défilement horizontal sur tout thème qui ne le
+               masque pas, comme le fait `body{overflow-x:hidden}` de jellyfin-web. */
+            '.mc-row .mc-arrow-prev{left:0;}',
+            '.mc-row .mc-arrow-next{right:0;}',
             '.mc-row .mc-strip-wrap:hover .mc-arrow{opacity:1;transform:translate3d(0,0,0);}',
             '.mc-row .mc-arrow:disabled{opacity:0!important;pointer-events:none;}',
 
@@ -1297,7 +1306,15 @@
             }
 
             var boite = bande.getBoundingClientRect();
-            var visible = window.innerWidth - boite.left;
+            // `visualViewport` et non `innerWidth` : ce dernier compte la barre de
+            // défilement verticale, et les ~15 px qu'elle occupe sur un PC suffisaient à
+            // étirer la bande sur une page ordinaire. `visualViewport` l'exclut, tout en
+            // rendant bien la largeur affichée en « version pour ordinateur » sur
+            // téléphone. Faute de mieux, la largeur du document : aucune extension.
+            var affichee = window.visualViewport
+                ? window.visualViewport.width
+                : document.documentElement.clientWidth;
+            var visible = affichee - boite.left;
             var rangee = bande.closest('.mc-row');
 
             if (!rangee) {
@@ -1429,7 +1446,9 @@
      * une panne passagère ne doit pas condamner la rangée pour cinq minutes.
      */
     function loadCached(path, params) {
-        var key = path + '|' + JSON.stringify(params || {});
+        // Le compte fait partie de la clé : ces listes sont filtrées pour chaque appelant.
+        var key = (window.ApiClient.getCurrentUserId() || '') + '|' + path + '|'
+            + JSON.stringify(params || {});
         var entry = cache[key];
         var now = Date.now();
 
@@ -1930,8 +1949,12 @@
             + '</div>'
             + '<div class="mc-prefs-field">'
             + '<label for="mc-prefs-scale">Taille du chiffre</label>'
-            + '<input type="range" id="mc-prefs-scale" min="25" max="200" step="5" value="'
-            + normalizeRankScale(opts.RankNumberScale) + '">'
+            // `normalizeRankScale` rend une FRACTION (1 pour 100 %) : donnée telle quelle à
+            // un curseur borné à partir de 25, elle était ramenée à 25, et enregistrer le
+            // panneau sans y toucher réduisait le chiffre au plancher. Les bornes sont
+            // celles du rendu : au-delà, le curseur bougeait sans rien changer.
+            + '<input type="range" id="mc-prefs-scale" min="40" max="100" step="5" value="'
+            + Math.round(normalizeRankScale(opts.RankNumberScale) * 100) + '">'
             + '</div>'
             + '<div class="mc-prefs-field">'
             + '<label for="mc-prefs-hide">Masquer les sections de Jellyfin</label>'
@@ -2103,10 +2126,56 @@
         header.appendChild(button);
     }
 
+    /**
+     * Rattache la mémoire du script au compte connecté, et l'oublie quand il change.
+     *
+     * jellyfin-web est une application d'une seule page : sa déconnexion NAVIGUE vers
+     * l'écran de connexion au lieu de recharger (lu dans le code de jellyfin-web 12.1), si
+     * bien que le script survit d'un compte à l'autre. Or les classements sont filtrés pour
+     * chaque appelant — visibilité, contrôle parental — et les réglages portent les choix
+     * personnels du compte. Servis depuis la mémoire, ils montraient au compte suivant ce
+     * qui avait été calculé pour le précédent : titres et affiches d'une bibliothèque qui
+     * lui est interdite pendant cinq minutes, réglages d'autrui jusqu'au rechargement.
+     */
+    function scopeMemoryToUser() {
+        var user = window.ApiClient.getCurrentUserId();
+
+        if (user !== memoryUser) {
+            memoryUser = user;
+            options = null;
+            cache = {};
+        }
+    }
+
+    /** Vrai quand toutes les rangées du plugin sont masquées, par le compte ou par le serveur. */
+    function allRowsHidden(opts) {
+        return Object.keys(ROW_TOGGLES).every(function (id) {
+            return opts[ROW_TOGGLES[id]] === false;
+        });
+    }
+
+    /**
+     * Seul point d'entrée restant quand toutes les rangées sont masquées : un en-tête
+     * discret qui porte le bouton du panneau, à l'endroit où les rangées apparaîtraient.
+     */
+    function insertPreferencesEntry(container, opts) {
+        var section = document.createElement('div');
+        section.className = 'verticalSection ' + ROW_CLASS + ' mc-prefs-only';
+        section.innerHTML = '<div class="sectionTitleContainer sectionTitleContainer-cards'
+            + ' padded-left mc-row-header">'
+            + '<h2 class="sectionTitle sectionTitle-cards">Mes rangées</h2></div>';
+
+        var library = findLibrarySection(container);
+        container.insertBefore(section, library ? library.nextSibling : container.firstChild);
+        attachPreferencesButton(section, opts);
+    }
+
     function render() {
         if (rendering || !ready()) {
             return Promise.resolve();
         }
+
+        scopeMemoryToUser();
 
         var container = findSectionsContainer();
         if (!container || container.querySelector('.' + ROW_CLASS)) {
@@ -2134,7 +2203,17 @@
                 var target = findSectionsContainer();
 
                 // La page a pu être reconstruite pendant le chargement des données.
-                if (!target || target.querySelector('.' + ROW_CLASS) || !collected.rows.length) {
+                if (!target || target.querySelector('.' + ROW_CLASS)) {
+                    return null;
+                }
+
+                if (!collected.rows.length) {
+                    // Le bouton du panneau vit sur une rangée du plugin : un compte qui les a
+                    // toutes masquées n'avait plus aucun moyen de revenir sur son choix.
+                    if (opts.AllowUserPreferences && allRowsHidden(opts)) {
+                        insertPreferencesEntry(target, opts);
+                    }
+
                     return null;
                 }
 
@@ -2176,6 +2255,11 @@
         window.addEventListener('hashchange', schedule);
         document.addEventListener('viewshow', schedule);
 
+        // Le panneau est accroché au corps du document : sans cela, un retour arrière le
+        // laissait au-dessus de la page suivante.
+        window.addEventListener('hashchange', closePreferences);
+        window.addEventListener('popstate', closePreferences);
+
         // La largeur d'affiche change à chaque palier de la grille : elle doit être
         // remesurée, sinon les rangées classées gardent celle du palier précédent.
         //
@@ -2209,24 +2293,14 @@
         watch();
     }
 
-    function waitForJellyfin(attempt) {
-        if (ready()) {
-            start();
-            return;
-        }
 
-        if (attempt > 300) {
-            return;
-        }
-
-        window.setTimeout(function () {
-            waitForJellyfin(attempt + 1);
-        }, 100);
-    }
-
+    // L'observation démarre tout de suite, connecté ou non : `render()` attend lui-même
+    // qu'un compte soit connecté. L'ancienne attente cessait au bout de trente secondes,
+    // et quiconque se connectait plus tard — l'écran de connexion est la première page de
+    // tout utilisateur non connecté — n'avait aucune rangée jusqu'au rechargement.
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', function () { waitForJellyfin(0); });
+        document.addEventListener('DOMContentLoaded', start);
     } else {
-        waitForJellyfin(0);
+        start();
     }
 })();
