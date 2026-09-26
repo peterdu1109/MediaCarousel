@@ -339,6 +339,52 @@
                                         <span>Ne garder que les titres présents dans la bibliothèque</span>
                                     </label>
                                 </div>
+
+                                <div class="checkboxContainer">
+                                    <label class="emby-checkbox-label">
+                                        <input is="emby-checkbox" type="checkbox" id="EnableSeerrRequests"
+                                               aria-describedby="hintSeerr" />
+                                        <span>Proposer de demander les titres absents à Seerr</span>
+                                    </label>
+                                    <div class="fieldDescription checkboxFieldDescription" id="hintSeerr">
+                                        Jellyseerr, Overseerr ou leur successeur. Un bouton « Demander » s'affiche
+                                        sur l'affiche de chaque titre absent de la bibliothèque, comme dans
+                                        Jellyfin Enhanced. La demande part au nom du compte Seerr de l'utilisateur :
+                                        ses droits et ses quotas s'appliquent, et il doit avoir été importé depuis
+                                        Jellyfin dans Seerr.
+                                    </div>
+                                </div>
+                                <p class="mcCfg-alert" id="mcSeerrAlert" role="status" aria-live="polite" hidden>
+                                    <span aria-hidden="true">&#9888;</span><span>
+                                        <strong>Aucun bouton ne s'affichera</strong>
+                                        « Ne garder que les titres présents dans la bibliothèque » est cochée :
+                                        le Top mondial ne montre alors aucun titre absent à demander.
+                                    </span>
+                                </p>
+
+                                <div id="groupSeerr">
+                                    <div class="mcCfg-grid">
+                                        <div class="inputContainer">
+                                            <input is="emby-input" type="url" id="SeerrUrl" autocomplete="off"
+                                                   label="Adresse de Seerr" aria-describedby="hintSeerrUrl" />
+                                            <div class="fieldDescription" id="hintSeerrUrl">
+                                                Telle que le serveur Jellyfin l'atteint, par exemple
+                                                http://192.168.1.10:5055.
+                                            </div>
+                                        </div>
+                                        <div class="inputContainer">
+                                            <input is="emby-input" type="password" id="SeerrApiKey" autocomplete="off"
+                                                   label="Clé d'API de Seerr" aria-describedby="hintSeerrKey" />
+                                            <div class="fieldDescription" id="hintSeerrKey">
+                                                Dans Seerr : Paramètres, Général. Elle n'est jamais transmise aux clients.
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <button is="emby-button" type="button" id="seerrTestButton" class="raised button-alt">
+                                        <span>Tester la connexion</span>
+                                    </button>
+                                    <p class="fieldDescription" id="seerrTestResult" role="status" aria-live="polite"></p>
+                                </div>
                             </div>
                         </fieldset>
                     </div>
@@ -734,7 +780,8 @@
                     'EnableBecauseRow', 'EnableAllTimeRow',
                     'EnableHomeRows', 'HideNativeHomeSections', 'ManageNativeSections', 'SyncCollections',
                     'AllowUserPreferences',
-                    'ExcludeChannelContent'
+                    'ExcludeChannelContent',
+                    'EnableSeerrRequests'
                 ];
                 var numbers = [
                     'LocalTopSize', 'LocalTopWindowDays', 'MaxPlaysCountedPerUser', 'CandidatesPerUser',
@@ -752,7 +799,8 @@
                     'MetadataLanguage', 'StudioRowTitle', 'ReturningRowTitle', 'NeverPlayedRowTitle',
                     'BecauseRowTitle', 'AllTimeRowTitle', 'RowOrder',
                     'LocalRowTitle', 'GlobalRowTitle',
-                    'HighlightColor', 'LocalCollectionName', 'GlobalCollectionName'
+                    'HighlightColor', 'LocalCollectionName', 'GlobalCollectionName',
+                    'SeerrUrl', 'SeerrApiKey'
                 ];
                 var lists = ['ExcludedUserIds', 'ExcludedLibraryIds'];
 
@@ -1239,6 +1287,58 @@
                     }
                 }
 
+                /* Le groupe Seerr vit DANS celui du Top mondial. Il n'utilise pas `data-toggles` :
+                   cocher le Top mondial réactive tous les champs de son groupe, y compris ceux
+                   d'un Seerr resté décoché, et l'onglet se croirait actif pour un Seerr coché
+                   sous un Top mondial éteint. */
+                function applySeerrToggle() {
+                    var on = field('EnableGlobalTop').checked && field('EnableSeerrRequests').checked;
+                    var group = field('groupSeerr');
+                    var controls = group.querySelectorAll('input, button');
+
+                    group.hidden = !on;
+                    for (var i = 0; i < controls.length; i++) {
+                        controls[i].disabled = !on;
+                    }
+
+                    field('mcSeerrAlert').hidden = !(on && field('GlobalTopLibraryOnly').checked);
+                }
+
+                var seerrTestMessages = {
+                    invalid: 'Renseignez une adresse commençant par http:// ou https://, et la clé d\'API.',
+                    unauthorized: 'Seerr refuse cette clé d\'API.',
+                    forbidden: 'Seerr accepte la clé, mais elle n\'a pas les droits nécessaires.',
+                    offline: 'Seerr ne répond pas à cette adresse depuis le serveur Jellyfin.',
+                    error: 'Seerr a répondu de façon inattendue : est-ce bien son adresse ?'
+                };
+
+                function testSeerr() {
+                    var result = field('seerrTestResult');
+                    result.textContent = 'Essai en cours…';
+
+                    // Les valeurs saisies, pas celles enregistrées : on vérifie avant d'enregistrer.
+                    ApiClient.ajax({
+                        type: 'POST',
+                        url: ApiClient.getUrl('MediaCarousel/Seerr/Test'),
+                        data: JSON.stringify({ Url: field('SeerrUrl').value, ApiKey: field('SeerrApiKey').value }),
+                        contentType: 'application/json',
+                        dataType: 'json'
+                    }).then(function (answer) {
+                        result.textContent = answer && answer.Ok
+                            ? 'Connexion réussie. Enregistrez pour activer les demandes.'
+                            : seerrTestMessages[(answer && answer.Error) || 'error'] || seerrTestMessages.error;
+                    }, function () {
+                        result.textContent = 'L\'essai n\'a pas pu être lancé.';
+                    });
+                }
+
+                function wireSeerr() {
+                    ['EnableGlobalTop', 'EnableSeerrRequests', 'GlobalTopLibraryOnly'].forEach(function (id) {
+                        field(id).addEventListener('change', applySeerrToggle);
+                    });
+                    field('seerrTestButton').addEventListener('click', testSeerr);
+                }
+
                 function applyToggles() {
                     var toggles = page.querySelectorAll('[data-toggles]');
 
@@ -1296,11 +1396,13 @@
                             wired = true;
                             wireTabs();
                             wireToggles();
+                            wireSeerr();
                             wireRowOrder();
                             field('ManageNativeSections').addEventListener('change', renderRowOrder);
                         }
 
                         applyToggles();
+                        applySeerrToggle();
                         renderRowOrder();
                         refreshTabStates();
                         refreshDuplicateAlert();

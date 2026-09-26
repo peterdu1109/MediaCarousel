@@ -297,6 +297,132 @@ const ordreAvantClic = await ordreRangees();
 await page.evaluate(() => document.querySelector('#mcRowOrder li .mcCfg-order-down').click());
 const ordreApresClic = await ordreRangees();
 
+// SEERR — les reglages de la demande des titres absents, sur une page a part : le Top
+// mondial y est active, et sa case « titres presents » cochee, comme a l'installation.
+const seerrPage = await browser.newPage({ viewport: { width: 1100, height: 900 } });
+seerrPage.on('pageerror', e => errors.push('pageerror(seerr): ' + e.message));
+seerrPage.on('console', m => { if (m.type() === 'error') errors.push('console(seerr): ' + m.text()); });
+await seerrPage.addInitScript(() => {
+  window.__saved = null;
+  window.__essais = [];
+  window.__reponseEssai = { Ok: true, Error: null };
+  window.__config = {
+    RowOrder: '', EnableLocalTop: true, LocalTopSize: 10, LocalTopMediaKind: 'Both', LocalTopWindowDays: 30,
+    MaxPlaysCountedPerUser: 3, CandidatesPerUser: 100, ExcludedUserIds: [], ExcludedLibraryIds: [],
+    EnableGlobalTop: true, GlobalTopProvider: 'Tmdb', GlobalTopApiKey: 'cle-tmdb', GlobalTopMediaKind: 'Both',
+    GlobalTopSize: 10, GlobalTopLibraryOnly: true, MetadataLanguage: 'fr-FR',
+    EnableSeerrRequests: false, SeerrUrl: '', SeerrApiKey: '',
+    EnableHomeRows: true, LocalRowTitle: 'Top 10 sur ce serveur', GlobalRowTitle: 'Top 10 mondial',
+    HighlightColor: '#775BF4', RefreshIntervalHours: 6, SyncCollections: false,
+    LocalCollectionName: 'Top 10 du serveur', GlobalCollectionName: 'Top 10 mondial'
+  };
+  window.ApiClient = {
+    getUrl: (p) => p,
+    getPluginConfiguration: () => Promise.resolve(JSON.parse(JSON.stringify(window.__config))),
+    updatePluginConfiguration: (id, c) => { window.__saved = c; return Promise.resolve({}); },
+    getJSON: () => Promise.resolve({
+      Version: '3.15.0.0',
+      LocalTop: { Enabled: true, Count: 10, Source: 'Jellyfin', GeneratedUtc: '2026-09-26T03:00:00Z' },
+      GlobalTop: { Enabled: true, Count: 10, Source: 'Tmdb', GeneratedUtc: '2026-09-26T03:00:00Z' },
+      ReturningSeries: { Enabled: false, Count: 0, Source: 'Jellyfin', GeneratedUtc: null },
+      NeverPlayed: { Enabled: false, Count: 0, Source: 'Jellyfin', GeneratedUtc: null },
+      Studios: { Enabled: false, Count: 0, Source: 'Jellyfin', GeneratedUtc: null },
+      Genres: { Enabled: false, Count: 0, Source: 'Jellyfin', GeneratedUtc: null },
+      LastRun: { StartedUtc: '2026-09-26T03:00:00Z', DurationSeconds: 3, Running: false, Failures: [] }
+    }),
+    ajax: (req) => {
+      if (req.url.indexOf('Seerr/Test') !== -1) {
+        window.__essais.push({ type: req.type, corps: JSON.parse(req.data), dataType: req.dataType });
+        return Promise.resolve(window.__reponseEssai);
+      }
+      return Promise.resolve({});
+    }
+  };
+  window.Dashboard = {
+    showLoadingMsg() {}, hideLoadingMsg() {},
+    processPluginConfigurationUpdateResult() {}, alert() {}
+  };
+});
+await seerrPage.goto('file://' + path.join(repo, 'Configuration', 'configPage.html'));
+const afficherPage = () => seerrPage.evaluate(() => {
+  document.querySelector('#mediaCarouselConfigPage').dispatchEvent(new Event('pageshow'));
+});
+await afficherPage();
+await seerrPage.waitForFunction(() => document.querySelectorAll('.mcCfg-tile').length === 4, { timeout: 5000 });
+
+const etatSeerrCfg = () => seerrPage.evaluate(() => ({
+  groupe: !document.querySelector('#groupSeerr').hidden,
+  champs: !document.querySelector('#SeerrUrl').disabled && !document.querySelector('#SeerrApiKey').disabled
+    && !document.querySelector('#seerrTestButton').disabled,
+  alerte: !document.querySelector('#mcSeerrAlert').hidden,
+  ongletEteint: document.querySelector('#tabGlobal').classList.contains('mcCfg-tab-off')
+}));
+const cocher = (id, valeur) => seerrPage.evaluate(([i, v]) => {
+  const cb = document.querySelector('#' + i);
+  cb.checked = v;
+  cb.dispatchEvent(new Event('change'));
+}, [id, valeur]);
+
+const seerrAuChargement = await etatSeerrCfg();
+await cocher('EnableSeerrRequests', true);
+const seerrCoche = await etatSeerrCfg();
+await cocher('GlobalTopLibraryOnly', false);
+const seerrSansFiltre = await etatSeerrCfg();
+await cocher('EnableGlobalTop', false);
+const seerrSousTopEteint = await etatSeerrCfg();
+await cocher('EnableGlobalTop', true);
+const seerrTopRallume = await etatSeerrCfg();
+// Le piege du groupe imbrique : rallumer le Top mondial ne doit pas rallumer un Seerr decoche.
+await cocher('EnableSeerrRequests', false);
+await cocher('EnableGlobalTop', false);
+await cocher('EnableGlobalTop', true);
+const seerrResteEteint = await etatSeerrCfg();
+await cocher('EnableSeerrRequests', true);
+
+// Essai de connexion : il part avec les valeurs SAISIES, avant tout enregistrement.
+await seerrPage.evaluate(() => {
+  document.querySelector('#SeerrUrl').value = 'http://seerr.local:5055/';
+  document.querySelector('#SeerrApiKey').value = 'cle-seerr-de-test';
+  document.querySelector('#seerrTestButton').click();
+});
+await seerrPage.waitForFunction(() => /réussie/.test(document.querySelector('#seerrTestResult').textContent));
+const essaiReussi = await seerrPage.evaluate(() => ({
+  essais: window.__essais.slice(),
+  message: document.querySelector('#seerrTestResult').textContent
+}));
+await seerrPage.evaluate(() => {
+  window.__reponseEssai = { Ok: false, Error: 'unauthorized' };
+  document.querySelector('#seerrTestButton').click();
+});
+await seerrPage.waitForFunction(() => /refuse/.test(document.querySelector('#seerrTestResult').textContent));
+const essaiRefuse = await seerrPage.evaluate(() => document.querySelector('#seerrTestResult').textContent);
+
+// jellyfin-web rejoue `pageshow` a chaque retour sur la page : un clic, un seul essai.
+await afficherPage();
+await seerrPage.waitForTimeout(200);
+const essaisAvant = await seerrPage.evaluate(() => window.__essais.length);
+await seerrPage.evaluate(() => {
+  document.querySelector('#SeerrUrl').value = 'http://seerr.local:5055';
+  document.querySelector('#SeerrApiKey').value = 'cle-seerr-de-test';
+  document.querySelector('#EnableSeerrRequests').checked = true;
+  document.querySelector('#EnableSeerrRequests').dispatchEvent(new Event('change'));
+  document.querySelector('#seerrTestButton').click();
+});
+await seerrPage.waitForTimeout(300);
+const essaisApresRetour = await seerrPage.evaluate(() => window.__essais.length) - essaisAvant;
+
+await seerrPage.evaluate(() => {
+  document.querySelector('#mediaCarouselConfigForm').dispatchEvent(new Event('submit', { cancelable: true }));
+});
+await seerrPage.waitForFunction(() => window.__saved !== null, { timeout: 5000 });
+const seerrEnregistre = await seerrPage.evaluate(() => ({
+  active: window.__saved.EnableSeerrRequests,
+  adresse: window.__saved.SeerrUrl,
+  cle: window.__saved.SeerrApiKey,
+  typeCle: document.querySelector('#SeerrApiKey').type
+}));
+await seerrPage.close();
+
 await browser.close();
 
 let failed = 0;
@@ -399,7 +525,7 @@ check('NATIF: decocher revient aux seules rangees du plugin',
 check('a11y: chaque aria-describedby pointe une cible', loaded.describedBy === true, loaded.describedBy);
 check('aucun champ orphelin hors des tableaux de chargement',
   loaded.orphanFields.length === 0, loaded.orphanFields);
-check('a11y: 3 regions live (bandeau, avertissement, retour)', loaded.liveRegions.length === 3
+check('a11y: 5 regions live (bandeau, deux avertissements, essai Seerr, retour)', loaded.liveRegions.length === 5
   && loaded.liveRegions.every(v => v === 'polite'), loaded.liveRegions);
 check('a11y: un seul h1', loaded.h1 === 1, loaded.h1);
 check('enregistrement : valeur modifiee', saved.LocalTopSize === 15, saved.LocalTopSize);
@@ -419,6 +545,33 @@ check('enregistrement : champ replie sous Reglages avances conserve',
 check('retour utilisateur apres enregistrement', feedbackAfterSave.startsWith('Réglages enregistrés'), feedbackAfterSave);
 check('recalcul declenche une seule requete', refresh.calls === 1, refresh.calls);
 check('retour utilisateur apres recalcul', refresh.feedback.startsWith('Recalcul lancé en arrière-plan'), refresh.feedback);
+check('SEERR: decoche, le groupe est masque et hors du parcours clavier',
+  seerrAuChargement.groupe === false && seerrAuChargement.champs === false && seerrAuChargement.alerte === false,
+  seerrAuChargement);
+check('SEERR: coche, adresse, cle et essai deviennent utilisables',
+  seerrCoche.groupe === true && seerrCoche.champs === true, seerrCoche);
+check('SEERR: avec « titres presents » coche, l avertissement previent qu aucun bouton ne s affichera',
+  seerrCoche.alerte === true, seerrCoche);
+check('SEERR: decocher ce filtre leve l avertissement', seerrSansFiltre.alerte === false, seerrSansFiltre);
+check('SEERR: sous un Top mondial eteint, le groupe disparait et l onglet est grise',
+  seerrSousTopEteint.groupe === false && seerrSousTopEteint.champs === false
+    && seerrSousTopEteint.ongletEteint === true, seerrSousTopEteint);
+check('SEERR: rallumer le Top mondial rend le groupe Seerr coche',
+  seerrTopRallume.groupe === true && seerrTopRallume.champs === true, seerrTopRallume);
+check('SEERR: mais ne rallume pas un Seerr decoche',
+  seerrResteEteint.groupe === false && seerrResteEteint.champs === false, seerrResteEteint);
+check('SEERR: l essai part en POST JSON avec les valeurs saisies',
+  essaiReussi.essais.length === 1 && essaiReussi.essais[0].type === 'POST'
+    && essaiReussi.essais[0].dataType === 'json'
+    && essaiReussi.essais[0].corps.Url === 'http://seerr.local:5055/'
+    && essaiReussi.essais[0].corps.ApiKey === 'cle-seerr-de-test', essaiReussi.essais);
+check('SEERR: un essai reussi le dit', /Connexion réussie/.test(essaiReussi.message), essaiReussi.message);
+check('SEERR: une cle refusee est nommee comme telle', /refuse cette clé/.test(essaiRefuse), essaiRefuse);
+check('SEERR: apres un retour sur la page, un clic ne fait qu un essai', essaisApresRetour === 1, essaisApresRetour);
+check('SEERR: activation, adresse et cle sont enregistrees',
+  seerrEnregistre.active === true && seerrEnregistre.adresse === 'http://seerr.local:5055'
+    && seerrEnregistre.cle === 'cle-seerr-de-test', seerrEnregistre);
+check('SEERR: la cle est masquee a l ecran', seerrEnregistre.typeCle === 'password', seerrEnregistre.typeCle);
 check('RETOUR: apres un retour sur la page, « Descendre » ne recule la rangee que d une place',
   ordreApresClic[0] === ordreAvantClic[1] && ordreApresClic[1] === ordreAvantClic[0]
     && ordreApresClic[2] === ordreAvantClic[2], [ordreAvantClic.slice(0, 3), ordreApresClic.slice(0, 3)]);

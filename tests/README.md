@@ -25,6 +25,9 @@ HTML, le chargement différé des genres, le cache client, le masquage des secti
 l'accessibilité — et **rejoue la fonction `allowSwipe()` de `jellyfin-web`** pour garantir
 qu'un balayage horizontal sur mobile ne bascule pas vers l'onglet Favoris.
 
+Les scénarios `SEERR` simulent les réponses de `SeerrController` : lecture des états par lots,
+clic et clavier, refus, panne, et parité de hauteur des cartes qui portent le bouton.
+
 La page de test charge `jellyfin-card.css` — les règles de carte de jellyfin-web 10.11.9,
 compilées depuis `src/components/cardbuilder/card.scss` — et porte une **rangée native de
 référence** (`#nativeReference`) que le script ne touche jamais. Nos cartes reprenant le

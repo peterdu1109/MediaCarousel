@@ -20,7 +20,7 @@ Media Carousel génère **tout seul** plusieurs rangées et les tient à jour.
 |---|---|---|
 | 🏠 | **Top du serveur** | Les statistiques de lecture de **tous** les comptes de ton serveur |
 | ⏳ | **Les plus regardés de tous les temps** | Le même calcul que le Top du serveur, sans fenêtre d'observation |
-| 🌍 | **Top mondial** | TMDB ou Trakt, rapproché de ta bibliothèque |
+| 🌍 | **Top mondial** | TMDB ou Trakt, rapproché de ta bibliothèque — un titre absent se demande à Seerr |
 | 📺 | **De retour cette semaine** | Les séries dont des épisodes viennent d'arriver |
 | 💎 | **Jamais vu** | Les films bien notés que personne n'a encore lancés |
 | 🎬 | **Par studio** | Les studios les mieux représentés, avec leur logo — variantes fusionnées |
@@ -134,9 +134,23 @@ l'épisode isolé.
 | Nombre d'entrées | `10` | Taille du classement |
 | Ne garder que ce que j'ai | ✅ | Masque les titres absents de ta bibliothèque |
 | Langue des métadonnées | `fr-FR` | Langue demandée à la source |
+| Demander les titres absents à Seerr | ❌ | Un bouton « Demander » sur l'affiche de chaque titre absent |
+| Adresse de Seerr | — | Telle que le serveur Jellyfin l'atteint, par exemple `http://192.168.1.10:5055` |
+| Clé d'API de Seerr | — | Dans Seerr : Paramètres → Général. Jamais transmise aux navigateurs |
 
 Si la source est injoignable, le classement précédent est conservé — une coupure réseau ne vide
 jamais la liste.
+
+**Demander à Seerr** (Jellyseerr, Overseerr ou leur successeur) fonctionne comme dans
+Jellyfin Enhanced, avec les mêmes libellés. La demande part au nom du compte Seerr de chaque
+utilisateur, donc ses droits et ses quotas s'appliquent. Pour que le bouton apparaisse :
+
+- décoche « Ne garder que ce que j'ai », sinon aucun titre absent ne s'affiche ;
+- importe tes utilisateurs Jellyfin dans Seerr (Seerr → Utilisateurs → Importer depuis Jellyfin) ;
+- attends le prochain recalcul, ou lance-le depuis la page de configuration.
+
+Une série est demandée en entier, toutes saisons comprises. Le bouton « Tester la connexion »
+vérifie l'adresse et la clé avant l'enregistrement.
 
 </details>
 

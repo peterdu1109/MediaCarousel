@@ -41,6 +41,10 @@
     var options = null;
     // Compte auquel appartiennent `cache` et `options` : voir scopeMemoryToUser().
     var memoryUser = null;
+    // Demandes à Seerr : proposées ou non par le serveur, et dernier état connu de chaque
+    // titre absent, par clé `type:identifiant TMDB` — voir refreshSeerrStates().
+    var seerrEnabled = false;
+    var seerrStates = {};
     var rendering = false;
     var scheduled = null;
     var sequence = 0;
@@ -449,6 +453,29 @@
                n'est pas cliquable, l'affiche est atténuée, la seconde ligne le dit. */
             '.mc-row .mc-unavailable .cardImageContainer{opacity:.55;}',
 
+            /* Bouton de demande à Seerr d'un titre absent. Il est posé DANS l'affiche, et
+               non dessous : la carte garde la hauteur de ses voisines, et la rangée celle
+               des rangées natives. Il reste masqué tant que l'état du titre n'est pas
+               connu — proposer « Demander » pour un titre déjà demandé serait faux. */
+            '.mc-row .mc-unavailable .cardScalable{position:relative;}',
+            '.mc-row .mc-seerr{position:absolute;left:7%;right:7%;bottom:6%;z-index:2;',
+            'box-sizing:border-box;margin:0;padding:.45em .4em;border:0;border-radius:4px;',
+            'font:inherit;font-size:.75em;font-weight:600;line-height:1.2;text-align:center;',
+            'white-space:normal;overflow-wrap:break-word;color:#fff;cursor:pointer;',
+            'background:rgba(32,32,36,.92);box-shadow:0 2px 10px rgba(0,0,0,.45);',
+            'transition:filter var(--mc-dur) var(--mc-ease);}',
+            '.mc-row .mc-seerr[data-state="loading"]{visibility:hidden;}',
+            '.mc-row .mc-seerr[aria-disabled="true"]{cursor:default;}',
+            '.mc-row .mc-seerr[aria-disabled="false"]:hover{filter:brightness(1.15);}',
+            /* Un anneau blanc cerné de noir : lisible sur n'importe quelle affiche. */
+            '.mc-row .mc-seerr:focus{outline:none;box-shadow:0 0 0 2px #fff,0 0 0 4px rgba(0,0,0,.7);}',
+            '.mc-row .mc-seerr:focus:not(:focus-visible){box-shadow:0 2px 10px rgba(0,0,0,.45);}',
+            '.mc-row .mc-seerr[data-tone="accent"]{background:var(--mc-accent);}',
+            '.mc-row .mc-seerr[data-tone="amber"]{background:#975a16;}',
+            '.mc-row .mc-seerr[data-tone="blue"]{background:#2b6cb0;}',
+            '.mc-row .mc-seerr[data-tone="green"]{background:#276749;}',
+            '.mc-row .mc-seerr[data-tone="red"]{background:#b83232;}',
+
             /* Logo de studio : contenu dans la vignette, jamais recadré. */
             '.mc-row .mc-tile-logo{max-width:82%;max-height:74%;object-fit:contain;',
             'display:block;opacity:0;transition:opacity .35s var(--mc-ease);}',
@@ -542,7 +569,7 @@
 
             '@media (prefers-reduced-motion:reduce){',
             '.verticalSection.mc-row,.mc-row .mc-skeleton .cardPadder{animation:none;}',
-            '.mc-row .mc-rank-glyph,.mc-row .mc-tile-logo{transition:none;}',
+            '.mc-row .mc-rank-glyph,.mc-row .mc-tile-logo,.mc-row .mc-seerr{transition:none;}',
             '.mc-row .mc-strip{scroll-behavior:auto;}',
             '}',
 
@@ -767,6 +794,7 @@
             ariaLabel: 'Numéro ' + entry.Rank + ' : ' + name + (year ? ' (' + year + ')' : '')
                 + (inLibrary ? '' : ' — absent de la bibliothèque'),
             cardClass: 'mc-ranked' + (inLibrary ? '' : ' mc-unavailable'),
+            overlay: inLibrary ? '' : seerrButton(entry),
             beside: rankBadge(entry.Rank),
             besideFactor: rankCardFactor(entry.Rank, rankScale)
         });
@@ -825,6 +853,255 @@
         return '<div class="mc-probe-strip itemsContainer scrollX" aria-hidden="true">'
             + nativeCard({ name: '', ariaHidden: true, cardClass: 'mc-probe' })
             + '</div>';
+    }
+
+    // ------------------------------------------------------------------
+    // Demandes à Seerr
+    // ------------------------------------------------------------------
+
+    /**
+     * États du bouton. Les libellés sont ceux de Jellyfin Enhanced : un serveur qui l'utilise
+     * déjà retrouve les mêmes mots pour le même geste.
+     *
+     * `tone` choisit la couleur, séparément de l'état : plusieurs états la partagent, et la
+     * feuille de style n'a pas à connaître la liste des erreurs. Seul `request` agit ; une
+     * erreur marquée `retry` rend la main au bout de SEERR_RETRY_DELAY, les autres
+     * persistent, puisqu'un nouvel essai échouerait de la même façon.
+     */
+    var SEERR_STATES = {
+        loading: { label: '', tone: 'neutral' },
+        request: { label: 'Demander', tone: 'accent', action: true },
+        sending: { label: 'Demande en cours', tone: 'neutral' },
+        pending: { label: 'En attente d\'approbation', tone: 'amber' },
+        processing: { label: 'Demandé', tone: 'blue' },
+        partial: { label: 'Partiellement disponible', tone: 'blue' },
+        available: { label: 'Disponible', tone: 'green' },
+        blocked: { label: 'Bloqué', tone: 'red' },
+        offline: { label: 'Seerr hors ligne', tone: 'red', retry: true },
+        error: { label: 'Erreur', tone: 'red', retry: true },
+        'user-not-found': {
+            label: 'Utilisateur non trouvé',
+            tone: 'red',
+            hint: 'Ce compte n\'existe pas dans Seerr : l\'administrateur doit l\'importer depuis Jellyfin.'
+        },
+        forbidden: {
+            label: 'Pas de permission pour faire des demandes',
+            tone: 'red',
+            hint: 'Ce compte Seerr n\'a pas le droit de faire des demandes.'
+        }
+    };
+
+    // Taille maximale d'un lot côté serveur : au-delà, les titres sont répartis en plusieurs.
+    var SEERR_BATCH = 20;
+    var SEERR_RETRY_DELAY = 4000;
+
+    function seerrKey(mediaType, tmdbId) {
+        return mediaType + ':' + parseInt(tmdbId, 10);
+    }
+
+    /**
+     * Bouton d'un titre absent, ou rien.
+     *
+     * Il faut le type ET l'identifiant TMDB : films et séries sont numérotés séparément, le
+     * 1399 d'une série n'est pas celui d'un film. Un classement calculé avant cette version
+     * ne porte pas le type — pas de bouton jusqu'au recalcul suivant.
+     */
+    function seerrButton(entry) {
+        var tmdbId = parseInt(entry.TmdbId, 10);
+
+        if (!seerrEnabled || !(tmdbId > 0) || (entry.MediaType !== 'movie' && entry.MediaType !== 'tv')) {
+            return '';
+        }
+
+        return '<button type="button" class="mc-seerr" data-state="loading" data-tone="neutral"'
+            + ' aria-disabled="true" data-media="' + entry.MediaType + '" data-tmdb="' + tmdbId + '"'
+            + ' data-name="' + escapeHtml(entry.Name || '') + '"></button>';
+    }
+
+    function applySeerrState(button, state) {
+        var known = Object.prototype.hasOwnProperty.call(SEERR_STATES, state) ? state : 'loading';
+        var spec = SEERR_STATES[known];
+        var name = button.getAttribute('data-name') || '';
+
+        button.setAttribute('data-state', known);
+        button.setAttribute('data-tone', spec.tone);
+        button.textContent = spec.label;
+        // `aria-disabled` et non `disabled` : un bouton désactivé perd le focus, et la
+        // télécommande qui venait de le presser ne serait plus nulle part.
+        button.setAttribute('aria-disabled', spec.action ? 'false' : 'true');
+        button.setAttribute('aria-label', spec.label ? spec.label + ' : ' + name : name);
+
+        if (spec.hint) {
+            button.setAttribute('title', spec.hint);
+        } else {
+            button.removeAttribute('title');
+        }
+    }
+
+    function seerrButtons(root) {
+        return Array.prototype.slice.call(root.querySelectorAll('.mc-seerr'));
+    }
+
+    function seerrButtonKey(button) {
+        return seerrKey(button.getAttribute('data-media'), button.getAttribute('data-tmdb'));
+    }
+
+    /** Pose l'état déjà connu de chaque titre : un retour sur l'accueil ne clignote pas. */
+    function showKnownSeerrStates(root) {
+        seerrButtons(root).forEach(function (button) {
+            applySeerrState(button, seerrStates[seerrButtonKey(button)] || 'loading');
+        });
+    }
+
+    function seerrPost(action, body) {
+        return window.ApiClient.ajax({
+            type: 'POST',
+            url: window.ApiClient.getUrl('MediaCarousel/Seerr/' + action),
+            data: JSON.stringify(body),
+            contentType: 'application/json',
+            dataType: 'json'
+        });
+    }
+
+    /**
+     * Relit l'état des titres absents auprès de Seerr, par lots, puis met les boutons à jour.
+     *
+     * Un titre dont l'état n'a pas pu être lu — Seerr injoignable, clé refusée, titre sorti
+     * du classement — perd son bouton. L'accueil est la page la plus vue du serveur : une
+     * panne de Seerr ne doit pas le couvrir d'erreurs. Une erreur ne s'affiche qu'en réponse
+     * à un geste, sur le bouton qui l'a provoquée.
+     */
+    function refreshSeerrStates(root) {
+        var buttons = seerrButtons(root);
+        var seen = {};
+        var items = [];
+        var batches = [];
+
+        buttons.forEach(function (button) {
+            var key = seerrButtonKey(button);
+
+            if (!seen[key]) {
+                seen[key] = true;
+                items.push({
+                    MediaType: button.getAttribute('data-media'),
+                    TmdbId: parseInt(button.getAttribute('data-tmdb'), 10)
+                });
+            }
+        });
+
+        for (var i = 0; i < items.length; i += SEERR_BATCH) {
+            batches.push(items.slice(i, i + SEERR_BATCH));
+        }
+
+        return Promise.all(batches.map(function (batch) {
+            return seerrPost('Status', batch).then(function (answers) {
+                var fresh = {};
+
+                (answers || []).forEach(function (answer) {
+                    if (answer && answer.State && !answer.Error) {
+                        fresh[seerrKey(answer.MediaType, answer.TmdbId)] = answer.State;
+                    }
+                });
+
+                batch.forEach(function (item) {
+                    var key = seerrKey(item.MediaType, item.TmdbId);
+
+                    if (fresh[key]) {
+                        seerrStates[key] = fresh[key];
+                    } else {
+                        delete seerrStates[key];
+                    }
+                });
+            }, function () {
+                batch.forEach(function (item) {
+                    delete seerrStates[seerrKey(item.MediaType, item.TmdbId)];
+                });
+            });
+        })).then(function () {
+            buttons.forEach(function (button) {
+                // Une demande partie entre-temps a le dernier mot : sa réponse est plus récente.
+                if (button.getAttribute('data-state') !== 'sending') {
+                    applySeerrState(button, seerrStates[seerrButtonKey(button)] || 'loading');
+                }
+            });
+        });
+    }
+
+    /**
+     * Traduit un refus du serveur en état du bouton. `ApiClient.ajax` rejette avec la
+     * réponse elle-même ; une panne réseau, elle, n'a pas de statut.
+     */
+    function seerrFailure(response) {
+        var status = response && response.status;
+
+        if (status === 404) {
+            return Promise.resolve('user-not-found');
+        }
+
+        if (status === 403) {
+            return Promise.resolve('forbidden');
+        }
+
+        // 502 : Seerr a mal répondu ou pas du tout, et le serveur précise lequel des deux.
+        if (status === 502 && typeof response.json === 'function') {
+            return response.json().then(function (body) {
+                return body && body.Error === 'offline' ? 'offline' : 'error';
+            }, function () {
+                return 'error';
+            });
+        }
+
+        // 503 : l'intégration a été désactivée depuis l'affichage de la page.
+        return Promise.resolve(status === 503 ? 'offline' : 'error');
+    }
+
+    function requestFromSeerr(button) {
+        var mediaType = button.getAttribute('data-media');
+        var tmdbId = parseInt(button.getAttribute('data-tmdb'), 10);
+        var key = seerrKey(mediaType, tmdbId);
+
+        applySeerrState(button, 'sending');
+
+        return seerrPost('Request', { MediaType: mediaType, TmdbId: tmdbId }).then(function (answer) {
+            var state = answer && answer.State;
+
+            // Une demande acceptée sans état lisible est au moins « Demandé ».
+            seerrStates[key] = Object.prototype.hasOwnProperty.call(SEERR_STATES, state) ? state : 'processing';
+            applySeerrState(button, seerrStates[key]);
+        }, function (response) {
+            return seerrFailure(response).then(function (failure) {
+                applySeerrState(button, failure);
+
+                if (SEERR_STATES[failure].retry) {
+                    window.setTimeout(function () {
+                        if (button.getAttribute('data-state') === failure) {
+                            applySeerrState(button, 'request');
+                        }
+                    }, SEERR_RETRY_DELAY);
+                }
+            });
+        });
+    }
+
+    function wireSeerr(section) {
+        section.addEventListener('click', function (event) {
+            var button = event.target.closest ? event.target.closest('.mc-seerr') : null;
+
+            if (!button) {
+                return;
+            }
+
+            // La carte d'un titre absent n'a pas de lien, mais jellyfin-web écoute les clics
+            // de toute la page : celui-ci ne doit rien déclencher d'autre.
+            event.preventDefault();
+            event.stopPropagation();
+
+            if (button.getAttribute('data-state') === 'request') {
+                requestFromSeerr(button).catch(function (error) {
+                    log('demande à Seerr impossible', error);
+                });
+            }
+        });
     }
 
     // ------------------------------------------------------------------
@@ -1623,7 +1900,14 @@
             function addRanked(entries, title) {
                 if (entries.length) {
                     // `true` : une rangée classée emporte son propre étalon de mesure.
-                    rows.push(buildRow(title, entries.map(buildRankedCard).join(''), true));
+                    var row = buildRow(title, entries.map(buildRankedCard).join(''), true);
+
+                    if (row.querySelector('.mc-seerr')) {
+                        wireSeerr(row);
+                        showKnownSeerrStates(row);
+                    }
+
+                    rows.push(row);
                 }
             }
 
@@ -2144,6 +2428,7 @@
             memoryUser = user;
             options = null;
             cache = {};
+            seerrStates = {};
         }
     }
 
@@ -2190,6 +2475,7 @@
             }
 
             rankScale = normalizeRankScale(opts.RankNumberScale);
+            seerrEnabled = opts.SeerrRequests === true;
             injectStyles(opts.HighlightColor, rankScale);
             onLightBackground = isLightBackground();
 
@@ -2225,6 +2511,13 @@
 
                 if (opts.AllowUserPreferences) {
                     attachPreferencesButton(collected.rows[0], opts);
+                }
+
+                // Sans attendre : les rangées sont déjà là, seuls les boutons attendent Seerr.
+                if (seerrEnabled) {
+                    refreshSeerrStates(target).catch(function (error) {
+                        log('état des demandes Seerr illisible', error);
+                    });
                 }
 
                 return null;

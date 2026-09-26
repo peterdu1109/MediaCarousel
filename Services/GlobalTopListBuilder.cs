@@ -127,7 +127,8 @@ public sealed class GlobalTopListBuilder
                 ProductionYear = title.Year,
                 TmdbId = title.TmdbId,
                 ImdbId = title.ImdbId,
-                PosterUrl = title.PosterUrl
+                PosterUrl = title.PosterUrl,
+                MediaType = SeerrRules.MediaTypeFor(title.IsMovie)
             });
 
             if (entries.Count == size)
