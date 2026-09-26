@@ -267,7 +267,7 @@
                toute rangée : sans lui dans ce sélecteur, il n'héritait d'aucune de ces
                couleurs, et son bouton « Enregistrer » perdait son fond tandis que ses
                contours de focus disparaissaient — invisibles à la télécommande. */
-            '.mc-row,.mc-prefs-backdrop{',
+            '.mc-row,.mc-prefs-backdrop,.mc-seerr-backdrop{',
             '--mc-accent:' + safeAccent(accent) + ';',
             /* Repris du thème quand il l'expose ; sinon la valeur de `.padded-left`. */
             '--mc-side-padding:var(--sidePadding,3.3%);',
@@ -453,28 +453,89 @@
                n'est pas cliquable, l'affiche est atténuée, la seconde ligne le dit. */
             '.mc-row .mc-unavailable .cardImageContainer{opacity:.55;}',
 
-            /* Bouton de demande à Seerr d'un titre absent. Il est posé DANS l'affiche, et
-               non dessous : la carte garde la hauteur de ses voisines, et la rangée celle
-               des rangées natives. Il reste masqué tant que l'état du titre n'est pas
-               connu — proposer « Demander » pour un titre déjà demandé serait faux. */
+            /* Bouton de demande à Seerr, à la manière de Jellyfin Enhanced : même voile en
+               dégradé au bas de l'affiche, mêmes couleurs, mêmes icônes, et un ▼ quand une
+               série ouvre le choix des saisons. Comme chez lui, il n'apparaît qu'au survol ou
+               au focus — et en permanence sur un écran sans survol, tactile ou téléviseur. Le
+               tout est posé DANS l'affiche, et non dessous : la carte garde la hauteur de ses
+               voisines, et la rangée celle des rangées natives. Masqué tant que l'état du
+               titre n'est pas connu — proposer « Demander » pour un titre déjà demandé serait
+               faux. */
             '.mc-row .mc-unavailable .cardScalable{position:relative;}',
-            '.mc-row .mc-seerr{position:absolute;left:7%;right:7%;bottom:6%;z-index:2;',
-            'box-sizing:border-box;margin:0;padding:.45em .4em;border:0;border-radius:4px;',
-            'font:inherit;font-size:.75em;font-weight:600;line-height:1.2;text-align:center;',
-            'white-space:normal;overflow-wrap:break-word;color:#fff;cursor:pointer;',
-            'background:rgba(32,32,36,.92);box-shadow:0 2px 10px rgba(0,0,0,.45);',
-            'transition:filter var(--mc-dur) var(--mc-ease);}',
-            '.mc-row .mc-seerr[data-state="loading"]{visibility:hidden;}',
+            '.mc-row .mc-seerr-zone{position:absolute;left:0;top:0;right:0;bottom:0;z-index:2;',
+            'display:flex;flex-direction:column;justify-content:flex-end;align-items:stretch;',
+            'box-sizing:border-box;padding:0 7% 7%;pointer-events:none;border-radius:inherit;',
+            'background:linear-gradient(180deg,rgba(0,0,0,0) 40%,rgba(0,0,0,.78) 80%,rgba(0,0,0,.92) 100%);',
+            'opacity:0;transition:opacity .18s ease;}',
+            '.mc-row .cardScalable:hover .mc-seerr-zone,.mc-row .cardScalable:focus-within .mc-seerr-zone{opacity:1;}',
+            '.mc-row .mc-seerr-zone[data-state="loading"]{visibility:hidden;}',
+            '.mc-row .mc-seerr{pointer-events:auto;display:flex;align-items:center;justify-content:center;',
+            'box-sizing:border-box;width:100%;margin:0;padding:.55em .5em;border:0;border-radius:8px;',
+            'font:inherit;font-size:.8em;font-weight:600;line-height:1.2;text-align:center;',
+            'white-space:normal;overflow-wrap:break-word;color:#fff;cursor:pointer;background:#5a3fb8;',
+            /* Seul le soulèvement au survol s'anime : une transition sur le fond ferait passer
+               chaque bouton par le violet avant sa vraie couleur, à chaque affichage. */
+            'transition:transform .2s;}',
+            /* Pas de `gap` : les moteurs Tizen d'avant Chromium 84 l'ignorent en flexbox. */
+            '.mc-row .mc-seerr .material-icons{font-size:1.25em;line-height:1;margin-right:.35em;flex:0 0 auto;}',
+            '.mc-row .mc-seerr[aria-haspopup="dialog"]::after{content:"▼";margin-left:.45em;font-size:.7em;opacity:.8;}',
+            '.mc-row .mc-seerr-spinner{flex:0 0 auto;width:.9em;height:.9em;margin-left:.45em;',
+            'box-sizing:border-box;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;',
+            'border-radius:50%;animation:mc-spin .8s linear infinite;}',
+            '@keyframes mc-spin{to{transform:rotate(360deg);}}',
             '.mc-row .mc-seerr[aria-disabled="true"]{cursor:default;}',
-            '.mc-row .mc-seerr[aria-disabled="false"]:hover{filter:brightness(1.15);}',
+            '.mc-row .mc-seerr[aria-disabled="false"]:hover{transform:translate3d(0,-2px,0);',
+            'box-shadow:0 4px 12px rgba(90,63,184,.4);filter:brightness(1.12);}',
             /* Un anneau blanc cerné de noir : lisible sur n'importe quelle affiche. */
             '.mc-row .mc-seerr:focus{outline:none;box-shadow:0 0 0 2px #fff,0 0 0 4px rgba(0,0,0,.7);}',
-            '.mc-row .mc-seerr:focus:not(:focus-visible){box-shadow:0 2px 10px rgba(0,0,0,.45);}',
-            '.mc-row .mc-seerr[data-tone="accent"]{background:var(--mc-accent);}',
-            '.mc-row .mc-seerr[data-tone="amber"]{background:#975a16;}',
-            '.mc-row .mc-seerr[data-tone="blue"]{background:#2b6cb0;}',
-            '.mc-row .mc-seerr[data-tone="green"]{background:#276749;}',
-            '.mc-row .mc-seerr[data-tone="red"]{background:#b83232;}',
+            '.mc-row .mc-seerr:focus:not(:focus-visible){box-shadow:none;}',
+            /* Les couleurs de Jellyfin Enhanced, état par état. */
+            '.mc-row .mc-seerr[data-tone="request"]{background:#5a3fb8;}',
+            '.mc-row .mc-seerr[data-tone="pending"]{background:#b45309;}',
+            '.mc-row .mc-seerr[data-tone="processing"]{background:#581c87;}',
+            '.mc-row .mc-seerr[data-tone="partial"]{background:#4ca46c;}',
+            '.mc-row .mc-seerr[data-tone="available"]{background:#16a34a;}',
+            '.mc-row .mc-seerr[data-tone="blocked"]{background:#78350f;}',
+            '.mc-row .mc-seerr[data-tone="error"]{background:#dc3545;}',
+
+            /* Choix des saisons : la fenêtre de Jellyfin Enhanced, en HTML nu comme le
+               panneau de personnalisation, et pour la même raison. */
+            '.mc-seerr-backdrop{position:fixed;left:0;right:0;top:0;bottom:0;z-index:1000;',
+            'background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:1em;}',
+            '.mc-seerr-dialog{background:#1c1c1f;color:#fff;border-radius:8px;padding:1.2em;',
+            'width:100%;max-width:460px;max-height:86vh;overflow-y:auto;box-sizing:border-box;',
+            'box-shadow:0 12px 40px rgba(0,0,0,.6);}',
+            '.mc-seerr-dialog:focus{outline:none;}',
+            '.mc-seerr-dialog h2{margin:0;font-size:1.2em;}',
+            '.mc-seerr-dialog .mc-seerr-subtitle{margin:.2em 0 1em;opacity:.7;}',
+            '.mc-seerr-season{display:flex;align-items:center;padding:.5em 0;cursor:pointer;',
+            'border-bottom:1px solid rgba(255,255,255,.08);}',
+            '.mc-seerr-season.mc-seerr-season-locked{cursor:default;}',
+            '.mc-seerr-season input{margin:0 .7em 0 0;flex:0 0 auto;}',
+            '.mc-seerr-season-name{flex:1 1 auto;min-width:0;}',
+            '.mc-seerr-season-meta{flex:0 0 auto;margin-left:.8em;opacity:.6;font-size:.85em;}',
+            '.mc-seerr-season-state{flex:0 0 auto;margin-left:.8em;padding:.15em .6em;border-radius:999px;',
+            'font-size:.78em;font-weight:600;background:rgba(255,255,255,.12);}',
+            '.mc-seerr-season-state[data-state="requested"]{background:#b45309;}',
+            '.mc-seerr-season-state[data-state="processing"]{background:#581c87;}',
+            '.mc-seerr-season-state[data-state="partial"]{background:#4ca46c;}',
+            '.mc-seerr-season-state[data-state="available"]{background:#16a34a;}',
+            '.mc-seerr-season-state[data-state="blocked"]{background:#78350f;}',
+            '.mc-seerr-dialog .mc-seerr-note{margin:.6em 0;opacity:.75;font-size:.9em;}',
+            '.mc-seerr-dialog .mc-seerr-message{min-height:1.2em;margin:.8em 0 0;color:#ff8a8a;font-size:.9em;}',
+            '.mc-seerr-dialog .mc-seerr-actions{display:flex;flex-wrap:wrap;margin-top:.6em;}',
+            '.mc-seerr-dialog .mc-seerr-actions button{margin-right:.5em;margin-top:.4em;border:0;',
+            'border-radius:4px;padding:.55em 1em;cursor:pointer;font-size:.95em;}',
+            '.mc-seerr-dialog .mc-seerr-send{background:#5a3fb8;color:#fff;}',
+            '.mc-seerr-dialog .mc-seerr-send[disabled]{opacity:.5;cursor:default;}',
+            '.mc-seerr-dialog .mc-seerr-cancel{background:rgba(255,255,255,.12);color:#fff;}',
+            '.mc-seerr-dialog button:focus,.mc-seerr-dialog input:focus{outline:2px solid var(--mc-accent);',
+            'outline-offset:2px;}',
+            '.mc-toast{position:fixed;left:50%;bottom:2em;z-index:1001;max-width:90vw;box-sizing:border-box;',
+            'padding:.7em 1.1em;border-radius:8px;background:#1c1c1f;color:#fff;',
+            'box-shadow:0 6px 24px rgba(0,0,0,.5);opacity:0;pointer-events:none;',
+            'transform:translate3d(-50%,1em,0);transition:opacity .2s,transform .2s;}',
+            '.mc-toast.mc-toast-visible{opacity:1;transform:translate3d(-50%,0,0);}',
 
             /* Logo de studio : contenu dans la vignette, jamais recadré. */
             '.mc-row .mc-tile-logo{max-width:82%;max-height:74%;object-fit:contain;',
@@ -565,11 +626,13 @@
             '--mc-scrim:rgba(0,0,0,.55);',
             '}',
 
-            '@media (hover:none){.mc-row .mc-arrow{display:none;}}',
+            '@media (hover:none){.mc-row .mc-arrow{display:none;}.mc-row .mc-seerr-zone{opacity:1;}}',
 
             '@media (prefers-reduced-motion:reduce){',
             '.verticalSection.mc-row,.mc-row .mc-skeleton .cardPadder{animation:none;}',
-            '.mc-row .mc-rank-glyph,.mc-row .mc-tile-logo,.mc-row .mc-seerr{transition:none;}',
+            '.mc-row .mc-rank-glyph,.mc-row .mc-tile-logo,.mc-row .mc-seerr,.mc-row .mc-seerr-zone,.mc-toast{',
+            'transition:none;}',
+            '.mc-row .mc-seerr-spinner{animation:none;}',
             '.mc-row .mc-strip{scroll-behavior:auto;}',
             '}',
 
@@ -860,47 +923,70 @@
     // ------------------------------------------------------------------
 
     /**
-     * États du bouton. Les libellés sont ceux de Jellyfin Enhanced : un serveur qui l'utilise
-     * déjà retrouve les mêmes mots pour le même geste.
+     * États du bouton, repris de Jellyfin Enhanced : mêmes libellés, mêmes couleurs, mêmes
+     * icônes, pour qu'un serveur qui l'utilise retrouve le même bouton au même geste.
      *
-     * `tone` choisit la couleur, séparément de l'état : plusieurs états la partagent, et la
-     * feuille de style n'a pas à connaître la liste des erreurs. Seul `request` agit ; une
-     * erreur marquée `retry` rend la main au bout de SEERR_RETRY_DELAY, les autres
-     * persistent, puisqu'un nouvel essai échouerait de la même façon.
+     * `tone` choisit la couleur et `icon` l'icône Material que jellyfin-web fournit déjà.
+     * `acts` dit pour quels types le bouton agit : un film se demande d'un clic, une série
+     * ouvre le choix des saisons. Comme chez Jellyfin Enhanced, une série « en attente »
+     * reste cliquable — d'autres saisons peuvent encore être demandées. Une erreur marquée
+     * `retry` rend la main au bout de SEERR_RETRY_DELAY ; les autres persistent, puisqu'un
+     * nouvel essai échouerait de la même façon.
      */
     var SEERR_STATES = {
-        loading: { label: '', tone: 'neutral' },
-        request: { label: 'Demander', tone: 'accent', action: true },
-        sending: { label: 'Demande en cours', tone: 'neutral' },
-        pending: { label: 'En attente d\'approbation', tone: 'amber' },
-        processing: { label: 'Demandé', tone: 'blue' },
-        partial: { label: 'Partiellement disponible', tone: 'blue' },
-        available: { label: 'Disponible', tone: 'green' },
-        blocked: { label: 'Bloqué', tone: 'red' },
-        offline: { label: 'Seerr hors ligne', tone: 'red', retry: true },
-        error: { label: 'Erreur', tone: 'red', retry: true },
+        loading: { label: '', tone: 'request' },
+        request: { label: 'Demander', tone: 'request', icon: 'file_download', acts: 'movie tv' },
+        'request-more': { label: 'Demander plus', tone: 'request', icon: 'file_download', acts: 'tv' },
+        'request-missing': { label: 'Demander manquant', tone: 'partial', icon: 'file_download', acts: 'tv' },
+        sending: { label: 'Demande en cours', tone: 'request', spinner: true },
+        pending: { label: 'En attente d\'approbation', tone: 'pending', icon: 'pending', acts: 'tv' },
+        requested: { label: 'Demandé', tone: 'pending', icon: 'schedule' },
+        processing: { label: 'Traitement', tone: 'processing', spinner: true },
+        partial: { label: 'Partiellement disponible', tone: 'partial', icon: 'task_alt' },
+        available: { label: 'Disponible', tone: 'available', icon: 'download_done' },
+        blocked: { label: 'Bloqué', tone: 'blocked', icon: 'cancel' },
+        offline: { label: 'Seerr hors ligne', tone: 'error', icon: 'cloud_off', retry: true },
+        error: { label: 'Erreur', tone: 'error', icon: 'error', retry: true },
         'user-not-found': {
             label: 'Utilisateur non trouvé',
-            tone: 'red',
+            tone: 'error',
+            icon: 'person_off',
             hint: 'Ce compte n\'existe pas dans Seerr : l\'administrateur doit l\'importer depuis Jellyfin.'
         },
         forbidden: {
             label: 'Pas de permission pour faire des demandes',
-            tone: 'red',
-            hint: 'Ce compte Seerr n\'a pas le droit de faire des demandes.'
+            tone: 'error',
+            icon: 'error',
+            hint: 'Ce compte Seerr n\'a pas le droit de faire des demandes, ou son quota est atteint.'
         }
+    };
+
+    // État d'une saison dans le choix des saisons, avec les libellés de Jellyfin Enhanced.
+    var SEASON_STATES = {
+        'not-requested': 'Non demandé',
+        requested: 'Demandé',
+        processing: 'Traitement',
+        partial: 'Partiel',
+        available: 'Disponible',
+        blocked: 'Bloqué'
     };
 
     // Taille maximale d'un lot côté serveur : au-delà, les titres sont répartis en plusieurs.
     var SEERR_BATCH = 20;
     var SEERR_RETRY_DELAY = 4000;
+    var TOAST_DELAY = 4000;
+    var toastTimer = null;
+
+    function has(table, key) {
+        return Object.prototype.hasOwnProperty.call(table, key);
+    }
 
     function seerrKey(mediaType, tmdbId) {
         return mediaType + ':' + parseInt(tmdbId, 10);
     }
 
     /**
-     * Bouton d'un titre absent, ou rien.
+     * Bouton d'un titre absent, dans son voile, ou rien.
      *
      * Il faut le type ET l'identifiant TMDB : films et séries sont numérotés séparément, le
      * 1399 d'une série n'est pas celui d'un film. Un classement calculé avant cette version
@@ -913,23 +999,50 @@
             return '';
         }
 
-        return '<button type="button" class="mc-seerr" data-state="loading" data-tone="neutral"'
+        return '<div class="mc-seerr-zone" data-state="loading">'
+            + '<button type="button" class="mc-seerr" data-state="loading" data-tone="request"'
             + ' aria-disabled="true" data-media="' + entry.MediaType + '" data-tmdb="' + tmdbId + '"'
-            + ' data-name="' + escapeHtml(entry.Name || '') + '"></button>';
+            + ' data-name="' + escapeHtml(entry.Name || '') + '"></button></div>';
+    }
+
+    function seerrActs(button, state) {
+        var spec = has(SEERR_STATES, state) ? SEERR_STATES[state] : null;
+
+        return !!(spec && spec.acts
+            && (' ' + spec.acts + ' ').indexOf(' ' + button.getAttribute('data-media') + ' ') !== -1);
     }
 
     function applySeerrState(button, state) {
-        var known = Object.prototype.hasOwnProperty.call(SEERR_STATES, state) ? state : 'loading';
+        var known = has(SEERR_STATES, state) ? state : 'loading';
         var spec = SEERR_STATES[known];
         var name = button.getAttribute('data-name') || '';
+        var acts = seerrActs(button, known);
+        var zone = button.parentNode;
 
         button.setAttribute('data-state', known);
         button.setAttribute('data-tone', spec.tone);
-        button.textContent = spec.label;
+
+        if (zone && zone.classList && zone.classList.contains('mc-seerr-zone')) {
+            zone.setAttribute('data-state', known);
+        }
+
+        // L'icône vient de la police Material de jellyfin-web, comme dans tout le client.
+        button.innerHTML = (spec.icon ? '<span class="material-icons ' + spec.icon + '" aria-hidden="true"></span>' : '')
+            + '<span class="mc-seerr-label">' + escapeHtml(spec.label) + '</span>'
+            + (spec.spinner ? '<span class="mc-seerr-spinner" aria-hidden="true"></span>' : '');
+
         // `aria-disabled` et non `disabled` : un bouton désactivé perd le focus, et la
         // télécommande qui venait de le presser ne serait plus nulle part.
-        button.setAttribute('aria-disabled', spec.action ? 'false' : 'true');
+        button.setAttribute('aria-disabled', acts ? 'false' : 'true');
         button.setAttribute('aria-label', spec.label ? spec.label + ' : ' + name : name);
+
+        // Une série ouvre le choix des saisons : le bouton l'annonce, et le montre par un ▼,
+        // comme chez Jellyfin Enhanced.
+        if (acts && button.getAttribute('data-media') === 'tv') {
+            button.setAttribute('aria-haspopup', 'dialog');
+        } else {
+            button.removeAttribute('aria-haspopup');
+        }
 
         if (spec.hint) {
             button.setAttribute('title', spec.hint);
@@ -1055,31 +1168,272 @@
         return Promise.resolve(status === 503 ? 'offline' : 'error');
     }
 
-    function requestFromSeerr(button) {
-        var mediaType = button.getAttribute('data-media');
+    function showSeerrFailure(button, failure) {
+        applySeerrState(button, failure);
+
+        if (SEERR_STATES[failure].retry) {
+            window.setTimeout(function () {
+                if (button.getAttribute('data-state') === failure) {
+                    applySeerrState(button, 'request');
+                }
+            }, SEERR_RETRY_DELAY);
+        }
+    }
+
+    /** Un film se demande d'un clic ; il est alors « Demandé », comme chez Jellyfin Enhanced. */
+    function requestMovie(button) {
         var tmdbId = parseInt(button.getAttribute('data-tmdb'), 10);
-        var key = seerrKey(mediaType, tmdbId);
+        var key = seerrKey('movie', tmdbId);
 
         applySeerrState(button, 'sending');
 
-        return seerrPost('Request', { MediaType: mediaType, TmdbId: tmdbId }).then(function (answer) {
+        return seerrPost('Request', { MediaType: 'movie', TmdbId: tmdbId }).then(function (answer) {
             var state = answer && answer.State;
 
-            // Une demande acceptée sans état lisible est au moins « Demandé ».
-            seerrStates[key] = Object.prototype.hasOwnProperty.call(SEERR_STATES, state) ? state : 'processing';
+            seerrStates[key] = has(SEERR_STATES, state) ? state : 'requested';
             applySeerrState(button, seerrStates[key]);
         }, function (response) {
             return seerrFailure(response).then(function (failure) {
-                applySeerrState(button, failure);
-
-                if (SEERR_STATES[failure].retry) {
-                    window.setTimeout(function () {
-                        if (button.getAttribute('data-state') === failure) {
-                            applySeerrState(button, 'request');
-                        }
-                    }, SEERR_RETRY_DELAY);
-                }
+                showSeerrFailure(button, failure);
             });
+        });
+    }
+
+    /** Message bref en bas de l'écran, comme les confirmations de Jellyfin Enhanced. */
+    function showToast(text) {
+        var toast = document.querySelector('.mc-toast');
+
+        if (!toast) {
+            toast = document.createElement('div');
+            toast.className = 'mc-toast';
+            toast.setAttribute('role', 'status');
+            toast.setAttribute('aria-live', 'polite');
+            document.body.appendChild(toast);
+        }
+
+        toast.textContent = text;
+        toast.classList.add('mc-toast-visible');
+        window.clearTimeout(toastTimer);
+        toastTimer = window.setTimeout(function () {
+            toast.classList.remove('mc-toast-visible');
+        }, TOAST_DELAY);
+    }
+
+    function closeSeasonDialog() {
+        var open = document.querySelector('.mc-seerr-backdrop');
+
+        if (!open) {
+            return;
+        }
+
+        var origin = open.mcOrigin;
+        open.parentNode.removeChild(open);
+
+        // Le focus revient au bouton qui a ouvert la fenêtre : la télécommande reprend là où
+        // elle en était, au lieu de repartir du haut de la page.
+        if (origin && document.body.contains(origin)) {
+            origin.focus();
+        }
+    }
+
+    function seasonLabel(season) {
+        if (season.Name) {
+            return season.Name;
+        }
+
+        return season.Number === 0 ? 'Épisodes spéciaux' : 'Saison ' + season.Number;
+    }
+
+    /**
+     * Choix des saisons d'une série, comme la fenêtre de Jellyfin Enhanced.
+     *
+     * Elle suit deux réglages de Seerr, lus par le serveur : sans demandes partielles, la
+     * série se demande en entier — les cases montrent ce qui partira, sans pouvoir être
+     * changées ; les épisodes spéciaux n'apparaissent que si Seerr les accepte.
+     */
+    function openSeasonDialog(button) {
+        closeSeasonDialog();
+        closePreferences();
+
+        var name = button.getAttribute('data-name') || '';
+        var tmdbId = parseInt(button.getAttribute('data-tmdb'), 10);
+        var titleId = 'mc-seerr-title-' + (++sequence);
+        var backdrop = document.createElement('div');
+
+        backdrop.className = 'mc-seerr-backdrop';
+        backdrop.mcOrigin = button;
+        backdrop.innerHTML = '<div class="mc-seerr-dialog" role="dialog" aria-modal="true"'
+            + ' aria-labelledby="' + titleId + '" tabindex="-1">'
+            + '<h2 id="' + titleId + '">Demander une série</h2>'
+            + '<p class="mc-seerr-subtitle">' + escapeHtml(name) + '</p>'
+            + '<div class="mc-seerr-seasons" aria-busy="true">'
+            + '<p class="mc-seerr-note">Chargement des saisons…</p></div>'
+            + '<p class="mc-seerr-message" role="alert"></p>'
+            + '<div class="mc-seerr-actions">'
+            + '<button type="button" class="mc-seerr-send" disabled>Demander</button>'
+            + '<button type="button" class="mc-seerr-cancel">Annuler</button>'
+            + '</div></div>';
+
+        document.body.appendChild(backdrop);
+        wireSeasonDialog(backdrop, button, tmdbId, name);
+        backdrop.querySelector('.mc-seerr-dialog').focus();
+
+        return seerrPost('Seasons', { MediaType: 'tv', TmdbId: tmdbId }).then(function (choice) {
+            if (backdrop.parentNode) {
+                renderSeasons(backdrop, choice);
+            }
+        }, function (response) {
+            return seerrFailure(response).then(function (failure) {
+                if (!backdrop.parentNode) {
+                    return;
+                }
+
+                var list = backdrop.querySelector('.mc-seerr-seasons');
+                list.removeAttribute('aria-busy');
+                list.innerHTML = '<p class="mc-seerr-note">' + (failure === 'offline'
+                    ? 'Seerr hors ligne' : 'Impossible de charger les informations de saison') + '</p>';
+            });
+        });
+    }
+
+    function renderSeasons(backdrop, choice) {
+        var partial = !!(choice && choice.PartialRequests);
+        var seasons = (choice && choice.Seasons) || [];
+        var list = backdrop.querySelector('.mc-seerr-seasons');
+        var send = backdrop.querySelector('.mc-seerr-send');
+        var requestable = seasons.filter(function (season) { return season.Requestable; });
+        var html = '';
+
+        backdrop.mcPartial = partial;
+
+        if (partial && requestable.length) {
+            html += '<label class="mc-seerr-season mc-seerr-all-row">'
+                + '<input type="checkbox" class="mc-seerr-all">'
+                + '<span class="mc-seerr-season-name">Sélectionner toutes les saisons</span></label>';
+        }
+
+        seasons.forEach(function (season) {
+            var state = has(SEASON_STATES, season.State) ? season.State : 'not-requested';
+            var enabled = partial && season.Requestable;
+            // Sans demandes partielles, partent toutes les saisons ordinaires encore
+            // demandables — jamais les spéciaux, comme chez Jellyfin Enhanced.
+            var checked = !partial && season.Requestable && season.Number > 0;
+            var meta = [season.Year || '', season.Episodes + ' ép.'].filter(function (part) { return part; });
+
+            html += '<label class="mc-seerr-season' + (enabled ? '' : ' mc-seerr-season-locked') + '">'
+                + '<input type="checkbox" class="mc-seerr-pick" value="' + parseInt(season.Number, 10) + '"'
+                + (season.Number === 0 ? ' data-special="true"' : '')
+                + (checked ? ' checked' : '') + (enabled ? '' : ' disabled') + '>'
+                + '<span class="mc-seerr-season-name">' + escapeHtml(seasonLabel(season)) + '</span>'
+                + '<span class="mc-seerr-season-meta">' + escapeHtml(meta.join(' · ')) + '</span>'
+                + '<span class="mc-seerr-season-state" data-state="' + state + '">'
+                + SEASON_STATES[state] + '</span></label>';
+        });
+
+        if (!seasons.length) {
+            html = '<p class="mc-seerr-note">Impossible de charger les informations de saison</p>';
+        } else if (!requestable.length) {
+            html += '<p class="mc-seerr-note">Toutes les saisons sont déjà demandées ou disponibles.</p>';
+        }
+
+        list.removeAttribute('aria-busy');
+        list.innerHTML = html;
+        send.textContent = partial ? 'Demander la/les saison(s) sélectionnée(s)' : 'Demander';
+        send.disabled = !requestable.length;
+
+        var first = list.querySelector('input:not([disabled])')
+            || (send.disabled ? backdrop.querySelector('.mc-seerr-cancel') : send);
+        first.focus();
+    }
+
+    // Cases que l'utilisateur peut cocher ; `regular` écarte les épisodes spéciaux, que
+    // « tout sélectionner » ne coche pas, comme chez Jellyfin Enhanced.
+    function seasonPicks(backdrop, regular) {
+        return Array.prototype.slice.call(backdrop.querySelectorAll('.mc-seerr-pick:not([disabled])'))
+            .filter(function (box) { return !regular || box.getAttribute('data-special') !== 'true'; });
+    }
+
+    function syncSelectAll(backdrop) {
+        var all = backdrop.querySelector('.mc-seerr-all');
+
+        if (!all) {
+            return;
+        }
+
+        var boxes = seasonPicks(backdrop, true);
+        var checked = boxes.filter(function (box) { return box.checked; }).length;
+
+        all.checked = checked > 0 && checked === boxes.length;
+        all.indeterminate = checked > 0 && checked < boxes.length;
+    }
+
+    function wireSeasonDialog(backdrop, button, tmdbId, name) {
+        backdrop.addEventListener('click', function (event) {
+            // Un clic hors de la fenêtre la ferme, comme n'importe quelle boîte de dialogue.
+            if (event.target === backdrop || event.target.classList.contains('mc-seerr-cancel')) {
+                closeSeasonDialog();
+                return;
+            }
+
+            if (event.target.classList.contains('mc-seerr-send')) {
+                sendSeasons(backdrop, button, tmdbId, name);
+            }
+        });
+
+        backdrop.addEventListener('change', function (event) {
+            if (event.target.classList.contains('mc-seerr-all')) {
+                seasonPicks(backdrop, true).forEach(function (box) {
+                    box.checked = event.target.checked;
+                });
+            }
+
+            syncSelectAll(backdrop);
+        });
+
+        backdrop.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape') {
+                closeSeasonDialog();
+            }
+        });
+    }
+
+    function sendSeasons(backdrop, button, tmdbId, name) {
+        var send = backdrop.querySelector('.mc-seerr-send');
+        var message = backdrop.querySelector('.mc-seerr-message');
+        var key = seerrKey('tv', tmdbId);
+        var seasons = Array.prototype.slice.call(backdrop.querySelectorAll('.mc-seerr-pick:checked'))
+            .map(function (box) { return parseInt(box.value, 10); });
+
+        if (!seasons.length) {
+            message.textContent = 'Veuillez sélectionner au moins une saison';
+            return;
+        }
+
+        message.textContent = '';
+        send.disabled = true;
+        send.textContent = 'Demande en cours…';
+
+        seerrPost('Request', { MediaType: 'tv', TmdbId: tmdbId, Seasons: seasons }).then(function (answer) {
+            var state = answer && answer.State;
+
+            seerrStates[key] = has(SEERR_STATES, state) ? state : 'requested';
+            applySeerrState(button, seerrStates[key]);
+            closeSeasonDialog();
+            showToast('Demandé ' + seasons.length + ' saison(s) de « ' + name + ' »');
+        }, function (response) {
+            return seerrFailure(response).then(function (failure) {
+                if (!backdrop.parentNode) {
+                    return;
+                }
+
+                message.textContent = failure === 'user-not-found' || failure === 'forbidden' || failure === 'offline'
+                    ? SEERR_STATES[failure].label
+                    : 'Échec de la demande de saisons';
+                send.disabled = false;
+                send.textContent = backdrop.mcPartial ? 'Demander la/les saison(s) sélectionnée(s)' : 'Demander';
+            });
+        }).catch(function (error) {
+            log('demande de saisons impossible', error);
         });
     }
 
@@ -1096,8 +1450,16 @@
             event.preventDefault();
             event.stopPropagation();
 
-            if (button.getAttribute('data-state') === 'request') {
-                requestFromSeerr(button).catch(function (error) {
+            if (!seerrActs(button, button.getAttribute('data-state'))) {
+                return;
+            }
+
+            if (button.getAttribute('data-media') === 'tv') {
+                openSeasonDialog(button).catch(function (error) {
+                    log('choix des saisons impossible', error);
+                });
+            } else {
+                requestMovie(button).catch(function (error) {
                     log('demande à Seerr impossible', error);
                 });
             }
@@ -2552,6 +2914,8 @@
         // laissait au-dessus de la page suivante.
         window.addEventListener('hashchange', closePreferences);
         window.addEventListener('popstate', closePreferences);
+        window.addEventListener('hashchange', closeSeasonDialog);
+        window.addEventListener('popstate', closeSeasonDialog);
 
         // La largeur d'affiche change à chaque palier de la grille : elle doit être
         // remesurée, sinon les rangées classées gardent celle du palier précédent.

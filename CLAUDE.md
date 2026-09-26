@@ -51,7 +51,7 @@ MediaCarousel/
 │   ├── ClientOptionsDto.cs            # Réglages d'affichage, lisibles sans droits admin
 │   ├── AssetsController.cs            # Sert media-carousel.js depuis les ressources
 │   ├── UserPreferencesController.cs   # GET/POST/DELETE des choix propres à un compte
-│   ├── SeerrController.cs             # POST Seerr/Status, Seerr/Request ; Seerr/Test (admin)
+│   ├── SeerrController.cs             # POST Seerr/Status, Seasons, Request ; Seerr/Test (admin)
 │   └── PosterController.cs            # Relaie et met en cache les affiches TMDB
 ├── Configuration/
 │   ├── PluginConfiguration.cs         # Modèle de config + enums
@@ -183,15 +183,33 @@ après filtrage.
 ### Demandes à Seerr
 
 Un titre du Top mondial absent de la bibliothèque porte un bouton « Demander », qui passe la
-demande à Seerr (Jellyseerr, Overseerr et leur successeur partagent l'API `/api/v1`). Le
-fonctionnement et les libellés sont ceux de Jellyfin Enhanced : un serveur qui l'utilise déjà
-retrouve les mêmes mots pour le même geste.
+demande à Seerr (Jellyseerr, Overseerr et leur successeur partagent l'API `/api/v1`). **Le
+bouton est celui de Jellyfin Enhanced**, relevé dans son code (`seerr-status.js`,
+`ui-buttons.js`, `analyzeSeasonStatuses`, `ui-season-modal.js`) : mêmes libellés, mêmes couleurs,
+même voile en dégradé, mêmes icônes — prises dans la police Material que jellyfin-web sert déjà,
+sans recopier ses SVG. Un serveur qui utilise ce plugin retrouve le même geste.
+
+- **Le bouton n'apparaît qu'au survol ou au focus**, comme chez Jellyfin Enhanced 12.8 (vu sur la
+  prod : son voile n'existe pas au repos). Sur un écran sans survol — tactile, téléviseur — il
+  est toujours là : la règle vit dans le `@media (hover:none)` des flèches, pas dans un nouveau
+  point de rupture.
+- **Un film se demande d'un clic** et devient « Demandé ». **Une série ouvre le choix des
+  saisons** — jamais une demande de toutes les saisons d'office. Elle reste cliquable « en
+  attente » ou « partiellement disponible » (« Demander manquant ») : d'autres saisons peuvent
+  encore être demandées. Son état se déduit de celui de ses saisons.
+- **Le choix des saisons suit deux réglages de Seerr**, lus dans `/api/v1/settings/main` comme le
+  fait Jellyfin Enhanced — seuls deux booléens, car la réponse contient la clé d'API. Sans
+  demandes partielles, la série part en entière, épisodes spéciaux exceptés ; sans épisodes
+  spéciaux, la saison 0 n'est pas proposée.
+- **Une saison qui attend son approbation n'est plus demandable.** Une demande porte un statut de
+  DEMANDE (1 à approuver, 2 approuvée), que `SeerrRules` traduit en statut de MÉDIA. Jellyfin
+  Enhanced les mélange, et rend ainsi demandable une saison déjà demandée.
 
 - **La clé d'administration ne quitte jamais le serveur.** Le navigateur parle à
   `SeerrController`, qui parle à Seerr. Chaque demande part avec `X-Api-User`, l'identifiant du
   compte Seerr lié au compte Jellyfin (`jellyfinUserId`, sans tirets) : Seerr applique alors les
   droits et les quotas de l'utilisateur, pas ceux de l'administrateur.
-- **Le serveur ne relaie que ce qu'il a publié.** `Status` et `Request` n'acceptent que les
+- **Le serveur ne relaie que ce qu'il a publié.** `Status`, `Seasons` et `Request` n'acceptent que les
   titres absents de l'instantané Global. Sans cette liste blanche, tout compte connecté pourrait
   faire demander n'importe quel titre au nom de n'importe qui — ou sonder Seerr à travers Jellyfin.
 - **Le type de média fait partie de l'identité.** TMDB numérote films et séries séparément :
@@ -199,8 +217,8 @@ retrouve les mêmes mots pour le même geste.
   porte pas, donc pas de bouton jusqu'au recalcul suivant.
 - **Caches** : association des comptes 10 min (1 min si le compte est introuvable, le temps
   qu'un administrateur l'importe), état d'un titre 1 min. Les états sont lus par lots de 20.
-- **Réponses de `Request`** : 200 avec l'état ; 404 compte absent de Seerr ; 403 droits
-  insuffisants ; 502 Seerr injoignable ou incohérent (le corps précise `offline` ou `error`) ; 503
+- **Réponses de `Request`** : 200 avec l'état ; 400 si une série arrive sans saisons, ou un film
+  avec ; 404 compte absent de Seerr ; 403 droits insuffisants ; 502 Seerr injoignable ou incohérent (le corps précise `offline` ou `error`) ; 503
   intégration désactivée. Le 403 est sans danger : le seul gestionnaire d'échec de jellyfin-web,
   `appRouter.onRequestFail` (lu dans le bundle 12.1), ne réagit qu'à un 403 portant
   `X-Application-Error-Code: ParentalControl`, qu'il renvoie à l'écran de connexion.
@@ -212,6 +230,10 @@ d'erreur : l'accueil est la page la plus vue du serveur, une panne de Seerr ne d
 de rouge. Une erreur ne s'affiche qu'en réponse à un clic, sur le bouton concerné. Une erreur
 passagère (« Seerr hors ligne », « Erreur ») rend la main au bout de 4 s ; « Utilisateur non
 trouvé » et « Pas de permission » restent affichés, puisqu'un nouvel essai échouerait pareil.
+Dans le choix des saisons, un refus s'affiche dans la fenêtre, qui reste ouverte.
+
+Aucune transition sur le fond du bouton : chaque bouton passerait par le violet de « Demander »
+avant sa vraie couleur, à chaque affichage. Seul le soulèvement au survol s'anime.
 
 ### Jamais vu et de retour cette semaine
 
@@ -751,7 +773,7 @@ dotnet run --project tests/ScriptTag.Tests -c Release
 cd tests/browser && npm install && node home-rows.test.mjs && node config-page.test.mjs
 ```
 
-Trois suites sans framework — 405 assertions — exécutées en CI avant la publication ; voir
+Trois suites sans framework — 452 assertions — exécutées en CI avant la publication ; voir
 `tests/README.md`. L'une charge un extrait des règles d'ElegantFin **après** les nôtres pour
 vérifier que la cohabitation tient.
 Les deux suites navigateur chargent le vrai `media-carousel.js` et le vrai `configPage.html`

@@ -495,7 +495,7 @@ UserPreferenceRules.Apply(avecAncienneEchelle, new UserRowPreferences { RankNumb
 Check("PREFS: un 150 deja enregistre est ramene au plafond du rendu",
     avecAncienneEchelle.RankNumberScale == 100);
 
-// SEERR — la regle d'association des comptes, la lecture des statuts et la demande.
+// SEERR — association des comptes, etats calques sur Jellyfin Enhanced, choix des saisons.
 var jellyfinId = Guid.Parse("22ae9f6f-970a-4447-a5f7-02ae3fbeb896");
 Check("SEERR: l'identifiant Jellyfin perd ses tirets, comme Seerr l'enregistre",
     SeerrRules.NormalizeJellyfinUserId(jellyfinId) == "22ae9f6f970a4447a5f702ae3fbeb896");
@@ -513,23 +513,84 @@ Check("SEERR: un compte absent de Seerr ne correspond a personne",
     SeerrRules.FindSeerrUserId(comptesSeerr, Guid.Parse("11111111-2222-3333-4444-555555555555")) is null);
 Check("SEERR: une reponse sans liste de comptes ne correspond a personne",
     SeerrRules.FindSeerrUserId("""{"message":"Unauthorized"}""", jellyfinId) is null);
-Check("SEERR: un titre jamais demande n'a pas de mediaInfo, son statut vaut 1",
-    SeerrRules.ReadMediaStatus("""{"id":27205,"title":"Inception"}""") == 1);
-Check("SEERR: le statut est lu dans mediaInfo",
-    SeerrRules.ReadMediaStatus("""{"id":1399,"mediaInfo":{"status":5}}""") == 5);
-Check("SEERR: les sept statuts de Seerr donnent les etats attendus",
-    SeerrRules.ToState(1) == "request" && SeerrRules.ToState(2) == "pending"
-    && SeerrRules.ToState(3) == "processing" && SeerrRules.ToState(4) == "partial"
-    && SeerrRules.ToState(5) == "available" && SeerrRules.ToState(6) == "blocked"
-    && SeerrRules.ToState(7) == "request");
-Check("SEERR: une demande a approuver attend un administrateur",
-    SeerrRules.ReadStateAfterRequest("""{"id":12,"status":1}""") == "pending");
-Check("SEERR: une demande approuvee d'office est en cours d'acquisition",
-    SeerrRules.ReadStateAfterRequest("""{"id":13,"status":2}""") == "processing");
+
+// Films : les etats de seerr-status.js.
+string Film(string mediaInfo) => SeerrRules.ReadState("{\"id\":27205" + mediaInfo + "}", "movie");
+Check("SEERR: un film que Seerr n'a jamais vu se demande", Film("") == "request");
+Check("SEERR: un film en attente attend l'approbation", Film(""","mediaInfo":{"status":2}""") == "pending");
+Check("SEERR: un film approuve sans telechargement est « Demande »",
+    Film(""","mediaInfo":{"status":3,"downloadStatus":[]}""") == "requested");
+Check("SEERR: un film qui se telecharge est « Traitement »",
+    Film(""","mediaInfo":{"status":3,"downloadStatus":[{"size":10}]}""") == "processing");
+Check("SEERR: partiellement disponible, disponible, bloque",
+    Film(""","mediaInfo":{"status":4}""") == "partial" && Film(""","mediaInfo":{"status":5}""") == "available"
+    && Film(""","mediaInfo":{"status":6}""") == "blocked");
+Check("SEERR: un film supprime redevient demandable", Film(""","mediaInfo":{"status":7}""") == "request");
+
+// Series : l'etat d'ensemble, puis sa deduction depuis les saisons (analyzeSeasonStatuses).
+string Serie(string mediaInfo) => SeerrRules.ReadState("{\"id\":1399" + mediaInfo + "}", "tv");
+string Saisons(params (int N, int S)[] saisons) => Serie(",\"mediaInfo\":{\"status\":1,\"seasons\":["
+    + string.Join(",", saisons.Select(s => "{\"seasonNumber\":" + s.N + ",\"status\":" + s.S + "}")) + "]}");
+Check("SEERR: une serie inconnue se demande", Serie("") == "request");
+Check("SEERR: une serie en attente reste « En attente d'approbation »", Serie(""","mediaInfo":{"status":2}""") == "pending");
+Check("SEERR: une serie en cours laisse demander d'autres saisons", Serie(""","mediaInfo":{"status":3}""") == "request");
+Check("SEERR: une serie partiellement disponible propose « Demander manquant »",
+    Serie(""","mediaInfo":{"status":4}""") == "request-missing");
+Check("SEERR: toutes les saisons disponibles : « Disponible »", Saisons((1, 5), (2, 5)) == "available");
+Check("SEERR: des speciaux jamais demandes gardent la serie demandable",
+    Saisons((0, 1), (1, 5), (2, 5)) == "request-more");
+Check("SEERR: une saison disponible et une absente : « Demander manquant »", Saisons((1, 5), (2, 1)) == "request-missing");
+Check("SEERR: une saison demandee et une absente : « Demander »", Saisons((1, 2), (2, 1)) == "request");
+Check("SEERR: tout est demande, rien de disponible : « Demander »", Saisons((1, 2), (2, 3)) == "request");
+Check("SEERR: tout est couvert, une partie disponible : « Demander plus »", Saisons((1, 5), (2, 3)) == "request-more");
+Check("SEERR: les speciaux seuls ne decident de rien", Saisons((0, 5)) == "request");
+
+// Choix des saisons.
+const string serieDetaillee = """
+    {"id":1399,"seasons":[
+      {"seasonNumber":0,"name":"Specials","episodeCount":14,"airDate":"2010-12-05"},
+      {"seasonNumber":1,"name":"Saison 1","episodeCount":10,"airDate":"2011-04-17"},
+      {"seasonNumber":2,"name":"2","episodeCount":10,"airDate":"2012-04-01"},
+      {"seasonNumber":3,"name":"","episodeCount":10,"airDate":null},
+      {"seasonNumber":4,"name":"Saison 4","episodeCount":0},
+      {"seasonNumber":5,"name":"Saison 5","episodeCount":10},
+      {"seasonNumber":6,"name":"Saison 6","episodeCount":10}],
+     "mediaInfo":{"status":4,
+      "seasons":[{"seasonNumber":1,"status":5},{"seasonNumber":2,"status":3}],
+      "requests":[
+        {"status":1,"seasons":[{"seasonNumber":3,"status":1}]},
+        {"status":3,"seasons":[{"seasonNumber":5,"status":3}]}],
+      "downloadStatus":[{"episode":{"seasonNumber":2}}]}}
+    """;
+var sansSpeciaux = SeerrRules.ReadSeasons(serieDetaillee, includeSpecials: false);
+var avecSpeciaux = SeerrRules.ReadSeasons(serieDetaillee, includeSpecials: true);
+SeerrSeason Saison(int n) => sansSpeciaux.First(s => s.Number == n);
+Check("SEERR: sans episodes, une saison n'est pas proposee ; les speciaux seulement si Seerr les accepte",
+    string.Join(",", sansSpeciaux.Select(s => s.Number)) == "1,2,3,5,6"
+    && string.Join(",", avecSpeciaux.Select(s => s.Number)) == "0,1,2,3,5,6");
+Check("SEERR: une saison disponible ne se redemande pas", Saison(1).State == "available" && !Saison(1).Requestable);
+Check("SEERR: une saison qui se telecharge est « Traitement »", Saison(2).State == "processing" && !Saison(2).Requestable);
+Check("SEERR: une saison qui attend son approbation n'est plus demandable",
+    Saison(3).State == "requested" && !Saison(3).Requestable);
+Check("SEERR: une demande refusee laisse la saison demandable", Saison(5).State == "not-requested" && Saison(5).Requestable);
+Check("SEERR: un nom qui n'est qu'un numero est laisse au client", Saison(1).Name == "Saison 1" && Saison(2).Name is null && Saison(3).Name is null);
+Check("SEERR: l'annee vient de la premiere diffusion", Saison(1).Year == "2011" && Saison(3).Year is null);
+Check("SEERR: le nombre d'episodes est transmis", Saison(6).Episodes == 10);
+
+Check("SEERR: les reglages de Seerr sont lus", SeerrRules.ReadRequestSettings(
+    """{"apiKey":"secret","partialRequestsEnabled":true,"enableSpecialEpisodes":true}""") == (true, true));
+Check("SEERR: un reglage absent vaut faux", SeerrRules.ReadRequestSettings("""{"applicationTitle":"Seerr"}""") == (false, false));
+
+Check("SEERR: les saisons demandees sont dedoublonnees et triees",
+    string.Join(",", SeerrRules.NormalizeSeasons(new[] { 3, 1, 3, 2 })!) == "1,2,3");
+Check("SEERR: une liste vide, negative ou demesuree est refusee",
+    SeerrRules.NormalizeSeasons(Array.Empty<int>()) is null && SeerrRules.NormalizeSeasons(new[] { -1 }) is null
+    && SeerrRules.NormalizeSeasons(Enumerable.Range(1, 201)) is null && SeerrRules.NormalizeSeasons(null) is null);
+
 Check("SEERR: un film se demande sans saisons",
     SeerrRules.BuildRequestBody("movie", 27205) == """{"mediaType":"movie","mediaId":27205}""");
-Check("SEERR: une serie se demande en entier, comme la demande rapide de Jellyfin Enhanced",
-    SeerrRules.BuildRequestBody("tv", 1399) == """{"mediaType":"tv","mediaId":1399,"seasons":"all"}""");
+Check("SEERR: une serie se demande saison par saison, comme la fenetre de Jellyfin Enhanced",
+    SeerrRules.BuildRequestBody("tv", 1399, new[] { 1, 2 }) == """{"mediaType":"tv","mediaId":1399,"seasons":[1,2]}""");
 Check("SEERR: seuls movie et tv sont des types de media",
     SeerrRules.IsMediaType("movie") && SeerrRules.IsMediaType("tv")
     && !SeerrRules.IsMediaType("Movie") && !SeerrRules.IsMediaType("series") && !SeerrRules.IsMediaType(null));

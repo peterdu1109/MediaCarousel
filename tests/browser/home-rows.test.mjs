@@ -1415,7 +1415,8 @@ const exempleApplique = await doc.evaluate(() => ({
 await doc.close();
 
 // ---------------------------------------------------------------------------
-// SEERR — le bouton « Demander » des titres absents du Top mondial.
+// SEERR — le bouton « Demander » des titres absents du Top mondial, a la maniere de
+// Jellyfin Enhanced : un film se demande d'un clic, une serie ouvre le choix des saisons.
 //
 // Le faux serveur repond comme SeerrController : l'etat d'un lot de titres sous la forme
 // { MediaType, TmdbId, State, Error }, et une demande refusee REJETTE avec la reponse,
@@ -1437,10 +1438,15 @@ const serveurSeerr = () => {
     // Classement calcule avant cette version : pas de type, donc pas de bouton.
     absent(4, 'Ancien classement', null, '680'),
     absent(5, 'Chernobyl', 'tv', '87108'),
-    absent(6, 'Fight Club', 'movie', '550')
+    absent(6, 'Fight Club', 'movie', '550'),
+    absent(7, 'Interstellar', 'movie', '157336'),
+    absent(8, 'Stranger Things', 'tv', '66732')
   ];
   // `null` : Seerr n'a pas pu repondre pour ce titre.
-  window.__etats = window.__etats || { 'movie:27205': 'request', 'tv:1399': 'pending', 'tv:87108': 'available', 'movie:550': null };
+  window.__etats = window.__etats || {
+    'movie:27205': 'request', 'tv:1399': 'pending', 'tv:87108': 'available', 'movie:550': null,
+    'movie:157336': 'pending', 'tv:66732': 'request'
+  };
   window.ApiClient = {
     getCurrentUserId: () => 'user-1',
     serverId: () => 'server-1',
@@ -1467,6 +1473,21 @@ const serveurSeerr = () => {
         });
         return new Promise((resolve) => setTimeout(() => resolve(reponse), window.__lenteur || 0));
       }
+      if (route === 'MediaCarousel/Seerr/Seasons') {
+        if (window.__refusSaisons) {
+          return Promise.reject({ status: 502, json: () => Promise.resolve({ Error: 'offline' }) });
+        }
+        return new Promise((resolve) => setTimeout(() => resolve({
+          PartialRequests: window.__partiel !== false,
+          Seasons: [
+            { Number: 0, Name: null, Year: '2016', Episodes: 3, State: 'not-requested', Requestable: true },
+            { Number: 1, Name: null, Year: '2016', Episodes: 8, State: 'available', Requestable: false },
+            { Number: 2, Name: 'Stranger Things 2', Year: '2017', Episodes: 9, State: 'requested', Requestable: false },
+            { Number: 3, Name: null, Year: '2019', Episodes: 8, State: 'not-requested', Requestable: true },
+            { Number: 4, Name: null, Year: null, Episodes: 9, State: 'not-requested', Requestable: true }
+          ]
+        }), 60));
+      }
       if (route === 'MediaCarousel/Seerr/Request') {
         return new Promise((resolve, reject) => setTimeout(() => {
           if (window.__refus === 404) { reject({ status: 404 }); return; }
@@ -1474,7 +1495,10 @@ const serveurSeerr = () => {
             reject({ status: 502, json: () => Promise.resolve({ Error: 'offline' }) });
             return;
           }
-          resolve({ MediaType: corps.MediaType, TmdbId: corps.TmdbId, State: 'pending', Error: null });
+          resolve({
+            MediaType: corps.MediaType, TmdbId: corps.TmdbId, Error: null,
+            State: corps.MediaType === 'tv' ? 'pending' : 'requested'
+          });
         }, 150));
       }
       return Promise.resolve({});
@@ -1504,7 +1528,8 @@ const seerrVu = await seerr.evaluate(() => {
   const vu = (b) => b && {
     etat: b.getAttribute('data-state'), texte: b.textContent, inerte: b.getAttribute('aria-disabled'),
     visible: getComputedStyle(b).visibility, fond: getComputedStyle(b).backgroundColor,
-    nom: b.getAttribute('aria-label')
+    nom: b.getAttribute('aria-label'), popup: b.getAttribute('aria-haspopup'),
+    icone: (b.querySelector('.material-icons') || { className: '' }).className
   };
   const carteAbsente = bouton('27205').closest('.card');
   const affiche = carteAbsente.querySelector('.cardScalable').getBoundingClientRect();
@@ -1515,12 +1540,15 @@ const seerrVu = await seerr.evaluate(() => {
     surPresent: document.querySelectorAll('.mc-ranked:not(.mc-unavailable) .mc-seerr').length,
     ancien: document.querySelectorAll('.mc-seerr[data-tmdb="680"]').length,
     demander: vu(bouton('27205')),
-    attente: vu(bouton('1399')),
+    filmEnAttente: vu(bouton('157336')),
+    serieEnAttente: vu(bouton('1399')),
+    serieADemander: vu(bouton('66732')),
     disponible: vu(bouton('87108')),
     illisible: vu(bouton('550')),
-    dansAffiche: bouton('27205').parentElement.classList.contains('cardScalable')
+    dansAffiche: bouton('27205').closest('.cardScalable') === carteAbsente.querySelector('.cardScalable')
       && zone.left >= affiche.left && zone.right <= affiche.right
       && zone.top >= affiche.top && zone.bottom <= affiche.bottom,
+    voile: getComputedStyle(bouton('27205').parentNode).backgroundImage.indexOf('linear-gradient') !== -1,
     hauteurAbsente: carteAbsente.getBoundingClientRect().height,
     hauteurPresente: document.querySelector('.mc-ranked:not(.mc-unavailable)').getBoundingClientRect().height,
     hauteurRangee: document.querySelector('.mc-row').getBoundingClientRect().height,
@@ -1529,29 +1557,56 @@ const seerrVu = await seerr.evaluate(() => {
     identifiantsNumeriques: statuts.length > 0 && statuts[0].corps.every(t => typeof t.TmdbId === 'number')
   };
 });
-await seerr.screenshot({ path: path.join(process.env.MC_SHOTS || here, 'seerr-rangee.png'), clip: { x: 0, y: 0, width: 1280, height: 520 } });
+// Capture pour relecture a l'oeil, seulement si on la demande : jamais dans le depot.
+if (process.env.MC_SHOTS) {
+  await seerr.screenshot({ path: path.join(process.env.MC_SHOTS, 'seerr-rangee.png'), clip: { x: 0, y: 0, width: 1280, height: 520 } });
+}
 
-// Clic : « Demande en cours » le temps de la requete, puis l'etat rendu par Seerr.
+// Comme chez Jellyfin Enhanced : sur ordinateur, le bouton n'apparait qu'au survol ou au
+// focus ; sur un ecran sans survol, tactile ou televiseur, il est toujours la.
+const opaciteVoile = (vue) => vue.evaluate(() =>
+  getComputedStyle(document.querySelector('.mc-seerr[data-tmdb="27205"]').parentNode).opacity);
+await seerr.mouse.move(5, 5);
+await seerr.waitForTimeout(300);
+const voileAuRepos = await opaciteVoile(seerr);
+await seerr.hover('.mc-seerr[data-tmdb="27205"]');
+await seerr.waitForTimeout(300);
+const voileAuSurvol = await opaciteVoile(seerr);
+const tactile = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+const telephone = await tactile.newPage();
+telephone.on('pageerror', e => errors.push('pageerror(seerr tactile): ' + e.message));
+await telephone.goto('file://' + path.join(here, 'home.html'));
+await telephone.evaluate(serveurSeerr);
+await telephone.evaluate(script);
+await telephone.waitForFunction(etatSeerr('27205', 'request'));
+await telephone.waitForTimeout(300);
+const voileTactile = await opaciteVoile(telephone);
+await tactile.close();
+
+// Film : « Demande en cours » le temps de la requete, puis « Demande ».
 await seerr.click('.mc-seerr[data-tmdb="27205"]');
 const pendantDemande = await seerr.evaluate(() => document.querySelector('.mc-seerr[data-tmdb="27205"]').textContent);
-await seerr.waitForFunction(etatSeerr('27205', 'pending'));
+await seerr.waitForFunction(etatSeerr('27205', 'requested'));
 const apresDemande = await seerr.evaluate(() => {
   const demandes = window.__appels.filter(a => a.route === 'MediaCarousel/Seerr/Request');
   return {
     demandes: demandes.length,
     corps: demandes[0] && demandes[0].corps,
     texte: document.querySelector('.mc-seerr[data-tmdb="27205"]').textContent,
+    fenetre: document.querySelectorAll('.mc-seerr-backdrop').length,
     clicsDocument: window.__clicsDocument,
     hash: location.hash
   };
 });
-// Un bouton qui n'est plus « Demander » n'envoie plus rien. `force` : Playwright refuse
-// de cliquer un bouton `aria-disabled`, une souris ou un doigt ne s'en privent pas.
+// Un bouton qui n'agit plus n'envoie rien. `force` : Playwright refuse de cliquer un
+// bouton `aria-disabled`, une souris ou un doigt ne s'en privent pas.
 await seerr.click('.mc-seerr[data-tmdb="27205"]', { force: true });
-await seerr.click('.mc-seerr[data-tmdb="1399"]', { force: true });
+await seerr.click('.mc-seerr[data-tmdb="157336"]', { force: true });
 await seerr.waitForTimeout(300);
-const demandesInertes = await seerr.evaluate(() =>
-  window.__appels.filter(a => a.route === 'MediaCarousel/Seerr/Request').length);
+const demandesInertes = await seerr.evaluate(() => ({
+  demandes: window.__appels.filter(a => a.route === 'MediaCarousel/Seerr/Request').length,
+  fenetres: document.querySelectorAll('.mc-seerr-backdrop').length
+}));
 await seerr.close();
 
 // Clavier et telecommande : Entree sur le bouton, et le focus ne s'evanouit pas.
@@ -1559,7 +1614,7 @@ const clavier = await pageSeerr();
 await clavier.waitForFunction(etatSeerr('27205', 'request'));
 await clavier.focus('.mc-seerr[data-tmdb="27205"]');
 await clavier.keyboard.press('Enter');
-await clavier.waitForFunction(etatSeerr('27205', 'pending'));
+await clavier.waitForFunction(etatSeerr('27205', 'requested'));
 const auClavier = await clavier.evaluate(() => {
   const bouton = document.querySelector('.mc-seerr[data-tmdb="27205"]');
   return {
@@ -1593,6 +1648,103 @@ refus.panneEnsuite = await panne.evaluate(() =>
   document.querySelector('.mc-seerr[data-tmdb="27205"]').getAttribute('data-state'));
 await inconnu.close();
 await panne.close();
+
+// SERIE — le choix des saisons.
+const saisons = await pageSeerr();
+await saisons.waitForFunction(etatSeerr('66732', 'request'));
+await saisons.click('.mc-seerr[data-tmdb="66732"]');
+await saisons.waitForSelector('.mc-seerr-dialog .mc-seerr-pick');
+const fenetre = await saisons.evaluate(() => {
+  const d = document.querySelector('.mc-seerr-dialog');
+  const lignes = Array.from(d.querySelectorAll('.mc-seerr-pick')).map(box => ({
+    saison: box.value, active: !box.disabled, nom: box.closest('label').querySelector('.mc-seerr-season-name').textContent,
+    etat: box.closest('label').querySelector('.mc-seerr-season-state').textContent,
+    infos: box.closest('label').querySelector('.mc-seerr-season-meta').textContent
+  }));
+  return {
+    role: d.getAttribute('role'), modale: d.getAttribute('aria-modal'),
+    titre: d.querySelector('h2').textContent, sousTitre: d.querySelector('.mc-seerr-subtitle').textContent,
+    tout: !!d.querySelector('.mc-seerr-all'), envoyer: d.querySelector('.mc-seerr-send').textContent,
+    lignes, focus: !!document.activeElement && document.activeElement.matches('.mc-seerr-seasons input:not([disabled])'),
+    demandes: window.__appels.filter(a => a.route === 'MediaCarousel/Seerr/Request').length
+  };
+});
+await saisons.click('.mc-seerr-send');
+const sansChoix = await saisons.evaluate(() => ({
+  message: document.querySelector('.mc-seerr-message').textContent,
+  demandes: window.__appels.filter(a => a.route === 'MediaCarousel/Seerr/Request').length
+}));
+await saisons.click('.mc-seerr-all');
+const toutCoche = await saisons.evaluate(() =>
+  Array.from(document.querySelectorAll('.mc-seerr-pick:checked')).map(b => b.value).join(','));
+await saisons.click('.mc-seerr-send');
+await saisons.waitForFunction(() => !document.querySelector('.mc-seerr-backdrop'));
+const apresSaisons = await saisons.evaluate(() => {
+  const demande = window.__appels.filter(a => a.route === 'MediaCarousel/Seerr/Request').pop();
+  const b = document.querySelector('.mc-seerr[data-tmdb="66732"]');
+  return {
+    corps: demande && demande.corps, etat: b.getAttribute('data-state'), texte: b.textContent,
+    agit: b.getAttribute('aria-disabled') === 'false', focus: document.activeElement === b,
+    toast: (document.querySelector('.mc-toast') || { textContent: '' }).textContent
+  };
+});
+// Echap ferme, et le focus revient au bouton.
+await saisons.click('.mc-seerr[data-tmdb="1399"]');
+await saisons.waitForSelector('.mc-seerr-dialog .mc-seerr-pick');
+await saisons.keyboard.press('Escape');
+const echap = await saisons.evaluate(() => ({
+  fenetre: document.querySelectorAll('.mc-seerr-backdrop').length,
+  focus: document.activeElement === document.querySelector('.mc-seerr[data-tmdb="1399"]')
+}));
+// Quitter la page ferme la fenetre, comme le panneau de personnalisation.
+await saisons.click('.mc-seerr[data-tmdb="1399"]');
+await saisons.waitForSelector('.mc-seerr-dialog');
+await saisons.evaluate(() => { location.hash = '#/details?id=ailleurs'; });
+await saisons.waitForTimeout(200);
+const apresNavigation = await saisons.evaluate(() => document.querySelectorAll('.mc-seerr-backdrop').length);
+await saisons.close();
+
+// Sans demandes partielles dans Seerr : la serie part en entier, specials exceptes.
+const entiere = await pageSeerr({ __partiel: false });
+await entiere.waitForFunction(etatSeerr('66732', 'request'));
+await entiere.click('.mc-seerr[data-tmdb="66732"]');
+await entiere.waitForSelector('.mc-seerr-dialog .mc-seerr-pick');
+const serieEntiere = await entiere.evaluate(() => ({
+  toutes: document.querySelectorAll('.mc-seerr-pick:not([disabled])').length,
+  cochees: Array.from(document.querySelectorAll('.mc-seerr-pick:checked')).map(b => b.value).join(','),
+  tout: !!document.querySelector('.mc-seerr-all'),
+  envoyer: document.querySelector('.mc-seerr-send').textContent
+}));
+await entiere.click('.mc-seerr-send');
+await entiere.waitForFunction(() => !document.querySelector('.mc-seerr-backdrop'));
+serieEntiere.envoye = await entiere.evaluate(() =>
+  window.__appels.filter(a => a.route === 'MediaCarousel/Seerr/Request').pop().corps.Seasons.join(','));
+await entiere.close();
+
+// Refus dans la fenetre : le message s'y affiche et elle reste ouverte.
+const refusSaisons = await pageSeerr({ __refus: 404 });
+await refusSaisons.waitForFunction(etatSeerr('66732', 'request'));
+await refusSaisons.click('.mc-seerr[data-tmdb="66732"]');
+await refusSaisons.waitForSelector('.mc-seerr-dialog .mc-seerr-pick');
+await refusSaisons.click('.mc-seerr-all');
+await refusSaisons.click('.mc-seerr-send');
+await refusSaisons.waitForFunction(() => document.querySelector('.mc-seerr-message').textContent !== '');
+const refusDansFenetre = await refusSaisons.evaluate(() => ({
+  message: document.querySelector('.mc-seerr-message').textContent,
+  ouverte: document.querySelectorAll('.mc-seerr-backdrop').length === 1,
+  rendue: !document.querySelector('.mc-seerr-send').disabled
+}));
+await refusSaisons.close();
+
+// Seerr injoignable a l'ouverture : la fenetre le dit.
+const saisonsIllisibles = await pageSeerr({ __refusSaisons: true });
+await saisonsIllisibles.waitForFunction(etatSeerr('66732', 'request'));
+await saisonsIllisibles.click('.mc-seerr[data-tmdb="66732"]');
+await saisonsIllisibles.waitForFunction(() => /Seerr hors ligne/.test(document.querySelector('.mc-seerr-seasons').textContent));
+const saisonsHorsLigne = await saisonsIllisibles.evaluate(() => ({
+  envoi: document.querySelector('.mc-seerr-send').disabled
+}));
+await saisonsIllisibles.close();
 
 // Integration non configuree : ni bouton, ni appel — et la rangee a la meme hauteur.
 const sansSeerr = await pageSeerr({ __seerr: false });
@@ -1958,26 +2110,36 @@ check('DOC: l exemple du README laisse le chiffre visible',
   exempleApplique.contourAuRepos !== 'none', exempleApplique);
 
 check('SEERR: un bouton sur chaque titre absent qui a un type et un identifiant TMDB',
-  seerrVu.boutons === 4, seerrVu.boutons);
+  seerrVu.boutons === 6, seerrVu.boutons);
 check('SEERR: aucun sur un titre de la bibliotheque', seerrVu.surPresent === 0, seerrVu.surPresent);
 check('SEERR: aucun sur un classement calcule avant le type de media', seerrVu.ancien === 0, seerrVu.ancien);
 check('SEERR: les etats sont lus en un seul lot, POST et JSON',
-  JSON.stringify(seerrVu.lots) === '[4]' && seerrVu.json === true, seerrVu);
+  JSON.stringify(seerrVu.lots) === '[6]' && seerrVu.json === true, seerrVu);
 check('SEERR: les identifiants partent en nombres, comme le serveur les attend',
   seerrVu.identifiantsNumeriques === true, seerrVu.identifiantsNumeriques);
-check('SEERR: « Demander » est actif, a la couleur d accentuation',
+check('SEERR: « Demander » est actif, au violet de Jellyfin Enhanced, avec son icone',
   seerrVu.demander.texte === 'Demander' && seerrVu.demander.inerte === 'false'
-    && seerrVu.demander.fond === 'rgb(119, 91, 244)', seerrVu.demander);
-check('SEERR: un titre deja demande attend l approbation, en ambre, sans action',
-  seerrVu.attente.texte === 'En attente d\'approbation' && seerrVu.attente.inerte === 'true'
-    && seerrVu.attente.fond === 'rgb(151, 90, 22)', seerrVu.attente);
+    && seerrVu.demander.fond === 'rgb(90, 63, 184)' && /file_download/.test(seerrVu.demander.icone), seerrVu.demander);
+check('SEERR: un film en attente l attend, en ambre, sans action',
+  seerrVu.filmEnAttente.texte === 'En attente d\'approbation' && seerrVu.filmEnAttente.inerte === 'true'
+    && seerrVu.filmEnAttente.fond === 'rgb(180, 83, 9)', seerrVu.filmEnAttente);
+check('SEERR: une serie en attente reste cliquable, pour demander d autres saisons',
+  seerrVu.serieEnAttente.texte === 'En attente d\'approbation' && seerrVu.serieEnAttente.inerte === 'false'
+    && seerrVu.serieEnAttente.popup === 'dialog', seerrVu.serieEnAttente);
+check('SEERR: une serie annonce le choix des saisons, pas un film',
+  seerrVu.serieADemander.popup === 'dialog' && seerrVu.demander.popup === null, [seerrVu.serieADemander, seerrVu.demander]);
 check('SEERR: un titre disponible le dit, en vert',
-  seerrVu.disponible.texte === 'Disponible' && seerrVu.disponible.fond === 'rgb(39, 103, 73)', seerrVu.disponible);
+  seerrVu.disponible.texte === 'Disponible' && seerrVu.disponible.fond === 'rgb(22, 163, 74)'
+    && seerrVu.disponible.inerte === 'true', seerrVu.disponible);
 check('SEERR: un etat illisible masque le bouton plutot que d afficher une erreur',
   seerrVu.illisible.etat === 'loading' && seerrVu.illisible.visible === 'hidden', seerrVu.illisible);
 check('SEERR: un lecteur d ecran entend le titre avec le libelle',
   seerrVu.demander.nom === 'Demander : Inception', seerrVu.demander.nom);
-check('SEERR: le bouton est pose dans l affiche', seerrVu.dansAffiche === true, seerrVu.dansAffiche);
+check('SEERR: le bouton est pose dans l affiche, sur le voile de Jellyfin Enhanced',
+  seerrVu.dansAffiche === true && seerrVu.voile === true, seerrVu);
+check('SEERR: sur ordinateur, le bouton n apparait qu au survol, comme chez Jellyfin Enhanced',
+  voileAuRepos === '0' && voileAuSurvol === '1', [voileAuRepos, voileAuSurvol]);
+check('SEERR: sur un ecran tactile, il est toujours visible', voileTactile === '1', voileTactile);
 check('SEERR: la carte garde la hauteur d une carte de la bibliotheque',
   Math.abs(seerrVu.hauteurAbsente - seerrVu.hauteurPresente) < 0.5, [seerrVu.hauteurAbsente, seerrVu.hauteurPresente]);
 check('SEERR: la rangee garde sa hauteur, bouton ou pas',
@@ -1985,14 +2147,14 @@ check('SEERR: la rangee garde sa hauteur, bouton ou pas',
 check('SEERR: sans integration configuree, ni bouton ni appel',
   sansSeerrVu.boutons === 0 && sansSeerrVu.appels === 0, sansSeerrVu);
 check('SEERR: pendant la demande, le bouton le dit', pendantDemande === 'Demande en cours', pendantDemande);
-check('SEERR: la demande part avec le type et l identifiant',
-  apresDemande.demandes === 1 && apresDemande.corps.MediaType === 'movie' && apresDemande.corps.TmdbId === 27205,
-  apresDemande);
-check('SEERR: apres la demande, le titre attend l approbation',
-  apresDemande.texte === 'En attente d\'approbation', apresDemande.texte);
+check('SEERR: un film se demande d un clic, sans fenetre',
+  apresDemande.demandes === 1 && apresDemande.corps.MediaType === 'movie' && apresDemande.corps.TmdbId === 27205
+    && apresDemande.corps.Seasons === undefined && apresDemande.fenetre === 0, apresDemande);
+check('SEERR: apres la demande, le film est « Demande »', apresDemande.texte === 'Demandé', apresDemande.texte);
 check('SEERR: le clic ne remonte pas a jellyfin-web et ne navigue pas',
   apresDemande.clicsDocument === 0 && apresDemande.hash === '', apresDemande);
-check('SEERR: un bouton qui n est plus « Demander » n envoie rien', demandesInertes === 1, demandesInertes);
+check('SEERR: un bouton qui n agit plus n envoie rien et n ouvre rien',
+  demandesInertes.demandes === 1 && demandesInertes.fenetres === 0, demandesInertes);
 check('SEERR: au clavier, Entree demande le titre', auClavier.demandes === 1, auClavier);
 check('SEERR: et le focus reste sur le bouton, pour la telecommande', auClavier.focus === true, auClavier);
 check('SEERR: le focus clavier est entoure', auClavier.anneau.indexOf('rgb(255, 255, 255)') !== -1, auClavier.anneau);
@@ -2002,6 +2164,45 @@ check('SEERR: ce refus persiste, puisqu un nouvel essai echouerait pareil',
   refus.inconnuEnsuite === 'user-not-found', refus.inconnuEnsuite);
 check('SEERR: une panne de Seerr le dit', refus.panne === 'Seerr hors ligne', refus.panne);
 check('SEERR: puis rend la main', refus.panneEnsuite === 'request', refus.panneEnsuite);
+
+check('SAISONS: une serie ouvre une vraie boite de dialogue, sans rien demander',
+  fenetre.role === 'dialog' && fenetre.modale === 'true' && fenetre.demandes === 0, fenetre);
+check('SAISONS: titre et nom de la serie, comme chez Jellyfin Enhanced',
+  fenetre.titre === 'Demander une série' && fenetre.sousTitre === 'Stranger Things', fenetre);
+check('SAISONS: seules les saisons encore demandables se cochent',
+  fenetre.lignes.filter(l => l.active).map(l => l.saison).join(',') === '0,3,4', fenetre.lignes);
+check('SAISONS: chaque saison dit son etat',
+  fenetre.lignes[1].etat === 'Disponible' && fenetre.lignes[2].etat === 'Demandé'
+    && fenetre.lignes[3].etat === 'Non demandé', fenetre.lignes);
+check('SAISONS: nom, specials, annee et episodes',
+  fenetre.lignes[0].nom === 'Épisodes spéciaux' && fenetre.lignes[2].nom === 'Stranger Things 2'
+    && fenetre.lignes[3].nom === 'Saison 3' && fenetre.lignes[3].infos === '2019 · 8 ép.'
+    && fenetre.lignes[4].infos === '9 ép.', fenetre.lignes);
+check('SAISONS: « Tout selectionner » et le bouton des demandes partielles',
+  fenetre.tout === true && fenetre.envoyer === 'Demander la/les saison(s) sélectionnée(s)', fenetre);
+check('SAISONS: le focus entre dans la fenetre, sur la premiere case', fenetre.focus === true, fenetre.focus);
+check('SAISONS: rien de coche, rien ne part, et la fenetre le dit',
+  sansChoix.demandes === 0 && sansChoix.message === 'Veuillez sélectionner au moins une saison', sansChoix);
+check('SAISONS: « Tout selectionner » laisse les specials de cote', toutCoche === '3,4', toutCoche);
+check('SAISONS: la demande part avec les saisons cochees',
+  apresSaisons.corps && apresSaisons.corps.MediaType === 'tv' && apresSaisons.corps.TmdbId === 66732
+    && apresSaisons.corps.Seasons.join(',') === '3,4', apresSaisons.corps);
+check('SAISONS: la fenetre se ferme et le bouton prend l etat rendu',
+  apresSaisons.etat === 'pending' && apresSaisons.texte === 'En attente d\'approbation' && apresSaisons.agit, apresSaisons);
+check('SAISONS: un message confirme la demande',
+  apresSaisons.toast === 'Demandé 2 saison(s) de « Stranger Things »', apresSaisons.toast);
+check('SAISONS: le focus revient au bouton de la serie', apresSaisons.focus === true, apresSaisons.focus);
+check('SAISONS: Echap ferme, et le focus revient au bouton', echap.fenetre === 0 && echap.focus === true, echap);
+check('SAISONS: quitter la page ferme la fenetre', apresNavigation === 0, apresNavigation);
+check('SAISONS: sans demandes partielles, les cases montrent ce qui partira, sans se changer',
+  serieEntiere.toutes === 0 && serieEntiere.cochees === '3,4' && serieEntiere.tout === false
+    && serieEntiere.envoyer === 'Demander', serieEntiere);
+check('SAISONS: et la serie part en entier, specials exceptes', serieEntiere.envoye === '3,4', serieEntiere.envoye);
+check('SAISONS: un refus s affiche dans la fenetre, qui reste ouverte',
+  refusDansFenetre.message === 'Utilisateur non trouvé' && refusDansFenetre.ouverte && refusDansFenetre.rendue, refusDansFenetre);
+check('SAISONS: Seerr injoignable a l ouverture, la fenetre le dit et ne propose rien',
+  saisonsHorsLigne.envoi === true, saisonsHorsLigne);
+
 check('SEERR: plus de 20 titres partent en plusieurs lots',
   JSON.stringify(lotsDecoupes) === '[20,5]', lotsDecoupes);
 check('SEERR: un retour sur l accueil montre aussitot l etat connu', etatAuRetour === 'request', etatAuRetour);

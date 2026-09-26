@@ -149,8 +149,11 @@ utilisateur, donc ses droits et ses quotas s'appliquent. Pour que le bouton appa
 - importe tes utilisateurs Jellyfin dans Seerr (Seerr → Utilisateurs → Importer depuis Jellyfin) ;
 - attends le prochain recalcul, ou lance-le depuis la page de configuration.
 
-Une série est demandée en entier, toutes saisons comprises. Le bouton « Tester la connexion »
-vérifie l'adresse et la clé avant l'enregistrement.
+Comme dans Jellyfin Enhanced, le bouton apparaît au survol de l'affiche — et en permanence sur
+un écran tactile ou une télévision. Un film se demande d'un clic. Une série ouvre le choix des
+saisons : chaque saison y montre son état, et seules celles qui ne sont ni disponibles ni déjà
+demandées se cochent. Si Seerr n'accepte pas les demandes partielles, la série part en entière.
+Le bouton « Tester la connexion » vérifie l'adresse et la clé avant l'enregistrement.
 
 </details>
 

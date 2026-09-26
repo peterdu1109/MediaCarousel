@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Net;
 using System.Net.Http;
@@ -56,6 +57,13 @@ public readonly record struct SeerrOutcome(string? State, SeerrFailure Failure)
 }
 
 /// <summary>
+/// Le choix des saisons d'une série : les saisons, et si Seerr accepte d'en demander une partie.
+/// </summary>
+/// <param name="PartialRequests">Vrai si Seerr accepte une demande qui ne couvre pas toutes les saisons.</param>
+/// <param name="Seasons">Les saisons proposées.</param>
+public sealed record SeerrSeasonChoice(bool PartialRequests, IReadOnlyList<SeerrSeason> Seasons);
+
+/// <summary>
 /// Dialogue avec Seerr, depuis le serveur.
 /// </summary>
 /// <remarks>
@@ -76,11 +84,13 @@ public sealed class SeerrClient
     private static readonly TimeSpan UserHit = TimeSpan.FromMinutes(10);
     private static readonly TimeSpan UserMiss = TimeSpan.FromMinutes(1);
     private static readonly TimeSpan StateLifetime = TimeSpan.FromMinutes(1);
+    private static readonly TimeSpan SettingsLifetime = TimeSpan.FromMinutes(10);
 
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<SeerrClient> _logger;
     private readonly ConcurrentDictionary<Guid, (int? Id, DateTime At)> _users = new();
     private readonly ConcurrentDictionary<string, (string State, DateTime At)> _states = new(StringComparer.Ordinal);
+    private (string BaseUrl, bool PartialRequests, bool SpecialEpisodes, DateTime At)? _settings;
 
     /// <summary>
     /// Initialise une nouvelle instance de la classe <see cref="SeerrClient"/>.
@@ -133,7 +143,7 @@ public sealed class SeerrClient
         string state;
         try
         {
-            state = SeerrRules.ToState(SeerrRules.ReadMediaStatus(body!));
+            state = SeerrRules.ReadState(body!, mediaType);
         }
         catch (JsonException)
         {
@@ -154,6 +164,7 @@ public sealed class SeerrClient
     /// <param name="jellyfinUserId">Compte Jellyfin à l'origine de la demande.</param>
     /// <param name="mediaType"><c>movie</c> ou <c>tv</c>.</param>
     /// <param name="tmdbId">Identifiant TMDB.</param>
+    /// <param name="seasons">Saisons demandées, pour une série ; <see langword="null"/> pour un film.</param>
     /// <param name="cancellationToken">Jeton d'annulation.</param>
     /// <returns>L'état du bouton après la demande, ou la raison de l'échec.</returns>
     public async Task<SeerrOutcome> RequestAsync(
@@ -162,6 +173,7 @@ public sealed class SeerrClient
         Guid jellyfinUserId,
         string mediaType,
         int tmdbId,
+        IReadOnlyList<int>? seasons,
         CancellationToken cancellationToken)
     {
         var (seerrUserId, lookupFailure) = await FindUserAsync(baseUrl, apiKey, jellyfinUserId, cancellationToken)
@@ -182,7 +194,7 @@ public sealed class SeerrClient
             baseUrl + "/api/v1/request",
             apiKey,
             seerrUserId,
-            SeerrRules.BuildRequestBody(mediaType, tmdbId),
+            SeerrRules.BuildRequestBody(mediaType, tmdbId, seasons),
             cancellationToken).ConfigureAwait(false);
 
         var key = StateKey(mediaType, tmdbId);
@@ -208,20 +220,66 @@ public sealed class SeerrClient
             return SeerrOutcome.Fail(failure);
         }
 
-        string state;
+        // Un film demandé est « Demandé », comme chez Jellyfin Enhanced, qu'il attende ou non
+        // une approbation. Une série, elle, se relit : selon les saisons demandées, elle peut
+        // rester demandable.
+        if (!string.Equals(mediaType, SeerrRules.Tv, StringComparison.Ordinal))
+        {
+            _states[key] = (SeerrRules.StateRequested, DateTime.UtcNow);
+            return SeerrOutcome.Ok(SeerrRules.StateRequested);
+        }
+
+        var reread = await GetStateAsync(baseUrl, apiKey, mediaType, tmdbId, cancellationToken).ConfigureAwait(false);
+
+        // La demande est partie : si seule la relecture échoue, l'annoncer comme un échec
+        // pousserait à redemander des saisons déjà demandées.
+        return reread.Failure == SeerrFailure.None ? reread : SeerrOutcome.Ok(SeerrRules.StateRequested);
+    }
+
+    /// <summary>
+    /// Lit les saisons d'une série et les réglages de Seerr qui décident de leur choix.
+    /// </summary>
+    /// <remarks>
+    /// Jamais servi depuis le cache : la fenêtre s'ouvre pour demander, elle doit montrer ce
+    /// qui est demandé à cet instant.
+    /// </remarks>
+    /// <param name="baseUrl">Adresse de Seerr.</param>
+    /// <param name="apiKey">Clé d'API de Seerr.</param>
+    /// <param name="tmdbId">Identifiant TMDB de la série.</param>
+    /// <param name="cancellationToken">Jeton d'annulation.</param>
+    /// <returns>Les saisons, ou la raison de l'échec.</returns>
+    public async Task<(SeerrSeasonChoice? Choice, SeerrFailure Failure)> GetSeasonsAsync(
+        string baseUrl,
+        string apiKey,
+        int tmdbId,
+        CancellationToken cancellationToken)
+    {
+        var settings = await GetSettingsAsync(baseUrl, apiKey, cancellationToken).ConfigureAwait(false);
+
+        var (status, body) = await SendAsync(
+            HttpMethod.Get,
+            baseUrl + "/api/v1/tv/" + tmdbId.ToString(CultureInfo.InvariantCulture),
+            apiKey,
+            null,
+            null,
+            cancellationToken).ConfigureAwait(false);
+
+        var failure = Classify(status, body);
+        if (failure != SeerrFailure.None)
+        {
+            return (null, failure);
+        }
+
         try
         {
-            state = SeerrRules.ReadStateAfterRequest(body!);
+            var seasons = SeerrRules.ReadSeasons(body!, settings.SpecialEpisodes);
+            _states[StateKey(SeerrRules.Tv, tmdbId)] = (SeerrRules.ReadState(body!, SeerrRules.Tv), DateTime.UtcNow);
+            return (new SeerrSeasonChoice(settings.PartialRequests, seasons), SeerrFailure.None);
         }
         catch (JsonException)
         {
-            // Seerr a accepté la demande ; seule sa réponse est illisible. Annoncer un échec
-            // pousserait à redemander un titre déjà demandé.
-            state = SeerrRules.StateProcessing;
+            return (null, SeerrFailure.Error);
         }
-
-        _states[key] = (state, DateTime.UtcNow);
-        return SeerrOutcome.Ok(state);
     }
 
     /// <summary>
@@ -289,6 +347,44 @@ public sealed class SeerrClient
 
         _users[jellyfinUserId] = (id, DateTime.UtcNow);
         return (id, SeerrFailure.None);
+    }
+
+    // Demandes partielles et épisodes spéciaux, lus comme le fait Jellyfin Enhanced. Faute de
+    // réponse, les deux sont faux — la même prudence que lui : on demande alors toutes les
+    // saisons ordinaires, jamais les spéciaux.
+    private async Task<(bool PartialRequests, bool SpecialEpisodes)> GetSettingsAsync(
+        string baseUrl,
+        string apiKey,
+        CancellationToken cancellationToken)
+    {
+        if (_settings is { } cached && cached.BaseUrl == baseUrl && DateTime.UtcNow - cached.At < SettingsLifetime)
+        {
+            return (cached.PartialRequests, cached.SpecialEpisodes);
+        }
+
+        var (status, body) = await SendAsync(
+            HttpMethod.Get,
+            baseUrl + "/api/v1/settings/main",
+            apiKey,
+            null,
+            null,
+            cancellationToken).ConfigureAwait(false);
+
+        if (Classify(status, body) != SeerrFailure.None)
+        {
+            return (false, false);
+        }
+
+        try
+        {
+            var (partial, specials) = SeerrRules.ReadRequestSettings(body!);
+            _settings = (baseUrl, partial, specials, DateTime.UtcNow);
+            return (partial, specials);
+        }
+        catch (JsonException)
+        {
+            return (false, false);
+        }
     }
 
     private SeerrFailure Classify(HttpStatusCode? status, string? body)
