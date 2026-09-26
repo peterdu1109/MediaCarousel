@@ -131,6 +131,15 @@ public class SeerrController : ControllerBase
             return BadRequest();
         }
 
+        // Une série se demande saison par saison, un film jamais : le client ne peut pas
+        // glisser de saisons dans la demande d'un film.
+        var isTv = string.Equals(item.MediaType, SeerrRules.Tv, StringComparison.Ordinal);
+        var seasons = isTv ? SeerrRules.NormalizeSeasons(item.Seasons) : null;
+        if (isTv ? seasons is null : item.Seasons is { Length: > 0 })
+        {
+            return BadRequest();
+        }
+
         var userId = ResolveUserId();
         if (userId == Guid.Empty)
         {
@@ -138,7 +147,7 @@ public class SeerrController : ControllerBase
             return Forbid();
         }
 
-        var outcome = await _seerr.RequestAsync(baseUrl, apiKey, userId, item.MediaType!, item.TmdbId, cancellationToken)
+        var outcome = await _seerr.RequestAsync(baseUrl, apiKey, userId, item.MediaType!, item.TmdbId, seasons, cancellationToken)
             .ConfigureAwait(false);
 
         var dto = new SeerrStateDto
@@ -156,6 +165,61 @@ public class SeerrController : ControllerBase
             SeerrFailure.Forbidden => StatusCode(StatusCodes.Status403Forbidden, dto),
             _ => StatusCode(StatusCodes.Status502BadGateway, dto)
         };
+    }
+
+    /// <summary>
+    /// Saisons d'une série absente, pour la fenêtre de choix des saisons.
+    /// </summary>
+    /// <param name="item">La série.</param>
+    /// <param name="cancellationToken">Jeton d'annulation.</param>
+    /// <returns>Les saisons et le réglage des demandes partielles.</returns>
+    [HttpPost("Seasons")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status502BadGateway)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
+    public async Task<ActionResult<SeerrSeasonsDto>> GetSeasons(
+        [FromBody] SeerrItemDto? item,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetSettings(out var baseUrl, out var apiKey))
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable);
+        }
+
+        if (item is null
+            || !string.Equals(item.MediaType, SeerrRules.Tv, StringComparison.Ordinal)
+            || !IsPublished(PublishedTitles(), item))
+        {
+            return BadRequest();
+        }
+
+        var (choice, failure) = await _seerr.GetSeasonsAsync(baseUrl, apiKey, item.TmdbId, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (choice is null)
+        {
+            return StatusCode(StatusCodes.Status502BadGateway, new SeerrStateDto
+            {
+                MediaType = SeerrRules.Tv,
+                TmdbId = item.TmdbId,
+                Error = ErrorCode(failure)
+            });
+        }
+
+        return Ok(new SeerrSeasonsDto
+        {
+            PartialRequests = choice.PartialRequests,
+            Seasons = choice.Seasons.Select(s => new SeerrSeasonDto
+            {
+                Number = s.Number,
+                Name = s.Name,
+                Year = s.Year,
+                Episodes = s.Episodes,
+                State = s.State,
+                Requestable = s.Requestable
+            }).ToArray()
+        });
     }
 
     /// <summary>
@@ -272,6 +336,52 @@ public sealed class SeerrItemDto
 
     /// <summary>Obtient ou définit l'identifiant TMDB.</summary>
     public int TmdbId { get; set; }
+
+    /// <summary>
+    /// Obtient ou définit les saisons demandées, pour une série.
+    /// </summary>
+    public int[]? Seasons { get; set; }
+}
+
+/// <summary>
+/// Le choix des saisons d'une série.
+/// </summary>
+public sealed class SeerrSeasonsDto
+{
+    /// <summary>
+    /// Obtient ou définit une valeur indiquant si Seerr accepte une demande qui ne couvre pas
+    /// toutes les saisons.
+    /// </summary>
+    public bool PartialRequests { get; set; }
+
+    /// <summary>
+    /// Obtient ou définit les saisons proposées.
+    /// </summary>
+    public IReadOnlyList<SeerrSeasonDto> Seasons { get; set; } = Array.Empty<SeerrSeasonDto>();
+}
+
+/// <summary>
+/// Une saison du choix des saisons.
+/// </summary>
+public sealed class SeerrSeasonDto
+{
+    /// <summary>Obtient ou définit le numéro ; 0 pour les épisodes spéciaux.</summary>
+    public int Number { get; set; }
+
+    /// <summary>Obtient ou définit le nom donné par Seerr, s'il n'est pas qu'un numéro.</summary>
+    public string? Name { get; set; }
+
+    /// <summary>Obtient ou définit l'année de diffusion.</summary>
+    public string? Year { get; set; }
+
+    /// <summary>Obtient ou définit le nombre d'épisodes.</summary>
+    public int Episodes { get; set; }
+
+    /// <summary>Obtient ou définit l'état de la saison.</summary>
+    public string State { get; set; } = string.Empty;
+
+    /// <summary>Obtient ou définit une valeur indiquant si la saison peut être demandée.</summary>
+    public bool Requestable { get; set; }
 }
 
 /// <summary>

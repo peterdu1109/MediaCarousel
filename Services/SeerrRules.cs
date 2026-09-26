@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Text.Json;
 
 namespace JellyfinCarouselPlugin.Services;
@@ -16,10 +18,11 @@ namespace JellyfinCarouselPlugin.Services;
 /// </para>
 /// <para>
 /// Le fonctionnement reprend celui de Jellyfin Enhanced, pour qu'un serveur qui utilise
-/// déjà ce plugin n'ait rien de nouveau à comprendre : la clé d'API d'administration reste
-/// sur le serveur, et chaque demande part AU NOM du compte Seerr de l'utilisateur, désigné
-/// par l'en-tête <c>X-Api-User</c>. Seerr applique alors les droits et les quotas de ce
-/// compte-là, pas ceux de l'administrateur.
+/// déjà ce plugin retrouve le même bouton au même geste : la clé d'API d'administration
+/// reste sur le serveur, et chaque demande part AU NOM du compte Seerr de l'utilisateur,
+/// désigné par l'en-tête <c>X-Api-User</c>. Seerr applique alors les droits et les quotas de
+/// ce compte-là, pas ceux de l'administrateur. Les états et leur ordre de priorité sont ceux
+/// de <c>seerr-status.js</c> et d'<c>analyzeSeasonStatuses</c>, lus dans son code.
 /// </para>
 /// </remarks>
 public static class SeerrRules
@@ -30,23 +33,52 @@ public static class SeerrRules
     /// <summary>Type de média Seerr d'une série.</summary>
     public const string Tv = "tv";
 
-    /// <summary>Le titre peut être demandé.</summary>
+    /// <summary>« Demander » : le titre peut être demandé.</summary>
     public const string StateRequest = "request";
 
-    /// <summary>Une demande attend l'approbation d'un administrateur Seerr.</summary>
+    /// <summary>« Demander plus » : série dont des saisons sont disponibles, d'autres pas encore.</summary>
+    public const string StateRequestMore = "request-more";
+
+    /// <summary>« Demander manquant » : série partiellement disponible.</summary>
+    public const string StateRequestMissing = "request-missing";
+
+    /// <summary>« En attente d'approbation » : une demande attend un administrateur Seerr.</summary>
     public const string StatePending = "pending";
 
-    /// <summary>Le titre a été demandé et approuvé ; il est en cours d'acquisition.</summary>
+    /// <summary>« Demandé » : la demande est approuvée, rien ne se télécharge encore.</summary>
+    public const string StateRequested = "requested";
+
+    /// <summary>« Traitement » : le titre est en cours de téléchargement.</summary>
     public const string StateProcessing = "processing";
 
-    /// <summary>Une partie du titre — des saisons — est disponible.</summary>
+    /// <summary>« Partiellement disponible ».</summary>
     public const string StatePartial = "partial";
 
-    /// <summary>Le titre est disponible.</summary>
+    /// <summary>« Disponible ».</summary>
     public const string StateAvailable = "available";
 
-    /// <summary>Le titre est sur la liste de blocage de Seerr.</summary>
+    /// <summary>« Bloqué » : le titre est sur la liste de blocage de Seerr.</summary>
     public const string StateBlocked = "blocked";
+
+    /// <summary>« Non demandé » : état d'une saison que personne n'a demandée.</summary>
+    public const string StateNotRequested = "not-requested";
+
+    // Statuts de média de Seerr (MediaStatus).
+    private const int Unknown = 1;
+    private const int Pending = 2;
+    private const int Processing = 3;
+    private const int PartiallyAvailable = 4;
+    private const int Available = 5;
+    private const int Blocked = 6;
+    private const int Deleted = 7;
+
+    // Statuts d'une demande (MediaRequestStatus) : 1 à approuver, 2 approuvée.
+    private const int RequestPendingApproval = 1;
+    private const int RequestApproved = 2;
+
+    // Au-delà, une liste de saisons n'est plus une demande plausible.
+    private const int MaxSeasons = 200;
+    private const int MaxSeasonNumber = 10000;
 
     /// <summary>
     /// Indique si un type de média est l'un de ceux que Seerr connaît.
@@ -111,81 +143,232 @@ public static class SeerrRules
     }
 
     /// <summary>
-    /// Lit le statut d'un titre dans la réponse de <c>GET /api/v1/movie/{id}</c> ou
+    /// Lit l'état d'un titre dans la réponse de <c>GET /api/v1/movie/{id}</c> ou
     /// <c>/api/v1/tv/{id}</c>.
     /// </summary>
     /// <remarks>
-    /// Un titre que Seerr n'a jamais vu demander n'a pas de <c>mediaInfo</c> : son statut vaut
-    /// alors 1, « inconnu », qui se demande.
+    /// Un titre que Seerr n'a jamais vu demander n'a pas de <c>mediaInfo</c> : il se demande.
+    /// L'état d'une série se déduit de ses saisons quand Seerr les détaille, comme chez
+    /// Jellyfin Enhanced — une série dont une saison est disponible et la suivante absente
+    /// n'est ni « disponible » ni « à demander », mais « partiellement disponible ».
     /// </remarks>
     /// <param name="mediaJson">La réponse de Seerr.</param>
-    /// <returns>Le statut Seerr du titre, de 1 à 7.</returns>
-    public static int ReadMediaStatus(string mediaJson)
+    /// <param name="mediaType"><c>movie</c> ou <c>tv</c>.</param>
+    /// <returns>L'état du bouton.</returns>
+    public static string ReadState(string mediaJson, string mediaType)
     {
         using var document = JsonDocument.Parse(mediaJson);
+        var info = MediaInfo(document.RootElement);
+        var status = IntProperty(info, "status") ?? Unknown;
 
-        return document.RootElement.TryGetProperty("mediaInfo", out var info)
-            && info.ValueKind == JsonValueKind.Object
-            && info.TryGetProperty("status", out var status)
-            && status.ValueKind == JsonValueKind.Number
-                ? status.GetInt32()
-                : 1;
+        if (!string.Equals(mediaType, Tv, StringComparison.Ordinal))
+        {
+            return MovieState(status, Downloads(info).Count > 0);
+        }
+
+        var seasons = new List<(int Number, int Status)>();
+        if (info is { } media && media.TryGetProperty("seasons", out var list) && list.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var season in list.EnumerateArray())
+            {
+                if (IntProperty(season, "seasonNumber") is int number)
+                {
+                    seasons.Add((number, IntProperty(season, "status") ?? Unknown));
+                }
+            }
+        }
+
+        if (seasons.Count == 0)
+        {
+            return TvState(status, 0);
+        }
+
+        var (overall, available) = AnalyzeSeasons(seasons);
+        return TvState(overall, available);
     }
 
     /// <summary>
-    /// Traduit un statut Seerr en état du bouton.
+    /// État du bouton d'un film, d'après son statut Seerr.
     /// </summary>
     /// <remarks>
-    /// Statuts de Seerr : 1 inconnu, 2 en attente, 3 en cours, 4 partiellement disponible,
-    /// 5 disponible, 6 bloqué, 7 supprimé. Un titre supprimé redevient demandable, comme un
-    /// titre inconnu — c'est aussi le choix de Jellyfin Enhanced.
+    /// Un film approuvé n'est « en traitement » que si quelque chose se télécharge ; sinon il
+    /// est simplement « demandé ». Un film supprimé redevient demandable.
     /// </remarks>
-    /// <param name="mediaStatus">Le statut Seerr.</param>
+    /// <param name="status">Statut Seerr, de 1 à 7.</param>
+    /// <param name="downloading">Vrai si un téléchargement est en cours.</param>
     /// <returns>L'état du bouton.</returns>
-    public static string ToState(int mediaStatus) => mediaStatus switch
+    public static string MovieState(int status, bool downloading) => status switch
     {
-        2 => StatePending,
-        3 => StateProcessing,
-        4 => StatePartial,
-        5 => StateAvailable,
-        6 => StateBlocked,
+        Pending => StatePending,
+        Processing => downloading ? StateProcessing : StateRequested,
+        PartiallyAvailable => StatePartial,
+        Available => StateAvailable,
+        Blocked => StateBlocked,
         _ => StateRequest
     };
 
     /// <summary>
-    /// Lit l'état qui suit une demande, dans la réponse de <c>POST /api/v1/request</c>.
+    /// État du bouton d'une série, d'après son statut d'ensemble.
     /// </summary>
     /// <remarks>
-    /// Une demande à approuver porte le statut 1 : le titre attend un administrateur. Toute
-    /// autre demande acceptée — approuvée d'office pour un compte qui en a le droit — est en
-    /// cours d'acquisition.
+    /// Une série reste demandable tant qu'une saison peut l'être : « en attente » et
+    /// « en cours » laissent demander les autres saisons, et « partiellement disponible »
+    /// devient « Demander manquant ».
     /// </remarks>
-    /// <param name="requestJson">La réponse de Seerr.</param>
-    /// <returns>L'état du bouton après la demande.</returns>
-    public static string ReadStateAfterRequest(string requestJson)
+    /// <param name="overall">Statut d'ensemble, lu ou déduit des saisons.</param>
+    /// <param name="availableSeasons">Nombre de saisons au moins partiellement disponibles.</param>
+    /// <returns>L'état du bouton.</returns>
+    public static string TvState(int overall, int availableSeasons) => overall switch
     {
-        using var document = JsonDocument.Parse(requestJson);
+        Pending => StatePending,
+        PartiallyAvailable => StateRequestMissing,
+        Available => StateAvailable,
+        Blocked => StateBlocked,
+        Deleted => availableSeasons > 0 ? StateRequestMore : StateRequest,
+        _ => StateRequest
+    };
 
-        return document.RootElement.TryGetProperty("status", out var status)
-            && status.ValueKind == JsonValueKind.Number
-            && status.GetInt32() == 1
-                ? StatePending
-                : StateProcessing;
+    /// <summary>
+    /// Déduit le statut d'ensemble d'une série de celui de ses saisons.
+    /// </summary>
+    /// <remarks>
+    /// Reprend <c>analyzeSeasonStatuses</c> de Jellyfin Enhanced. Les épisodes spéciaux
+    /// (saison 0) ne comptent pas, sauf pour garder demandable une série dont toutes les
+    /// saisons sont disponibles mais pas les spéciaux.
+    /// </remarks>
+    /// <param name="seasons">Numéro et statut Seerr de chaque saison.</param>
+    /// <returns>Le statut d'ensemble et le nombre de saisons au moins partiellement disponibles.</returns>
+    public static (int Overall, int AvailableSeasons) AnalyzeSeasons(IReadOnlyList<(int Number, int Status)> seasons)
+    {
+        var regular = seasons.Where(s => s.Number > 0).ToList();
+        if (regular.Count == 0)
+        {
+            return (Unknown, 0);
+        }
+
+        var available = regular.Count(s => s.Status == Available || s.Status == PartiallyAvailable);
+        var requested = regular.Count(s => s.Status == Pending || s.Status == Processing);
+        var notRequested = regular.Count(s => s.Status == Unknown);
+
+        int overall;
+        if (notRequested == 0)
+        {
+            overall = available == regular.Count ? Available : Deleted;
+        }
+        else if (requested + available > 0)
+        {
+            overall = available > 0 ? PartiallyAvailable : Processing;
+        }
+        else
+        {
+            overall = Unknown;
+        }
+
+        if (overall == Available && seasons.Any(s => s.Number == 0 && s.Status == Unknown))
+        {
+            overall = Deleted;
+        }
+
+        return (overall, available);
+    }
+
+    /// <summary>
+    /// Lit les saisons d'une série dans la réponse de <c>GET /api/v1/tv/{id}</c>.
+    /// </summary>
+    /// <remarks>
+    /// Seules les saisons qui ont des épisodes sont proposées, et les épisodes spéciaux
+    /// seulement si Seerr les accepte. Une saison déjà couverte par une demande en cours
+    /// n'est plus demandable, même si Seerr ne l'a pas encore reportée sur le média.
+    /// </remarks>
+    /// <param name="tvJson">La réponse de Seerr.</param>
+    /// <param name="includeSpecials">Vrai si Seerr accepte les épisodes spéciaux.</param>
+    /// <returns>Les saisons, dans l'ordre.</returns>
+    public static IReadOnlyList<SeerrSeason> ReadSeasons(string tvJson, bool includeSpecials)
+    {
+        using var document = JsonDocument.Parse(tvJson);
+        var root = document.RootElement;
+        var info = MediaInfo(root);
+        var statuses = SeasonStatuses(info);
+        var downloading = Downloads(info);
+        var result = new List<SeerrSeason>();
+
+        if (root.TryGetProperty("seasons", out var seasons) && seasons.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var season in seasons.EnumerateArray())
+            {
+                if (IntProperty(season, "seasonNumber") is not int number
+                    || (IntProperty(season, "episodeCount") ?? 0) <= 0
+                    || (number == 0 && !includeSpecials))
+                {
+                    continue;
+                }
+
+                var status = statuses.TryGetValue(number, out var known) ? known : Unknown;
+                result.Add(new SeerrSeason(
+                    number,
+                    SeasonName(season),
+                    Year(season),
+                    IntProperty(season, "episodeCount") ?? 0,
+                    SeasonState(status, downloading.Contains(number)),
+                    IsRequestable(status)));
+            }
+        }
+
+        result.Sort((a, b) => a.Number.CompareTo(b.Number));
+        return result;
+    }
+
+    /// <summary>
+    /// Lit, dans <c>GET /api/v1/settings/main</c>, les deux réglages qui décident du choix des
+    /// saisons : demandes partielles et épisodes spéciaux.
+    /// </summary>
+    /// <remarks>
+    /// Seuls ces deux booléens sont lus ; la réponse contient aussi la clé d'API de Seerr, qui
+    /// n'en sort jamais.
+    /// </remarks>
+    /// <param name="settingsJson">La réponse de Seerr.</param>
+    /// <returns>Les deux réglages ; faux quand ils manquent.</returns>
+    public static (bool PartialRequests, bool SpecialEpisodes) ReadRequestSettings(string settingsJson)
+    {
+        using var document = JsonDocument.Parse(settingsJson);
+        var root = document.RootElement;
+
+        return (BoolProperty(root, "partialRequestsEnabled"), BoolProperty(root, "enableSpecialEpisodes"));
+    }
+
+    /// <summary>
+    /// Valide une liste de saisons à demander.
+    /// </summary>
+    /// <param name="seasons">Les numéros reçus.</param>
+    /// <returns>Les numéros, sans doublon et dans l'ordre, ou <see langword="null"/> si la liste est vide ou invraisemblable.</returns>
+    public static IReadOnlyList<int>? NormalizeSeasons(IEnumerable<int>? seasons)
+    {
+        if (seasons is null)
+        {
+            return null;
+        }
+
+        var list = seasons.Distinct().OrderBy(n => n).ToList();
+
+        return list.Count == 0 || list.Count > MaxSeasons || list.Any(n => n < 0 || n > MaxSeasonNumber)
+            ? null
+            : list;
     }
 
     /// <summary>
     /// Construit le corps d'une demande.
     /// </summary>
     /// <remarks>
-    /// Une série est demandée en entier, <c>seasons: "all"</c> — comme le fait la demande
-    /// rapide de Jellyfin Enhanced. Choisir ses saisons reste possible depuis Seerr.
+    /// Une série est demandée saison par saison, celles qu'a cochées l'utilisateur — comme la
+    /// fenêtre de saisons de Jellyfin Enhanced.
     /// </remarks>
     /// <param name="mediaType"><c>movie</c> ou <c>tv</c>.</param>
     /// <param name="tmdbId">Identifiant TMDB du titre.</param>
+    /// <param name="seasons">Saisons demandées, pour une série.</param>
     /// <returns>Le corps JSON de la demande.</returns>
-    public static string BuildRequestBody(string mediaType, int tmdbId)
+    public static string BuildRequestBody(string mediaType, int tmdbId, IReadOnlyList<int>? seasons = null)
         => string.Equals(mediaType, Tv, StringComparison.Ordinal)
-            ? JsonSerializer.Serialize(new { mediaType, mediaId = tmdbId, seasons = "all" })
+            ? JsonSerializer.Serialize(new { mediaType, mediaId = tmdbId, seasons = seasons ?? Array.Empty<int>() })
             : JsonSerializer.Serialize(new { mediaType, mediaId = tmdbId });
 
     /// <summary>
@@ -202,4 +385,138 @@ public static class SeerrRules
                 ? trimmed
                 : null;
     }
+
+    // Une saison se demande tant que Seerr ne la connaît pas, ou qu'elle a été supprimée.
+    private static bool IsRequestable(int status) => status == Unknown || status == Deleted;
+
+    // Statut de chaque saison : celui du média, sinon celui d'une demande en cours. Une
+    // demande porte un statut de DEMANDE (1 à approuver, 2 approuvée), traduit ici en statut de
+    // média — les confondre rendrait demandable une saison qui attend son approbation.
+    private static Dictionary<int, int> SeasonStatuses(JsonElement? info)
+    {
+        var statuses = new Dictionary<int, int>();
+
+        if (info is not { } media)
+        {
+            return statuses;
+        }
+
+        if (media.TryGetProperty("seasons", out var seasons) && seasons.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var season in seasons.EnumerateArray())
+            {
+                if (IntProperty(season, "seasonNumber") is int number && IntProperty(season, "status") is int status)
+                {
+                    statuses[number] = status;
+                }
+            }
+        }
+
+        if (!media.TryGetProperty("requests", out var requests) || requests.ValueKind != JsonValueKind.Array)
+        {
+            return statuses;
+        }
+
+        foreach (var request in requests.EnumerateArray())
+        {
+            var requestStatus = IntProperty(request, "status");
+            int? asMedia = requestStatus == RequestPendingApproval ? Pending
+                : requestStatus == RequestApproved ? Processing
+                : null;
+
+            if (asMedia is null
+                || !request.TryGetProperty("seasons", out var requested)
+                || requested.ValueKind != JsonValueKind.Array)
+            {
+                continue;
+            }
+
+            foreach (var season in requested.EnumerateArray())
+            {
+                if (IntProperty(season, "seasonNumber") is int number
+                    && (!statuses.TryGetValue(number, out var known) || IsRequestable(known)))
+                {
+                    statuses[number] = asMedia.Value;
+                }
+            }
+        }
+
+        return statuses;
+    }
+
+    private static string SeasonState(int status, bool downloading) => status switch
+    {
+        Pending or Processing => downloading ? StateProcessing : StateRequested,
+        PartiallyAvailable => StatePartial,
+        Available => StateAvailable,
+        Blocked => StateBlocked,
+        _ => StateNotRequested
+    };
+
+    // TheTVDB nomme parfois une saison par son seul numéro : le client écrit alors « Saison N ».
+    private static string? SeasonName(JsonElement season)
+    {
+        var name = season.TryGetProperty("name", out var value) && value.ValueKind == JsonValueKind.String
+            ? value.GetString()?.Trim()
+            : null;
+
+        return string.IsNullOrEmpty(name) || name.All(char.IsDigit) ? null : name;
+    }
+
+    private static string? Year(JsonElement season)
+    {
+        var date = season.TryGetProperty("airDate", out var value) && value.ValueKind == JsonValueKind.String
+            ? value.GetString()
+            : null;
+
+        return date is { Length: >= 4 } && date.Take(4).All(char.IsDigit) ? date[..4] : null;
+    }
+
+    private static JsonElement? MediaInfo(JsonElement root)
+        => root.TryGetProperty("mediaInfo", out var info) && info.ValueKind == JsonValueKind.Object ? info : null;
+
+    // Saisons dont un épisode se télécharge ; -1 pour un téléchargement sans saison (un film).
+    private static HashSet<int> Downloads(JsonElement? info)
+    {
+        var seasons = new HashSet<int>();
+
+        if (info is { } media && media.TryGetProperty("downloadStatus", out var downloads) && downloads.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var download in downloads.EnumerateArray())
+            {
+                var season = download.ValueKind == JsonValueKind.Object
+                    && download.TryGetProperty("episode", out var episode)
+                    && episode.ValueKind == JsonValueKind.Object
+                        ? IntProperty(episode, "seasonNumber")
+                        : null;
+                seasons.Add(season ?? -1);
+            }
+        }
+
+        return seasons;
+    }
+
+    private static int? IntProperty(JsonElement? element, string name)
+        => element is { ValueKind: JsonValueKind.Object } value
+            && value.TryGetProperty(name, out var property)
+            && property.ValueKind == JsonValueKind.Number
+            && property.TryGetInt32(out var number)
+                ? number
+                : null;
+
+    private static bool BoolProperty(JsonElement element, string name)
+        => element.ValueKind == JsonValueKind.Object
+            && element.TryGetProperty(name, out var property)
+            && property.ValueKind == JsonValueKind.True;
 }
+
+/// <summary>
+/// Une saison proposée dans le choix des saisons.
+/// </summary>
+/// <param name="Number">Numéro de la saison ; 0 pour les épisodes spéciaux.</param>
+/// <param name="Name">Nom donné par Seerr, ou <see langword="null"/> s'il n'est qu'un numéro.</param>
+/// <param name="Year">Année de diffusion, si connue.</param>
+/// <param name="Episodes">Nombre d'épisodes.</param>
+/// <param name="State">État de la saison.</param>
+/// <param name="Requestable">Vrai si la saison peut être demandée.</param>
+public sealed record SeerrSeason(int Number, string? Name, string? Year, int Episodes, string State, bool Requestable);
