@@ -209,6 +209,10 @@ sans recopier ses SVG. Un serveur qui utilise ce plugin retrouve le même geste.
   écarts : l'en-tête prend l'affiche déjà relayée plutôt que le fond TMDB — pas de nouveau relais
   d'images, et TMDB ne voit pas le visiteur ; la colonne du nom perd son `min-width: 0`, qui
   laissait un mot long chevaucher la colonne des épisodes sur un téléphone.
+- **Voiles à z-index 10000**, comme la fenêtre de Jellyfin Enhanced — fenêtre Seerr et panneau de
+  personnalisation ; le toast à 10001. jellyfin-web 12.1 place `.skinHeader` dans un conteneur
+  `sticky` à z-index 1099 (relevé sur le vrai serveur le 2026-09-27) : à 1000, l'en-tête restait
+  net par-dessus le voile et cachait le haut de la fenêtre. Le banc rejoue cet en-tête.
 - **Options avancées** (`SeerrAdvancedRequests`, l'option du même nom chez Jellyfin Enhanced) :
   serveurs lus dans `/api/v1/service/{sonarr|radarr}` puis le détail de chacun, gardés 5 min, le
   serveur par défaut non-4K présélectionné. Un film ouvre alors lui aussi sa fenêtre. **Seerr ne
@@ -799,7 +803,7 @@ dotnet run --project tests/ScriptTag.Tests -c Release
 cd tests/browser && npm install && node home-rows.test.mjs && node config-page.test.mjs
 ```
 
-Trois suites sans framework — 479 assertions — exécutées en CI avant la publication ; voir
+Trois suites sans framework — 481 assertions — exécutées en CI avant la publication ; voir
 `tests/README.md`. L'une charge un extrait des règles d'ElegantFin **après** les nôtres pour
 vérifier que la cohabitation tient.
 Les deux suites navigateur chargent le vrai `media-carousel.js` et le vrai `configPage.html`

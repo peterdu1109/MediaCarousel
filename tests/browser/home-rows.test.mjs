@@ -1776,6 +1776,35 @@ await saisons.waitForTimeout(200);
 const apresNavigation = await saisons.evaluate(() => document.querySelectorAll('.mc-seerr-backdrop').length);
 await saisons.close();
 
+// EN-TETE 12.1 — releve sur le 12.1 du PC le 2026-09-27 : `.skinHeader` (fixe, z-index 999)
+// vit dans un conteneur `sticky` a z-index 1099, qui forme son propre contexte d'empilement.
+// Un voile a 1000 passait dessous : l'en-tete cachait le haut de la fenetre. Il est pose
+// APRES le clic, sinon il intercepterait ceux de Playwright.
+const enteteJellyfin12 = () => {
+  const conteneur = document.createElement('div');
+  conteneur.style.cssText = 'position:sticky;top:0;z-index:1099';
+  conteneur.innerHTML = '<div class="skinHeader" style="position:fixed;top:0;left:0;right:0;'
+    + 'height:122px;z-index:999;background:#101010"></div>';
+  document.body.insertBefore(conteneur, document.body.firstChild);
+};
+const couvreEntete = (voile) => {
+  const el = document.elementFromPoint(innerWidth / 2, 60);
+  return !!(el && el.closest(voile));
+};
+const sousEntete = await pageSeerr();
+await sousEntete.waitForFunction(etatSeerr('66732', 'request'));
+await sousEntete.click('.mc-seerr[data-tmdb="66732"]');
+await sousEntete.waitForSelector('.mc-seerr-dialog .mc-seerr-pick');
+await sousEntete.evaluate(enteteJellyfin12);
+const enTete = { seerr: await sousEntete.evaluate(couvreEntete, '.mc-seerr-backdrop') };
+await sousEntete.close();
+const prefsSousEntete = await pageAudit();
+await prefsSousEntete.waitForSelector('.mc-prefs-open');
+await prefsSousEntete.click('.mc-prefs-open');
+await prefsSousEntete.evaluate(enteteJellyfin12);
+enTete.preferences = await prefsSousEntete.evaluate(couvreEntete, '.mc-prefs-backdrop');
+await prefsSousEntete.close();
+
 // Sans demandes partielles dans Seerr : la serie part en entier, specials exceptes.
 const entiere = await pageSeerr({ __partiel: false });
 await entiere.waitForFunction(etatSeerr('66732', 'request'));
@@ -2324,6 +2353,8 @@ check('SAISONS: la fenetre de Jellyfin Enhanced — interrupteurs, titre en degr
 check('SAISONS: l en-tete est illustre par l affiche du titre, deja relayee',
   fenetre.fondEntete.indexOf('st.jpg') !== -1, fenetre.fondEntete);
 check('SAISONS: sans options avancees proposees, pas de section', fenetre.avancees === 0, fenetre.avancees);
+check('EN-TETE 12.1: la fenetre Seerr passe devant l en-tete de jellyfin-web', enTete.seerr === true, enTete);
+check('EN-TETE 12.1: le panneau de personnalisation aussi', enTete.preferences === true, enTete);
 check('SAISONS: « Tout selectionner » et le bouton des demandes partielles',
   fenetre.tout === true && fenetre.envoyer === 'Demander', fenetre);
 check('SAISONS: le focus entre dans la fenetre, sur la premiere case', fenetre.focus === true, fenetre.focus);
