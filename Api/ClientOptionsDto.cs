@@ -121,4 +121,10 @@ public sealed class ClientOptionsDto
     /// l'autre ne sont publiées : les demandes passent par le serveur.
     /// </remarks>
     public bool SeerrRequests { get; set; }
+
+    /// <summary>
+    /// Obtient ou définit une valeur indiquant si les demandes proposent serveur, profil de
+    /// qualité et dossier racine.
+    /// </summary>
+    public bool SeerrAdvanced { get; set; }
 }

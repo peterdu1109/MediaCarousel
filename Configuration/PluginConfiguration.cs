@@ -404,6 +404,17 @@ public class PluginConfiguration : BasePluginConfiguration
     public string SeerrApiKey { get; set; } = string.Empty;
 
     /// <summary>
+    /// Obtient ou définit une valeur indiquant si chaque demande propose les options avancées de
+    /// Seerr : serveur de destination, profil de qualité, dossier racine.
+    /// </summary>
+    /// <remarks>
+    /// L'équivalent de « Afficher les options avancées » dans Jellyfin Enhanced. Seerr ne filtre
+    /// pas ces choix selon les droits du compte : le serveur les vérifie contre les listes que
+    /// Seerr publie, pour qu'aucun dossier arbitraire n'arrive jusqu'à Sonarr ou Radarr.
+    /// </remarks>
+    public bool SeerrAdvancedRequests { get; set; }
+
+    /// <summary>
     /// Obtient ou définit une valeur indiquant si chaque compte peut régler ses propres rangées.
     /// </summary>
     /// <remarks>

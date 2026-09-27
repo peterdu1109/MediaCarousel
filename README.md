@@ -137,6 +137,7 @@ l'épisode isolé.
 | Demander les titres absents à Seerr | ❌ | Un bouton « Demander » sur l'affiche de chaque titre absent |
 | Adresse de Seerr | — | Telle que le serveur Jellyfin l'atteint, par exemple `http://192.168.1.10:5055` |
 | Clé d'API de Seerr | — | Dans Seerr : Paramètres → Général. Jamais transmise aux navigateurs |
+| Options avancées | ❌ | Serveur, profil de qualité et dossier racine proposés à chaque demande |
 
 Si la source est injoignable, le classement précédent est conservé — une coupure réseau ne vide
 jamais la liste.
@@ -150,9 +151,11 @@ utilisateur, donc ses droits et ses quotas s'appliquent. Pour que le bouton appa
 - attends le prochain recalcul, ou lance-le depuis la page de configuration.
 
 Comme dans Jellyfin Enhanced, le bouton apparaît au survol de l'affiche — et en permanence sur
-un écran tactile ou une télévision. Un film se demande d'un clic. Une série ouvre le choix des
-saisons : chaque saison y montre son état, et seules celles qui ne sont ni disponibles ni déjà
-demandées se cochent. Si Seerr n'accepte pas les demandes partielles, la série part en entière.
+un écran tactile ou une télévision. Un film se demande d'un clic. Une série ouvre la fenêtre de
+Jellyfin Enhanced : chaque saison y montre son état, et seules celles qui ne sont ni disponibles ni
+déjà demandées s'activent. Si Seerr n'accepte pas les demandes partielles, la série part en
+entière. Avec les options avancées, la fenêtre propose aussi le serveur, le profil de qualité et le
+dossier racine — et un film l'ouvre à son tour.
 Le bouton « Tester la connexion » vérifie l'adresse et la clé avant l'enregistrement.
 
 </details>

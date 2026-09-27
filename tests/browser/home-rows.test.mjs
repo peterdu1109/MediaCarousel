@@ -1440,7 +1440,7 @@ const serveurSeerr = () => {
     absent(5, 'Chernobyl', 'tv', '87108'),
     absent(6, 'Fight Club', 'movie', '550'),
     absent(7, 'Interstellar', 'movie', '157336'),
-    absent(8, 'Stranger Things', 'tv', '66732'),
+    Object.assign(absent(8, 'Stranger Things', 'tv', '66732'), { PosterUrl: 'MediaCarousel/Poster/st.jpg' }),
     absent(9, 'Severance', 'tv', '95396')
   ];
   // `null` : Seerr n'a pas pu repondre pour ce titre.
@@ -1457,7 +1457,8 @@ const serveurSeerr = () => {
       if (url.includes('ClientOptions')) {
         return Promise.resolve({
           EnableHomeRows: true, ShowGlobalRow: true, GlobalRowTitle: 'Top 10 mondial', GlobalRowSize: 30,
-          RankNumberScale: 100, HighlightColor: '#775BF4', SeerrRequests: window.__seerr !== false
+          RankNumberScale: 100, HighlightColor: '#775BF4', SeerrRequests: window.__seerr !== false,
+          SeerrAdvanced: window.__avance === true
         });
       }
       if (url.includes('Top/Global')) { return Promise.resolve({ Items: window.__global }); }
@@ -1473,6 +1474,22 @@ const serveurSeerr = () => {
           return { MediaType: t.MediaType, TmdbId: t.TmdbId, State: etat || null, Error: etat ? null : 'offline' };
         });
         return new Promise((resolve) => setTimeout(() => resolve(reponse), window.__lenteur || 0));
+      }
+      if (route === 'MediaCarousel/Seerr/Options') {
+        if (window.__refusOptions) {
+          return Promise.reject({ status: 502, json: () => Promise.resolve({ Error: 'offline' }) });
+        }
+        // Dans le desordre de Seerr, le serveur 4K en tete : le tri et la preselection sont testes.
+        return Promise.resolve({ Servers: corps.MediaType === 'tv' ? [
+          { Id: 1, Name: 'Sonarr 4K', Is4k: true, IsDefault: true, ActiveProfileId: 7, ActiveDirectory: '/series-4k',
+            Profiles: [{ Id: 7, Name: 'Ultra-HD' }], RootFolders: [{ Path: '/series-4k', FreeSpace: null }] },
+          { Id: 0, Name: 'Sonarr', Is4k: false, IsDefault: true, ActiveProfileId: 4, ActiveDirectory: '/series',
+            Profiles: [{ Id: 4, Name: 'HD-1080p' }, { Id: 6, Name: 'HD-720p' }],
+            RootFolders: [{ Path: '/series', FreeSpace: 4376499000000 }, { Path: '/series2', FreeSpace: null }] }
+        ] : [
+          { Id: 0, Name: 'Radarr', Is4k: false, IsDefault: true, ActiveProfileId: 4, ActiveDirectory: '/films',
+            Profiles: [{ Id: 4, Name: 'HD-1080p' }], RootFolders: [{ Path: '/films', FreeSpace: 1099511627776 }] }
+        ] });
       }
       if (route === 'MediaCarousel/Seerr/Seasons') {
         if (window.__refusSaisons) {
@@ -1661,13 +1678,22 @@ const fenetre = await saisons.evaluate(() => {
   const lignes = Array.from(d.querySelectorAll('.mc-seerr-pick')).map(box => ({
     saison: box.value, active: !box.disabled, nom: box.closest('label').querySelector('.mc-seerr-season-name').textContent,
     etat: box.closest('label').querySelector('.mc-seerr-season-state').textContent,
-    infos: box.closest('label').querySelector('.mc-seerr-season-meta').textContent
+    annee: (box.closest('label').querySelector('.mc-seerr-season-year') || { textContent: '' }).textContent,
+    episodes: box.closest('label').querySelector('.mc-seerr-season-episodes').textContent
   }));
+  const toggles = Array.from(d.querySelectorAll('input[type=checkbox]'));
+  const pastille = d.querySelector('.mc-seerr-season-state');
   return {
     role: d.getAttribute('role'), modale: d.getAttribute('aria-modal'),
     titre: d.querySelector('h2').textContent, sousTitre: d.querySelector('.mc-seerr-subtitle').textContent,
     tout: !!d.querySelector('.mc-seerr-all'), envoyer: d.querySelector('.mc-seerr-send').textContent,
     lignes, focus: !!document.activeElement && document.activeElement.matches('.mc-seerr-seasons input:not([disabled])'),
+    interrupteurs: toggles.length > 0 && toggles.every(t => t.classList.contains('mc-seerr-toggle')
+      && getComputedStyle(t).appearance === 'none' && getComputedStyle(t).width === '40px'),
+    fondEntete: getComputedStyle(d.querySelector('.mc-seerr-head')).backgroundImage,
+    titreDegrade: getComputedStyle(d.querySelector('h2')).backgroundImage.indexOf('linear-gradient') !== -1,
+    capitales: getComputedStyle(pastille).textTransform === 'uppercase',
+    avancees: d.querySelectorAll('.mc-seerr-advanced').length,
     demandes: window.__appels.filter(a => a.route === 'MediaCarousel/Seerr/Request').length
   };
 });
@@ -1747,6 +1773,65 @@ const saisonsHorsLigne = await saisonsIllisibles.evaluate(() => ({
   envoi: document.querySelector('.mc-seerr-send').disabled
 }));
 await saisonsIllisibles.close();
+
+// OPTIONS AVANCEES — serveur, profil et dossier, comme chez Jellyfin Enhanced.
+const avancee = await pageSeerr({ __avance: true });
+await avancee.waitForFunction(etatSeerr('66732', 'request'));
+await avancee.click('.mc-seerr[data-tmdb="66732"]');
+await avancee.waitForSelector('.mc-seerr-advanced:not([hidden]) .mc-seerr-server option', { state: 'attached' });
+const optionsSerie = await avancee.evaluate(() => {
+  const section = document.querySelector('.mc-seerr-advanced');
+  const choisi = (sel) => section.querySelector(sel).selectedOptions[0].textContent;
+  return {
+    titre: section.querySelector('h3').textContent,
+    serveurs: Array.from(section.querySelectorAll('.mc-seerr-server option')).map(o => o.textContent).join(','),
+    serveur: choisi('.mc-seerr-server'), profil: choisi('.mc-seerr-profile'), dossier: choisi('.mc-seerr-folder')
+  };
+});
+await avancee.selectOption('.mc-seerr-server', '1');
+const apres4k = await avancee.evaluate(() => ({
+  profil: document.querySelector('.mc-seerr-profile').value,
+  dossier: document.querySelector('.mc-seerr-folder').value
+}));
+await avancee.selectOption('.mc-seerr-server', '0');
+await avancee.selectOption('.mc-seerr-profile', '6');
+await avancee.selectOption('.mc-seerr-folder', '/series2');
+await avancee.click('.mc-seerr-all');
+await avancee.click('.mc-seerr-send');
+await avancee.waitForFunction(() => !document.querySelector('.mc-seerr-backdrop'));
+const demandeAvancee = await avancee.evaluate(() =>
+  window.__appels.filter(a => a.route === 'MediaCarousel/Seerr/Request').pop().corps);
+// Avec les options avancees, un film ouvre lui aussi sa fenetre.
+await avancee.click('.mc-seerr[data-tmdb="27205"]');
+await avancee.waitForSelector('.mc-seerr-advanced:not([hidden]) .mc-seerr-server option', { state: 'attached' });
+const fenetreFilm = await avancee.evaluate(() => ({
+  titre: document.querySelector('.mc-seerr-dialog h2').textContent,
+  saisons: document.querySelectorAll('.mc-seerr-dialog .mc-seerr-seasons').length,
+  envoiActif: !document.querySelector('.mc-seerr-send').disabled,
+  dossier: document.querySelector('.mc-seerr-folder').selectedOptions[0].textContent
+}));
+await avancee.click('.mc-seerr-send');
+await avancee.waitForFunction(() => !document.querySelector('.mc-seerr-backdrop'));
+const demandeFilm = await avancee.evaluate(() => ({
+  corps: window.__appels.filter(a => a.route === 'MediaCarousel/Seerr/Request').pop().corps,
+  etat: document.querySelector('.mc-seerr[data-tmdb="27205"]').getAttribute('data-state')
+}));
+await avancee.close();
+
+// Options illisibles : la section reste cachee, et la demande part sans elles.
+const sansOptions = await pageSeerr({ __avance: true, __refusOptions: true });
+await sansOptions.waitForFunction(etatSeerr('27205', 'request'));
+await sansOptions.click('.mc-seerr[data-tmdb="27205"]');
+await sansOptions.waitForSelector('.mc-seerr-dialog');
+await sansOptions.waitForTimeout(200);
+const optionsIllisibles = await sansOptions.evaluate(() => ({
+  cachee: document.querySelector('.mc-seerr-advanced').hidden
+}));
+await sansOptions.click('.mc-seerr-send');
+await sansOptions.waitForFunction(() => !document.querySelector('.mc-seerr-backdrop'));
+optionsIllisibles.corps = await sansOptions.evaluate(() =>
+  window.__appels.filter(a => a.route === 'MediaCarousel/Seerr/Request').pop().corps);
+await sansOptions.close();
 
 // Integration non configuree : ni bouton, ni appel — et la rangee a la meme hauteur.
 const sansSeerr = await pageSeerr({ __seerr: false });
@@ -2182,10 +2267,15 @@ check('SAISONS: chaque saison dit son etat',
     && fenetre.lignes[3].etat === 'Non demandé', fenetre.lignes);
 check('SAISONS: nom, specials, annee et episodes',
   fenetre.lignes[0].nom === 'Épisodes spéciaux' && fenetre.lignes[2].nom === 'Stranger Things 2'
-    && fenetre.lignes[3].nom === 'Saison 3' && fenetre.lignes[3].infos === '2019 · 8 ép.'
-    && fenetre.lignes[4].infos === '9 ép.', fenetre.lignes);
+    && fenetre.lignes[3].nom === 'Saison 3' && fenetre.lignes[3].annee === '2019' && fenetre.lignes[3].episodes === '8 ép.'
+    && fenetre.lignes[4].annee === '' && fenetre.lignes[4].episodes === '9 ép.', fenetre.lignes);
+check('SAISONS: la fenetre de Jellyfin Enhanced — interrupteurs, titre en degrade, pastilles en capitales',
+  fenetre.interrupteurs && fenetre.titreDegrade && fenetre.capitales, fenetre);
+check('SAISONS: l en-tete est illustre par l affiche du titre, deja relayee',
+  fenetre.fondEntete.indexOf('st.jpg') !== -1, fenetre.fondEntete);
+check('SAISONS: sans options avancees proposees, pas de section', fenetre.avancees === 0, fenetre.avancees);
 check('SAISONS: « Tout selectionner » et le bouton des demandes partielles',
-  fenetre.tout === true && fenetre.envoyer === 'Demander la/les saison(s) sélectionnée(s)', fenetre);
+  fenetre.tout === true && fenetre.envoyer === 'Demander', fenetre);
 check('SAISONS: le focus entre dans la fenetre, sur la premiere case', fenetre.focus === true, fenetre.focus);
 check('SAISONS: rien de coche, rien ne part, et la fenetre le dit',
   sansChoix.demandes === 0 && sansChoix.message === 'Veuillez sélectionner au moins une saison', sansChoix);
@@ -2209,6 +2299,25 @@ check('SAISONS: un refus s affiche dans la fenetre, qui reste ouverte',
 check('SAISONS: Seerr injoignable a l ouverture, la fenetre le dit et ne propose rien',
   saisonsHorsLigne.envoi === true, saisonsHorsLigne);
 
+check('AVANCEES: la section de Jellyfin Enhanced, ses serveurs tries par nom',
+  optionsSerie.titre === 'Options avancées' && optionsSerie.serveurs === 'Sonarr,Sonarr 4K', optionsSerie);
+check('AVANCEES: le serveur par defaut des demandes ordinaires est preselectionne, pas celui de la 4K',
+  optionsSerie.serveur === 'Sonarr' && optionsSerie.profil === 'HD-1080p'
+    && optionsSerie.dossier === '/series (3.98 TB)', optionsSerie);
+check('AVANCEES: changer de serveur propose ses propres profils et dossiers',
+  apres4k.profil === '7' && apres4k.dossier === '/series-4k', apres4k);
+check('AVANCEES: la demande porte le serveur, le profil et le dossier choisis',
+  demandeAvancee.ServerId === 0 && demandeAvancee.ProfileId === 6 && demandeAvancee.RootFolder === '/series2'
+    && demandeAvancee.Seasons.join(',') === '3,4', demandeAvancee);
+check('AVANCEES: un film ouvre sa fenetre, sans saisons, pret a partir',
+  fenetreFilm.titre === 'Demander un film' && fenetreFilm.saisons === 0 && fenetreFilm.envoiActif
+    && fenetreFilm.dossier === '/films (1 TB)', fenetreFilm);
+check('AVANCEES: et la demande du film porte ses options',
+  demandeFilm.corps.MediaType === 'movie' && demandeFilm.corps.ServerId === 0 && demandeFilm.corps.ProfileId === 4
+    && demandeFilm.corps.RootFolder === '/films' && demandeFilm.corps.Seasons === undefined
+    && demandeFilm.etat === 'requested', demandeFilm);
+check('AVANCEES: options illisibles, la section reste cachee et la demande part sans elles',
+  optionsIllisibles.cachee === true && optionsIllisibles.corps.ServerId === undefined, optionsIllisibles);
 check('SEERR: plus de 20 titres partent en plusieurs lots',
   JSON.stringify(lotsDecoupes) === '[20,5]', lotsDecoupes);
 check('SEERR: un retour sur l accueil montre aussitot l etat connu', etatAuRetour === 'request', etatAuRetour);

@@ -85,12 +85,14 @@ public sealed class SeerrClient
     private static readonly TimeSpan UserMiss = TimeSpan.FromMinutes(1);
     private static readonly TimeSpan StateLifetime = TimeSpan.FromMinutes(1);
     private static readonly TimeSpan SettingsLifetime = TimeSpan.FromMinutes(10);
+    private static readonly TimeSpan ServersLifetime = TimeSpan.FromMinutes(5);
 
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<SeerrClient> _logger;
     private readonly ConcurrentDictionary<Guid, (int? Id, DateTime At)> _users = new();
     private readonly ConcurrentDictionary<string, (string State, DateTime At)> _states = new(StringComparer.Ordinal);
     private (string BaseUrl, bool PartialRequests, bool SpecialEpisodes, DateTime At)? _settings;
+    private readonly ConcurrentDictionary<string, (IReadOnlyList<SeerrServer> Servers, DateTime At)> _servers = new(StringComparer.Ordinal);
 
     /// <summary>
     /// Initialise une nouvelle instance de la classe <see cref="SeerrClient"/>.
@@ -169,6 +171,7 @@ public sealed class SeerrClient
     /// <param name="mediaType"><c>movie</c> ou <c>tv</c>.</param>
     /// <param name="tmdbId">Identifiant TMDB.</param>
     /// <param name="seasons">Saisons demandées, pour une série ; <see langword="null"/> pour un film.</param>
+    /// <param name="choice">Serveur, profil et dossier choisis, déjà vérifiés ; <see langword="null"/> sinon.</param>
     /// <param name="cancellationToken">Jeton d'annulation.</param>
     /// <returns>L'état du bouton après la demande, ou la raison de l'échec.</returns>
     public async Task<SeerrOutcome> RequestAsync(
@@ -178,6 +181,7 @@ public sealed class SeerrClient
         string mediaType,
         int tmdbId,
         IReadOnlyList<int>? seasons,
+        SeerrChoice? choice,
         CancellationToken cancellationToken)
     {
         var (seerrUserId, lookupFailure) = await FindUserAsync(baseUrl, apiKey, jellyfinUserId, cancellationToken)
@@ -198,7 +202,7 @@ public sealed class SeerrClient
             baseUrl + "/api/v1/request",
             apiKey,
             seerrUserId,
-            SeerrRules.BuildRequestBody(mediaType, tmdbId, seasons),
+            SeerrRules.BuildRequestBody(mediaType, tmdbId, seasons, choice),
             cancellationToken).ConfigureAwait(false);
 
         var key = StateKey(mediaType, tmdbId);
@@ -284,6 +288,85 @@ public sealed class SeerrClient
         {
             return (null, SeerrFailure.Error);
         }
+    }
+
+    /// <summary>
+    /// Lit les serveurs Sonarr ou Radarr déclarés dans Seerr, avec leurs profils et leurs dossiers.
+    /// </summary>
+    /// <remarks>
+    /// Gardés cinq minutes : ils servent à chaque fenêtre de demande, et à vérifier chaque
+    /// choix reçu, alors qu'ils ne changent qu'avec la configuration de Seerr.
+    /// </remarks>
+    /// <param name="baseUrl">Adresse de Seerr.</param>
+    /// <param name="apiKey">Clé d'API de Seerr.</param>
+    /// <param name="mediaType"><c>movie</c> ou <c>tv</c>.</param>
+    /// <param name="cancellationToken">Jeton d'annulation.</param>
+    /// <returns>Les serveurs, ou la raison de l'échec.</returns>
+    public async Task<(IReadOnlyList<SeerrServer>? Servers, SeerrFailure Failure)> GetServersAsync(
+        string baseUrl,
+        string apiKey,
+        string mediaType,
+        CancellationToken cancellationToken)
+    {
+        var service = SeerrRules.ServiceFor(mediaType);
+        var key = baseUrl + "|" + service;
+
+        if (_servers.TryGetValue(key, out var cached) && DateTime.UtcNow - cached.At < ServersLifetime)
+        {
+            return (cached.Servers, SeerrFailure.None);
+        }
+
+        var (status, body) = await SendAsync(HttpMethod.Get, baseUrl + "/api/v1/service/" + service, apiKey, null, null, cancellationToken)
+            .ConfigureAwait(false);
+
+        var failure = Classify(status, body);
+        if (failure != SeerrFailure.None)
+        {
+            return (null, failure);
+        }
+
+        IReadOnlyList<SeerrServer> servers;
+        try
+        {
+            servers = SeerrRules.ReadServers(body!);
+        }
+        catch (JsonException)
+        {
+            return (null, SeerrFailure.Error);
+        }
+
+        var detailed = new List<SeerrServer>(servers.Count);
+        foreach (var server in servers)
+        {
+            var (detailStatus, detailBody) = await SendAsync(
+                HttpMethod.Get,
+                baseUrl + "/api/v1/service/" + service + "/" + server.Id.ToString(CultureInfo.InvariantCulture),
+                apiKey,
+                null,
+                null,
+                cancellationToken).ConfigureAwait(false);
+
+            // Un serveur dont le détail manque reste proposé sans profils ni dossiers, comme chez
+            // Jellyfin Enhanced — et aucun choix ne peut alors le viser.
+            if (Classify(detailStatus, detailBody) == SeerrFailure.None)
+            {
+                try
+                {
+                    var (profiles, folders) = SeerrRules.ReadServerDetails(detailBody!);
+                    detailed.Add(server with { Profiles = profiles, Folders = folders });
+                    continue;
+                }
+                catch (JsonException)
+                {
+                    // Le serveur reste proposé, sans détail.
+                }
+            }
+
+            detailed.Add(server);
+        }
+
+        _servers[key] = (detailed, DateTime.UtcNow);
+        return (detailed, SeerrFailure.None);
     }
 
     /// <summary>

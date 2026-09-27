@@ -44,6 +44,7 @@
     // Demandes à Seerr : proposées ou non par le serveur, et dernier état connu de chaque
     // titre absent, par clé `type:identifiant TMDB` — voir refreshSeerrStates().
     var seerrEnabled = false;
+    var seerrAdvanced = false;
     var seerrStates = {};
     var rendering = false;
     var scheduled = null;
@@ -498,39 +499,109 @@
             '.mc-row .mc-seerr[data-tone="blocked"]{background:#78350f;}',
             '.mc-row .mc-seerr[data-tone="error"]{background:#dc3545;}',
 
-            /* Choix des saisons : la fenêtre de Jellyfin Enhanced, en HTML nu comme le
-               panneau de personnalisation, et pour la même raison. */
+            /* Fenêtre de demande : celle de Jellyfin Enhanced, relevée règle par règle — voile
+               flouté, en-tête illustré sous un voile sombre, titre en dégradé, une carte par
+               saison avec son interrupteur et sa pastille, options avancées, pied « Annuler /
+               Demander ». En HTML nu, comme le panneau de personnalisation, et pour la même
+               raison. Pas de `gap` en flexbox (Tizen) : des marges ; la grille, elle, porte le sien. */
             '.mc-seerr-backdrop{position:fixed;left:0;right:0;top:0;bottom:0;z-index:1000;',
-            'background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:1em;}',
-            '.mc-seerr-dialog{background:#1c1c1f;color:#fff;border-radius:8px;padding:1.2em;',
-            'width:100%;max-width:460px;max-height:86vh;overflow-y:auto;box-sizing:border-box;',
-            'box-shadow:0 12px 40px rgba(0,0,0,.6);}',
+            'display:flex;align-items:center;justify-content:center;background:rgba(0,10,20,.85);',
+            '-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);}',
+            '.mc-seerr-dialog{display:flex;flex-direction:column;box-sizing:border-box;width:90%;max-width:700px;',
+            'max-height:80vh;overflow:hidden;color:#e2e8f0;border-radius:16px;',
+            'background:linear-gradient(145deg,#1e293b 0%,#0f172a 100%);border:1px solid rgba(148,163,184,.1);',
+            'box-shadow:0 25px 80px rgba(0,0,0,.8),0 0 0 1px rgba(148,163,184,.05);}',
             '.mc-seerr-dialog:focus{outline:none;}',
-            '.mc-seerr-dialog h2{margin:0;font-size:1.2em;}',
-            '.mc-seerr-dialog .mc-seerr-subtitle{margin:.2em 0 1em;opacity:.7;}',
-            '.mc-seerr-season{display:flex;align-items:center;padding:.5em 0;cursor:pointer;',
-            'border-bottom:1px solid rgba(255,255,255,.08);}',
-            '.mc-seerr-season.mc-seerr-season-locked{cursor:default;}',
-            '.mc-seerr-season input{margin:0 .7em 0 0;flex:0 0 auto;}',
-            '.mc-seerr-season-name{flex:1 1 auto;min-width:0;}',
-            '.mc-seerr-season-meta{flex:0 0 auto;margin-left:.8em;opacity:.6;font-size:.85em;}',
-            '.mc-seerr-season-state{flex:0 0 auto;margin-left:.8em;padding:.15em .6em;border-radius:999px;',
-            'font-size:.78em;font-weight:600;background:rgba(255,255,255,.12);}',
-            '.mc-seerr-season-state[data-state="requested"]{background:#b45309;}',
-            '.mc-seerr-season-state[data-state="processing"]{background:#581c87;}',
-            '.mc-seerr-season-state[data-state="partial"]{background:#4ca46c;}',
-            '.mc-seerr-season-state[data-state="available"]{background:#16a34a;}',
-            '.mc-seerr-season-state[data-state="blocked"]{background:#78350f;}',
-            '.mc-seerr-dialog .mc-seerr-note{margin:.6em 0;opacity:.75;font-size:.9em;}',
-            '.mc-seerr-dialog .mc-seerr-message{min-height:1.2em;margin:.8em 0 0;color:#ff8a8a;font-size:.9em;}',
-            '.mc-seerr-dialog .mc-seerr-actions{display:flex;flex-wrap:wrap;margin-top:.6em;}',
-            '.mc-seerr-dialog .mc-seerr-actions button{margin-right:.5em;margin-top:.4em;border:0;',
-            'border-radius:4px;padding:.55em 1em;cursor:pointer;font-size:.95em;}',
-            '.mc-seerr-dialog .mc-seerr-send{background:#5a3fb8;color:#fff;}',
-            '.mc-seerr-dialog .mc-seerr-send[disabled]{opacity:.5;cursor:default;}',
-            '.mc-seerr-dialog .mc-seerr-cancel{background:rgba(255,255,255,.12);color:#fff;}',
-            '.mc-seerr-dialog button:focus,.mc-seerr-dialog input:focus{outline:2px solid var(--mc-accent);',
-            'outline-offset:2px;}',
+            '.mc-seerr-head{position:relative;flex:0 0 auto;box-sizing:border-box;height:8em;',
+            'padding:24px;padding:min(24px,5vw);',
+            'overflow:hidden;border-radius:16px 16px 0 0;background-color:#1e293b;',
+            'background-image:linear-gradient(45deg,#3b82f6,#8b5cf6);background-size:cover;background-position:center;}',
+            '.mc-seerr-head::before{content:"";position:absolute;left:0;top:0;right:0;bottom:0;',
+            'background:rgba(0,0,0,.8);-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px);}',
+            '.mc-seerr-title{position:relative;margin:0 0 6px;font-size:1.8rem;font-weight:700;line-height:1.2;',
+            'color:#8b5cf6;background:linear-gradient(45deg,#3b82f6,#8b5cf6);-webkit-background-clip:text;',
+            'background-clip:text;-webkit-text-fill-color:transparent;}',
+            '.mc-seerr-subtitle{position:relative;margin:0;font-size:1.4rem;font-weight:500;',
+            'color:rgba(255,255,255,.9);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}',
+            /* Sur un écran étroit, marges et colonnes se resserrent : `min()` plutôt qu'un point
+               de rupture, la valeur de Jellyfin Enhanced d'abord pour les moteurs qui l'ignorent. */
+            '.mc-seerr-body{flex:1 1 auto;overflow-y:auto;padding:24px;padding:min(24px,5vw);}',
+            '.mc-seerr-seasons{display:grid;grid-row-gap:4px;margin-bottom:24px;}',
+            /* `1fr` : la colonne du nom ne descend jamais sous son plus long mot ; sur un écran
+               étroit, c'est la pastille qui passe sur deux lignes. */
+            '.mc-seerr-season{display:grid;grid-template-columns:40px 1fr auto auto;',
+            'grid-column-gap:16px;grid-column-gap:min(16px,3vw);align-items:center;',
+            'padding:16px 20px;padding:16px min(20px,4vw);border-radius:12px;cursor:pointer;',
+            'background:rgba(30,41,59,.4);border:1px solid rgba(51,65,85,.3);',
+            'transition:background-color .2s ease,border-color .2s ease;}',
+            '.mc-seerr-season:not(.mc-seerr-season-locked):hover{background:rgba(30,41,59,.7);',
+            'border-color:rgba(59,130,246,.3);}',
+            '.mc-seerr-season.mc-seerr-season-locked{cursor:default;opacity:.6;background:rgba(15,23,42,.6);',
+            'border-color:rgba(51,65,85,.2);}',
+            '.mc-seerr-season.mc-seerr-all-row{grid-template-columns:40px 1fr;margin-bottom:8px;',
+            'padding:12px 20px;padding:12px min(20px,4vw);',
+            'background:rgba(51,65,85,.3);border-color:rgba(71,85,105,.4);}',
+            '.mc-seerr-all-label{font-size:.95rem;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:#cbd5e1;}',
+            '.mc-seerr-toggle{-webkit-appearance:none;appearance:none;position:relative;box-sizing:border-box;',
+            'width:40px;min-width:40px;height:22px;margin:0;border:0;border-radius:999px;cursor:pointer;',
+            'background:rgba(71,85,105,.6);transition:background-color .2s ease;}',
+            '.mc-seerr-toggle::before{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;',
+            'border-radius:50%;background:#fff;transition:transform .2s ease;}',
+            '.mc-seerr-toggle:checked{background:#4f46e5;}',
+            '.mc-seerr-toggle:checked::before{transform:translateX(18px);}',
+            '.mc-seerr-toggle:disabled{opacity:.4;cursor:not-allowed;}',
+            '.mc-seerr-toggle:focus{outline:2px solid rgba(59,130,246,.8);outline-offset:2px;}',
+            '.mc-seerr-toggle:focus:not(:focus-visible){outline:none;}',
+            /* Sans le `min-width:0` de Jellyfin Enhanced : c'est lui qui laisse, sur un écran
+               étroit, un mot long déborder sur la colonne des épisodes. */
+            '.mc-seerr-season-info{display:flex;flex-direction:column;}',
+            '.mc-seerr-season-name{font-size:1rem;font-weight:600;color:#e2e8f0;}',
+            '.mc-seerr-season-year{margin-top:4px;font-size:.875rem;color:#94a3b8;}',
+            '.mc-seerr-season-episodes{min-width:70px;min-width:min(70px,11vw);text-align:right;font-size:.875rem;',
+            'font-weight:500;color:#64748b;}',
+            '.mc-seerr-season-state{box-sizing:border-box;min-width:110px;min-width:min(110px,22vw);',
+            'padding:6px 12px;border-radius:20px;',
+            'text-align:center;font-size:.75rem;font-weight:700;letter-spacing:.5px;text-transform:uppercase;',
+            'color:#818cf8;background:rgba(99,102,241,.15);border:1px solid rgba(99,102,241,.3);}',
+            '.mc-seerr-season-state[data-state="requested"],.mc-seerr-season-state[data-state="processing"]{',
+            'color:#a855f7;background:rgba(147,51,234,.15);border-color:rgba(147,51,234,.3);}',
+            '.mc-seerr-season-state[data-state="available"],.mc-seerr-season-state[data-state="partial"]{',
+            'color:#4ade80;background:rgba(34,197,94,.15);border-color:rgba(34,197,94,.3);}',
+            '.mc-seerr-season-state[data-state="blocked"]{color:#f87171;background:rgba(239,68,68,.15);',
+            'border-color:rgba(239,68,68,.3);}',
+            '.mc-seerr-dialog .mc-seerr-note{margin:.6em 0;font-size:.9em;color:#94a3b8;}',
+            '.mc-seerr-advanced{margin-top:1em;padding-top:1em;border-top:1px solid rgba(148,163,184,.1);}',
+            '.mc-seerr-advanced[hidden]{display:none;}',
+            '.mc-seerr-advanced h3{margin:0 0 1em;font-size:1.17em;}',
+            '.mc-seerr-row{display:flex;margin:0 -.5em 1em;}',
+            '.mc-seerr-field{flex:1 1 0;min-width:0;margin:0 .5em;}',
+            '.mc-seerr-field label{display:block;margin-bottom:.5em;font-weight:600;color:#e2e8f0;}',
+            '.mc-seerr-field select{box-sizing:border-box;width:100%;padding:12px 40px 12px 16px;border-radius:8px;',
+            'border:1px solid rgba(51,65,85,.5);background-color:rgba(30,41,59,.7);color:#e2e8f0;font:inherit;',
+            'font-size:.95rem;cursor:pointer;-webkit-appearance:none;appearance:none;',
+            'background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22',
+            ' viewBox=%220 0 16 16%22%3E%3Cpath fill=%22none%22 stroke=%22%2394a3b8%22 stroke-width=%222%22',
+            ' d=%22M3 6l5 5 5-5%22/%3E%3C/svg%3E");background-repeat:no-repeat;',
+            'background-position:right 14px center;background-size:14px;}',
+            '.mc-seerr-field select:hover{border-color:rgba(59,130,246,.4);background-color:#1e293b;}',
+            '.mc-seerr-field select:focus{outline:none;border-color:rgba(59,130,246,.8);',
+            'box-shadow:0 0 0 3px rgba(59,130,246,.1);}',
+            '.mc-seerr-field option{background:#1e293b;color:#e2e8f0;}',
+            '.mc-seerr-dialog .mc-seerr-message{min-height:1.2em;margin:.8em 0 0;font-size:.9em;color:#f87171;}',
+            '.mc-seerr-foot{flex:0 0 auto;display:flex;justify-content:flex-end;padding:20px 24px;',
+            'background:rgba(15,23,42,.3);border-top:1px solid rgba(51,65,85,.3);}',
+            '.mc-seerr-foot button{min-width:120px;margin-left:12px;padding:12px 24px;border:0;border-radius:8px;',
+            'font:inherit;font-size:.875rem;font-weight:600;cursor:pointer;transition:transform .2s ease;}',
+            '.mc-seerr-foot .mc-seerr-send{color:#fff;background:linear-gradient(135deg,#4f46e5,#7c3aed);',
+            'box-shadow:0 4px 12px rgba(79,70,229,.3);}',
+            '.mc-seerr-foot .mc-seerr-send:hover:not([disabled]){background:linear-gradient(135deg,#4338ca,#6d28d9);',
+            'transform:translate3d(0,-1px,0);}',
+            '.mc-seerr-foot .mc-seerr-send[disabled]{opacity:.6;cursor:not-allowed;}',
+            '.mc-seerr-foot .mc-seerr-cancel{color:#e2e8f0;background:rgba(71,85,105,.8);',
+            'border:1px solid rgba(148,163,184,.2);}',
+            '.mc-seerr-foot .mc-seerr-cancel:hover{background:rgba(71,85,105,1);}',
+            '.mc-seerr-foot button:focus{outline:2px solid var(--mc-accent);outline-offset:2px;}',
+            '.mc-seerr-foot button:focus:not(:focus-visible){outline:none;}',
             '.mc-toast{position:fixed;left:50%;bottom:2em;z-index:1001;max-width:90vw;box-sizing:border-box;',
             'padding:.7em 1.1em;border-radius:8px;background:#1c1c1f;color:#fff;',
             'box-shadow:0 6px 24px rgba(0,0,0,.5);opacity:0;pointer-events:none;',
@@ -1244,40 +1315,116 @@
         return season.Number === 0 ? 'Épisodes spéciaux' : 'Saison ' + season.Number;
     }
 
+    /** Espace libre d'un dossier, écrit comme chez Jellyfin Enhanced : « 3.98 TB ». */
+    function formatBytes(bytes) {
+        var units = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB'];
+        var value = bytes;
+        var unit = 0;
+
+        if (!(bytes > 0)) {
+            return '0 Bytes';
+        }
+
+        while (value >= 1024 && unit < units.length - 1) {
+            value /= 1024;
+            unit++;
+        }
+
+        return parseFloat(value.toFixed(2)) + ' ' + units[unit];
+    }
+
+    function advancedField(id, label, className) {
+        return '<div class="mc-seerr-field"><label for="' + id + '">' + label + '</label>'
+            + '<select id="' + id + '" class="' + className + '"></select></div>';
+    }
+
     /**
-     * Choix des saisons d'une série, comme la fenêtre de Jellyfin Enhanced.
+     * Fenêtre de demande, celle de Jellyfin Enhanced : en-tête illustré, choix des saisons pour
+     * une série, options avancées quand l'administrateur les propose, puis « Annuler » et
+     * « Demander ». Un film ne l'ouvre qu'avec les options avancées ; sans elles, il se
+     * demande d'un clic, comme chez lui.
      *
-     * Elle suit deux réglages de Seerr, lus par le serveur : sans demandes partielles, la
-     * série se demande en entier — les cases montrent ce qui partira, sans pouvoir être
-     * changées ; les épisodes spéciaux n'apparaissent que si Seerr les accepte.
+     * Le choix des saisons suit deux réglages de Seerr, lus par le serveur : sans demandes
+     * partielles, la série se demande en entier — les interrupteurs montrent ce qui partira,
+     * sans pouvoir être changés ; les épisodes spéciaux n'apparaissent que si Seerr les accepte.
      */
-    function openSeasonDialog(button) {
+    function openRequestDialog(button) {
         closeSeasonDialog();
         closePreferences();
 
+        var mediaType = button.getAttribute('data-media');
+        var isTv = mediaType === 'tv';
         var name = button.getAttribute('data-name') || '';
         var tmdbId = parseInt(button.getAttribute('data-tmdb'), 10);
-        var titleId = 'mc-seerr-title-' + (++sequence);
+        var id = 'mc-seerr-' + (++sequence);
+        var poster = button.closest('.cardScalable').querySelector('.cardImageContainer');
         var backdrop = document.createElement('div');
+        var loads = [];
 
         backdrop.className = 'mc-seerr-backdrop';
         backdrop.mcOrigin = button;
         backdrop.innerHTML = '<div class="mc-seerr-dialog" role="dialog" aria-modal="true"'
-            + ' aria-labelledby="' + titleId + '" tabindex="-1">'
-            + '<h2 id="' + titleId + '">Demander une série</h2>'
-            + '<p class="mc-seerr-subtitle">' + escapeHtml(name) + '</p>'
-            + '<div class="mc-seerr-seasons" aria-busy="true">'
-            + '<p class="mc-seerr-note">Chargement des saisons…</p></div>'
+            + ' aria-labelledby="' + id + '-title" tabindex="-1">'
+            + '<div class="mc-seerr-head">'
+            + '<h2 id="' + id + '-title" class="mc-seerr-title">'
+            + (isTv ? 'Demander une série' : 'Demander un film') + '</h2>'
+            + '<p class="mc-seerr-subtitle">' + escapeHtml(name) + '</p></div>'
+            + '<div class="mc-seerr-body">'
+            + (isTv ? '<div class="mc-seerr-seasons" aria-busy="true">'
+                + '<p class="mc-seerr-note">Chargement des saisons…</p></div>' : '')
+            + (seerrAdvanced ? '<div class="mc-seerr-advanced" hidden><h3>Options avancées</h3>'
+                + '<div class="mc-seerr-row">'
+                + advancedField(id + '-server', 'Serveur de destination', 'mc-seerr-server')
+                + advancedField(id + '-profile', 'Profil de qualité', 'mc-seerr-profile')
+                + '</div><div class="mc-seerr-row">'
+                + advancedField(id + '-folder', 'Dossier racine', 'mc-seerr-folder')
+                + '</div></div>' : '')
             + '<p class="mc-seerr-message" role="alert"></p>'
-            + '<div class="mc-seerr-actions">'
-            + '<button type="button" class="mc-seerr-send" disabled>Demander</button>'
+            + '</div>'
+            + '<div class="mc-seerr-foot">'
             + '<button type="button" class="mc-seerr-cancel">Annuler</button>'
+            + '<button type="button" class="mc-seerr-send"' + (isTv ? ' disabled' : '') + '>Demander</button>'
             + '</div></div>';
 
+        // L'affiche du titre sert de fond à l'en-tête, sous le même voile sombre que chez
+        // Jellyfin Enhanced : elle est déjà relayée par le serveur, TMDB ne voit pas le visiteur.
+        if (poster && poster.style.backgroundImage) {
+            backdrop.querySelector('.mc-seerr-head').style.backgroundImage = poster.style.backgroundImage;
+        }
+
         document.body.appendChild(backdrop);
-        wireSeasonDialog(backdrop, button, tmdbId, name);
+        wireRequestDialog(backdrop, button, mediaType, tmdbId, name);
         backdrop.querySelector('.mc-seerr-dialog').focus();
 
+        if (isTv) {
+            loads.push(loadSeasons(backdrop, tmdbId));
+        }
+
+        if (seerrAdvanced) {
+            loads.push(loadAdvanced(backdrop, mediaType));
+        }
+
+        return Promise.all(loads).then(function () {
+            if (backdrop.parentNode) {
+                focusFirst(backdrop);
+            }
+        });
+    }
+
+    /** Premier contrôle visible et actif de la fenêtre, pour le clavier et la télécommande. */
+    function focusFirst(backdrop) {
+        var candidates = backdrop.querySelectorAll('.mc-seerr-body input:not([disabled]),'
+            + ' .mc-seerr-body select, .mc-seerr-send:not([disabled]), .mc-seerr-cancel');
+
+        for (var i = 0; i < candidates.length; i++) {
+            if (candidates[i].offsetParent !== null) {
+                candidates[i].focus();
+                return;
+            }
+        }
+    }
+
+    function loadSeasons(backdrop, tmdbId) {
         return seerrPost('Seasons', { MediaType: 'tv', TmdbId: tmdbId }).then(function (choice) {
             if (backdrop.parentNode) {
                 renderSeasons(backdrop, choice);
@@ -1304,12 +1451,10 @@
         var requestable = seasons.filter(function (season) { return season.Requestable; });
         var html = '';
 
-        backdrop.mcPartial = partial;
-
         if (partial && requestable.length) {
             html += '<label class="mc-seerr-season mc-seerr-all-row">'
-                + '<input type="checkbox" class="mc-seerr-all">'
-                + '<span class="mc-seerr-season-name">Sélectionner toutes les saisons</span></label>';
+                + '<input type="checkbox" class="mc-seerr-toggle mc-seerr-all">'
+                + '<span class="mc-seerr-all-label">Sélectionner toutes les saisons</span></label>';
         }
 
         seasons.forEach(function (season) {
@@ -1318,14 +1463,16 @@
             // Sans demandes partielles, partent toutes les saisons ordinaires encore
             // demandables — jamais les spéciaux, comme chez Jellyfin Enhanced.
             var checked = !partial && season.Requestable && season.Number > 0;
-            var meta = [season.Year || '', season.Episodes + ' ép.'].filter(function (part) { return part; });
 
             html += '<label class="mc-seerr-season' + (enabled ? '' : ' mc-seerr-season-locked') + '">'
-                + '<input type="checkbox" class="mc-seerr-pick" value="' + parseInt(season.Number, 10) + '"'
+                + '<input type="checkbox" class="mc-seerr-toggle mc-seerr-pick" value="' + parseInt(season.Number, 10) + '"'
                 + (season.Number === 0 ? ' data-special="true"' : '')
                 + (checked ? ' checked' : '') + (enabled ? '' : ' disabled') + '>'
+                + '<span class="mc-seerr-season-info">'
                 + '<span class="mc-seerr-season-name">' + escapeHtml(seasonLabel(season)) + '</span>'
-                + '<span class="mc-seerr-season-meta">' + escapeHtml(meta.join(' · ')) + '</span>'
+                + (season.Year ? '<span class="mc-seerr-season-year">' + escapeHtml(season.Year) + '</span>' : '')
+                + '</span>'
+                + '<span class="mc-seerr-season-episodes">' + parseInt(season.Episodes, 10) + ' ép.</span>'
                 + '<span class="mc-seerr-season-state" data-state="' + state + '">'
                 + SEASON_STATES[state] + '</span></label>';
         });
@@ -1338,12 +1485,80 @@
 
         list.removeAttribute('aria-busy');
         list.innerHTML = html;
-        send.textContent = partial ? 'Demander la/les saison(s) sélectionnée(s)' : 'Demander';
         send.disabled = !requestable.length;
+    }
 
-        var first = list.querySelector('input:not([disabled])')
-            || (send.disabled ? backdrop.querySelector('.mc-seerr-cancel') : send);
-        first.focus();
+    function loadAdvanced(backdrop, mediaType) {
+        return seerrPost('Options', { MediaType: mediaType }).then(function (options) {
+            if (backdrop.parentNode) {
+                fillServers(backdrop, (options && options.Servers) || []);
+            }
+        }, function () {
+            // Sans options, la section reste cachée : la demande part avec les réglages par
+            // défaut de Seerr, comme lorsque l'administrateur ne les propose pas.
+        });
+    }
+
+    function fillServers(backdrop, servers) {
+        var section = backdrop.querySelector('.mc-seerr-advanced');
+        var sorted = servers.slice().sort(function (a, b) {
+            return String(a.Name || '').localeCompare(String(b.Name || ''));
+        });
+
+        if (!sorted.length) {
+            return;
+        }
+
+        // Seerr désigne un serveur par défaut pour les demandes ordinaires, un autre pour la
+        // 4K : c'est le premier qui est présélectionné, comme chez Jellyfin Enhanced.
+        var preferred = sorted.filter(function (server) { return server.IsDefault && !server.Is4k; })[0] || sorted[0];
+
+        section.querySelector('.mc-seerr-server').innerHTML = sorted.map(function (server) {
+            return '<option value="' + parseInt(server.Id, 10) + '"' + (server === preferred ? ' selected' : '') + '>'
+                + escapeHtml(server.Name) + '</option>';
+        }).join('');
+
+        backdrop.mcServers = sorted;
+        fillServerDetails(backdrop);
+        section.hidden = false;
+    }
+
+    function fillServerDetails(backdrop) {
+        var section = backdrop.querySelector('.mc-seerr-advanced');
+        var id = parseInt(section.querySelector('.mc-seerr-server').value, 10);
+        var server = (backdrop.mcServers || []).filter(function (candidate) { return candidate.Id === id; })[0];
+        var profiles = (server && server.Profiles) || [];
+        var folders = (server && server.RootFolders) || [];
+
+        section.querySelector('.mc-seerr-profile').innerHTML = profiles.map(function (profile) {
+            return '<option value="' + parseInt(profile.Id, 10) + '"'
+                + (profile.Id === server.ActiveProfileId ? ' selected' : '') + '>' + escapeHtml(profile.Name) + '</option>';
+        }).join('');
+
+        section.querySelector('.mc-seerr-folder').innerHTML = folders.map(function (folder) {
+            var label = typeof folder.FreeSpace === 'number'
+                ? folder.Path + ' (' + formatBytes(folder.FreeSpace) + ')' : folder.Path;
+
+            return '<option value="' + escapeHtml(folder.Path) + '"'
+                + (folder.Path === server.ActiveDirectory ? ' selected' : '') + '>' + escapeHtml(label) + '</option>';
+        }).join('');
+    }
+
+    /** Serveur, profil et dossier choisis, ou rien si la section n'a pas pu se remplir. */
+    function chosenOptions(backdrop) {
+        var section = backdrop.querySelector('.mc-seerr-advanced');
+
+        if (!section || section.hidden) {
+            return null;
+        }
+
+        var server = section.querySelector('.mc-seerr-server').value;
+        var profile = section.querySelector('.mc-seerr-profile').value;
+        var folder = section.querySelector('.mc-seerr-folder').value;
+
+        return server !== '' && profile !== '' && folder !== ''
+            ? { ServerId: parseInt(server, 10), ProfileId: parseInt(profile, 10), RootFolder: folder }
+            : null;
     }
 
     // Cases que l'utilisateur peut cocher ; `regular` écarte les épisodes spéciaux, que
@@ -1367,7 +1582,7 @@
         all.indeterminate = checked > 0 && checked < boxes.length;
     }
 
-    function wireSeasonDialog(backdrop, button, tmdbId, name) {
+    function wireRequestDialog(backdrop, button, mediaType, tmdbId, name) {
         backdrop.addEventListener('click', function (event) {
             // Un clic hors de la fenêtre la ferme, comme n'importe quelle boîte de dialogue.
             if (event.target === backdrop || event.target.classList.contains('mc-seerr-cancel')) {
@@ -1376,11 +1591,16 @@
             }
 
             if (event.target.classList.contains('mc-seerr-send')) {
-                sendSeasons(backdrop, button, tmdbId, name);
+                sendRequest(backdrop, button, mediaType, tmdbId, name);
             }
         });
 
         backdrop.addEventListener('change', function (event) {
+            if (event.target.classList.contains('mc-seerr-server')) {
+                fillServerDetails(backdrop);
+                return;
+            }
+
             if (event.target.classList.contains('mc-seerr-all')) {
                 seasonPicks(backdrop, true).forEach(function (box) {
                     box.checked = event.target.checked;
@@ -1397,29 +1617,46 @@
         });
     }
 
-    function sendSeasons(backdrop, button, tmdbId, name) {
+    function sendRequest(backdrop, button, mediaType, tmdbId, name) {
         var send = backdrop.querySelector('.mc-seerr-send');
         var message = backdrop.querySelector('.mc-seerr-message');
-        var key = seerrKey('tv', tmdbId);
-        var seasons = Array.prototype.slice.call(backdrop.querySelectorAll('.mc-seerr-pick:checked'))
-            .map(function (box) { return parseInt(box.value, 10); });
+        var key = seerrKey(mediaType, tmdbId);
+        var body = { MediaType: mediaType, TmdbId: tmdbId };
+        var options = chosenOptions(backdrop);
+        var seasons = null;
 
-        if (!seasons.length) {
-            message.textContent = 'Veuillez sélectionner au moins une saison';
-            return;
+        if (mediaType === 'tv') {
+            seasons = Array.prototype.slice.call(backdrop.querySelectorAll('.mc-seerr-pick:checked'))
+                .map(function (box) { return parseInt(box.value, 10); });
+
+            if (!seasons.length) {
+                message.textContent = 'Veuillez sélectionner au moins une saison';
+                return;
+            }
+
+            body.Seasons = seasons;
+        }
+
+        if (options) {
+            body.ServerId = options.ServerId;
+            body.ProfileId = options.ProfileId;
+            body.RootFolder = options.RootFolder;
         }
 
         message.textContent = '';
         send.disabled = true;
         send.textContent = 'Demande en cours…';
 
-        seerrPost('Request', { MediaType: 'tv', TmdbId: tmdbId, Seasons: seasons }).then(function (answer) {
+        seerrPost('Request', body).then(function (answer) {
             var state = answer && answer.State;
 
             seerrStates[key] = has(SEERR_STATES, state) ? state : 'requested';
             applySeerrState(button, seerrStates[key]);
             closeSeasonDialog();
-            showToast('Demandé ' + seasons.length + ' saison(s) de « ' + name + ' »');
+
+            if (seasons) {
+                showToast('Demandé ' + seasons.length + ' saison(s) de « ' + name + ' »');
+            }
         }, function (response) {
             return seerrFailure(response).then(function (failure) {
                 if (!backdrop.parentNode) {
@@ -1428,12 +1665,12 @@
 
                 message.textContent = failure === 'user-not-found' || failure === 'forbidden' || failure === 'offline'
                     ? SEERR_STATES[failure].label
-                    : 'Échec de la demande de saisons';
+                    : (seasons ? 'Échec de la demande de saisons' : 'Erreur');
                 send.disabled = false;
-                send.textContent = backdrop.mcPartial ? 'Demander la/les saison(s) sélectionnée(s)' : 'Demander';
+                send.textContent = 'Demander';
             });
         }).catch(function (error) {
-            log('demande de saisons impossible', error);
+            log('demande impossible', error);
         });
     }
 
@@ -1454,9 +1691,10 @@
                 return;
             }
 
-            if (button.getAttribute('data-media') === 'tv') {
-                openSeasonDialog(button).catch(function (error) {
-                    log('choix des saisons impossible', error);
+            // Une série ouvre toujours la fenêtre ; un film, seulement avec les options avancées.
+            if (button.getAttribute('data-media') === 'tv' || seerrAdvanced) {
+                openRequestDialog(button).catch(function (error) {
+                    log('fenêtre de demande impossible', error);
                 });
             } else {
                 requestMovie(button).catch(function (error) {
@@ -2838,6 +3076,7 @@
 
             rankScale = normalizeRankScale(opts.RankNumberScale);
             seerrEnabled = opts.SeerrRequests === true;
+            seerrAdvanced = seerrEnabled && opts.SeerrAdvanced === true;
             injectStyles(opts.HighlightColor, rankScale);
             onLightBackground = isLightBackground();
 

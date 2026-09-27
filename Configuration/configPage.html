@@ -380,6 +380,18 @@
                                             </div>
                                         </div>
                                     </div>
+                                    <div class="checkboxContainer">
+                                        <label class="emby-checkbox-label">
+                                            <input is="emby-checkbox" type="checkbox" id="SeerrAdvancedRequests"
+                                                   aria-describedby="hintSeerrAdvanced" />
+                                            <span>Proposer les options avancées : serveur, profil de qualité, dossier racine</span>
+                                        </label>
+                                        <div class="fieldDescription checkboxFieldDescription" id="hintSeerrAdvanced">
+                                            Comme « Afficher les options avancées » dans Jellyfin Enhanced : chaque demande
+                                            propose les serveurs, profils et dossiers configurés dans Seerr, et seuls ceux-là
+                                            sont acceptés. Un film ouvre alors lui aussi une fenêtre de demande.
+                                        </div>
+                                    </div>
                                     <button is="emby-button" type="button" id="seerrTestButton" class="raised button-alt">
                                         <span>Tester la connexion</span>
                                     </button>
@@ -781,7 +793,7 @@
                     'EnableHomeRows', 'HideNativeHomeSections', 'ManageNativeSections', 'SyncCollections',
                     'AllowUserPreferences',
                     'ExcludeChannelContent',
-                    'EnableSeerrRequests'
+                    'EnableSeerrRequests', 'SeerrAdvancedRequests'
                 ];
                 var numbers = [
                     'LocalTopSize', 'LocalTopWindowDays', 'MaxPlaysCountedPerUser', 'CandidatesPerUser',
