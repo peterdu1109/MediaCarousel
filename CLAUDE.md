@@ -211,9 +211,15 @@ sans recopier ses SVG. Un serveur qui utilise ce plugin retrouve le même geste.
   est toujours là : la règle vit dans le `@media (hover:none)` des flèches, pas dans un nouveau
   point de rupture.
 - **Un film se demande d'un clic** et devient « Demandé ». **Une série ouvre le choix des
-  saisons** — jamais une demande de toutes les saisons d'office. Elle reste cliquable « en
-  attente » ou « partiellement disponible » (« Demander manquant ») : d'autres saisons peuvent
-  encore être demandées. Son état se déduit de celui de ses saisons.
+  saisons** — jamais une demande de toutes les saisons d'office. Son état se déduit de celui de
+  ses saisons : tant qu'il en reste une à demander, ce sont les libellés de Jellyfin Enhanced
+  (« Demander », « Demander manquant », « Demander plus »).
+- **Seul écart assumé avec Jellyfin Enhanced** : quand plus aucune saison n'est demandable, il
+  affiche encore « Demander » (`analyzeSeasonStatuses` classe la série en « supprimée »), en
+  comptant sur ses pastilles d'état. Constaté sur le 12.1 : une série dont on venait de demander
+  toutes les saisons redevenait « Demander ▼ ». Ici le bouton dit l'état réel — « En attente
+  d'approbation », « Demandé », « Partiellement disponible » — et n'agit plus. Les épisodes
+  spéciaux ne comptent que si Seerr les accepte.
 - **Le choix des saisons suit deux réglages de Seerr**, lus dans `/api/v1/settings/main` comme le
   fait Jellyfin Enhanced — seuls deux booléens, car la réponse contient la clé d'API. Sans
   demandes partielles, la série part en entière, épisodes spéciaux exceptés ; sans épisodes
@@ -818,7 +824,7 @@ dotnet run --project tests/ScriptTag.Tests -c Release
 cd tests/browser && npm install && node home-rows.test.mjs && node config-page.test.mjs
 ```
 
-Trois suites sans framework — 452 assertions — exécutées en CI avant la publication ; voir
+Trois suites sans framework — 455 assertions — exécutées en CI avant la publication ; voir
 `tests/README.md`. L'une charge un extrait des règles d'ElegantFin **après** les nôtres pour
 vérifier que la cohabitation tient.
 Les deux suites navigateur chargent le vrai `media-carousel.js` et le vrai `configPage.html`

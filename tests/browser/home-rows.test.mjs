@@ -1440,12 +1440,13 @@ const serveurSeerr = () => {
     absent(5, 'Chernobyl', 'tv', '87108'),
     absent(6, 'Fight Club', 'movie', '550'),
     absent(7, 'Interstellar', 'movie', '157336'),
-    absent(8, 'Stranger Things', 'tv', '66732')
+    absent(8, 'Stranger Things', 'tv', '66732'),
+    absent(9, 'Severance', 'tv', '95396')
   ];
   // `null` : Seerr n'a pas pu repondre pour ce titre.
   window.__etats = window.__etats || {
-    'movie:27205': 'request', 'tv:1399': 'pending', 'tv:87108': 'available', 'movie:550': null,
-    'movie:157336': 'pending', 'tv:66732': 'request'
+    'movie:27205': 'request', 'tv:1399': 'request-missing', 'tv:87108': 'available', 'movie:550': null,
+    'movie:157336': 'pending', 'tv:66732': 'request', 'tv:95396': 'pending'
   };
   window.ApiClient = {
     getCurrentUserId: () => 'user-1',
@@ -1541,7 +1542,8 @@ const seerrVu = await seerr.evaluate(() => {
     ancien: document.querySelectorAll('.mc-seerr[data-tmdb="680"]').length,
     demander: vu(bouton('27205')),
     filmEnAttente: vu(bouton('157336')),
-    serieEnAttente: vu(bouton('1399')),
+    serieManquante: vu(bouton('1399')),
+    serieEnAttente: vu(bouton('95396')),
     serieADemander: vu(bouton('66732')),
     disponible: vu(bouton('87108')),
     illisible: vu(bouton('550')),
@@ -2115,11 +2117,11 @@ check('DOC: l exemple du README laisse le chiffre visible',
   exempleApplique.contourAuRepos !== 'none', exempleApplique);
 
 check('SEERR: un bouton sur chaque titre absent qui a un type et un identifiant TMDB',
-  seerrVu.boutons === 6, seerrVu.boutons);
+  seerrVu.boutons === 7, seerrVu.boutons);
 check('SEERR: aucun sur un titre de la bibliotheque', seerrVu.surPresent === 0, seerrVu.surPresent);
 check('SEERR: aucun sur un classement calcule avant le type de media', seerrVu.ancien === 0, seerrVu.ancien);
 check('SEERR: les etats sont lus en un seul lot, POST et JSON',
-  JSON.stringify(seerrVu.lots) === '[6]' && seerrVu.json === true, seerrVu);
+  JSON.stringify(seerrVu.lots) === '[7]' && seerrVu.json === true, seerrVu);
 check('SEERR: les identifiants partent en nombres, comme le serveur les attend',
   seerrVu.identifiantsNumeriques === true, seerrVu.identifiantsNumeriques);
 check('SEERR: « Demander » est actif, au violet de Jellyfin Enhanced, avec son icone',
@@ -2128,9 +2130,13 @@ check('SEERR: « Demander » est actif, au violet de Jellyfin Enhanced, avec son
 check('SEERR: un film en attente l attend, en ambre, sans action',
   seerrVu.filmEnAttente.texte === 'En attente d\'approbation' && seerrVu.filmEnAttente.inerte === 'true'
     && seerrVu.filmEnAttente.fond === 'rgb(180, 83, 9)', seerrVu.filmEnAttente);
-check('SEERR: une serie en attente reste cliquable, pour demander d autres saisons',
-  seerrVu.serieEnAttente.texte === 'En attente d\'approbation' && seerrVu.serieEnAttente.inerte === 'false'
-    && seerrVu.serieEnAttente.popup === 'dialog', seerrVu.serieEnAttente);
+check('SEERR: une serie partiellement disponible propose « Demander manquant », en vert, cliquable',
+  seerrVu.serieManquante.texte === 'Demander manquant' && seerrVu.serieManquante.inerte === 'false'
+    && seerrVu.serieManquante.popup === 'dialog' && seerrVu.serieManquante.fond === 'rgb(76, 164, 108)',
+  seerrVu.serieManquante);
+check('SEERR: une serie dont tout est demande attend, sans action — plus de « Demander » trompeur',
+  seerrVu.serieEnAttente.texte === 'En attente d\'approbation' && seerrVu.serieEnAttente.inerte === 'true'
+    && seerrVu.serieEnAttente.popup === null, seerrVu.serieEnAttente);
 check('SEERR: une serie annonce le choix des saisons, pas un film',
   seerrVu.serieADemander.popup === 'dialog' && seerrVu.demander.popup === null, [seerrVu.serieADemander, seerrVu.demander]);
 check('SEERR: un titre disponible le dit, en vert',
@@ -2192,8 +2198,8 @@ check('SAISONS: « Tout selectionner » laisse les specials de cote', toutCoche 
 check('SAISONS: la demande part avec les saisons cochees',
   apresSaisons.corps && apresSaisons.corps.MediaType === 'tv' && apresSaisons.corps.TmdbId === 66732
     && apresSaisons.corps.Seasons.join(',') === '3,4', apresSaisons.corps);
-check('SAISONS: la fenetre se ferme et le bouton prend l etat rendu',
-  apresSaisons.etat === 'pending' && apresSaisons.texte === 'En attente d\'approbation' && apresSaisons.agit, apresSaisons);
+check('SAISONS: la fenetre se ferme et le bouton prend l etat rendu par le serveur',
+  apresSaisons.etat === 'pending' && apresSaisons.texte === 'En attente d\'approbation' && !apresSaisons.agit, apresSaisons);
 check('SAISONS: un message confirme la demande',
   apresSaisons.toast === 'Demandé 2 saison(s) de « Stranger Things »', apresSaisons.toast);
 check('SAISONS: le focus revient au bouton de la serie', apresSaisons.focus === true, apresSaisons.focus);

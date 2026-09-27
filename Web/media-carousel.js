@@ -928,10 +928,10 @@
      *
      * `tone` choisit la couleur et `icon` l'icône Material que jellyfin-web fournit déjà.
      * `acts` dit pour quels types le bouton agit : un film se demande d'un clic, une série
-     * ouvre le choix des saisons. Comme chez Jellyfin Enhanced, une série « en attente »
-     * reste cliquable — d'autres saisons peuvent encore être demandées. Une erreur marquée
-     * `retry` rend la main au bout de SEERR_RETRY_DELAY ; les autres persistent, puisqu'un
-     * nouvel essai échouerait de la même façon.
+     * ouvre le choix des saisons. « En attente d'approbation » n'agit pas : le serveur ne
+     * l'annonce, pour une série, que lorsqu'il ne reste plus aucune saison à demander. Une
+     * erreur marquée `retry` rend la main au bout de SEERR_RETRY_DELAY ; les autres
+     * persistent, puisqu'un nouvel essai échouerait de la même façon.
      */
     var SEERR_STATES = {
         loading: { label: '', tone: 'request' },
@@ -939,7 +939,7 @@
         'request-more': { label: 'Demander plus', tone: 'request', icon: 'file_download', acts: 'tv' },
         'request-missing': { label: 'Demander manquant', tone: 'partial', icon: 'file_download', acts: 'tv' },
         sending: { label: 'Demande en cours', tone: 'request', spinner: true },
-        pending: { label: 'En attente d\'approbation', tone: 'pending', icon: 'pending', acts: 'tv' },
+        pending: { label: 'En attente d\'approbation', tone: 'pending', icon: 'pending' },
         requested: { label: 'Demandé', tone: 'pending', icon: 'schedule' },
         processing: { label: 'Traitement', tone: 'processing', spinner: true },
         partial: { label: 'Partiellement disponible', tone: 'partial', icon: 'task_alt' },
