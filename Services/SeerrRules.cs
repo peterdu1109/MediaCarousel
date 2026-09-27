@@ -377,10 +377,136 @@ public static class SeerrRules
     /// <param name="tmdbId">Identifiant TMDB du titre.</param>
     /// <param name="seasons">Saisons demandées, pour une série.</param>
     /// <returns>Le corps JSON de la demande.</returns>
-    public static string BuildRequestBody(string mediaType, int tmdbId, IReadOnlyList<int>? seasons = null)
-        => string.Equals(mediaType, Tv, StringComparison.Ordinal)
-            ? JsonSerializer.Serialize(new { mediaType, mediaId = tmdbId, seasons = seasons ?? Array.Empty<int>() })
-            : JsonSerializer.Serialize(new { mediaType, mediaId = tmdbId });
+    /// <param name="choice">Serveur, profil et dossier choisis, quand les options avancées sont proposées.</param>
+    public static string BuildRequestBody(string mediaType, int tmdbId, IReadOnlyList<int>? seasons = null, SeerrChoice? choice = null)
+    {
+        var body = new Dictionary<string, object>(StringComparer.Ordinal)
+        {
+            ["mediaType"] = mediaType,
+            ["mediaId"] = tmdbId
+        };
+
+        if (string.Equals(mediaType, Tv, StringComparison.Ordinal))
+        {
+            body["seasons"] = seasons ?? Array.Empty<int>();
+        }
+
+        if (choice is not null)
+        {
+            body["serverId"] = choice.ServerId;
+            body["profileId"] = choice.ProfileId;
+            body["rootFolder"] = choice.RootFolder;
+        }
+
+        return JsonSerializer.Serialize(body);
+    }
+
+    /// <summary>
+    /// Le service de Seerr qui reçoit un type de média : Sonarr pour les séries, Radarr pour les films.
+    /// </summary>
+    /// <param name="mediaType"><c>movie</c> ou <c>tv</c>.</param>
+    /// <returns><c>sonarr</c> ou <c>radarr</c>.</returns>
+    public static string ServiceFor(string mediaType)
+        => string.Equals(mediaType, Tv, StringComparison.Ordinal) ? "sonarr" : "radarr";
+
+    /// <summary>
+    /// Lit la liste des serveurs d'un service, <c>GET /api/v1/service/{sonarr|radarr}</c>.
+    /// </summary>
+    /// <param name="listJson">La réponse de Seerr.</param>
+    /// <returns>Les serveurs, sans leurs profils ni leurs dossiers, que donne leur détail.</returns>
+    public static IReadOnlyList<SeerrServer> ReadServers(string listJson)
+    {
+        using var document = JsonDocument.Parse(listJson);
+        var servers = new List<SeerrServer>();
+
+        if (document.RootElement.ValueKind != JsonValueKind.Array)
+        {
+            return servers;
+        }
+
+        foreach (var server in document.RootElement.EnumerateArray())
+        {
+            if (IntProperty(server, "id") is not int id)
+            {
+                continue;
+            }
+
+            servers.Add(new SeerrServer(
+                id,
+                StringProperty(server, "name") ?? "Serveur " + id.ToString(CultureInfo.InvariantCulture),
+                BoolProperty(server, "is4k"),
+                BoolProperty(server, "isDefault"),
+                IntProperty(server, "activeProfileId"),
+                StringProperty(server, "activeDirectory"),
+                Array.Empty<SeerrProfile>(),
+                Array.Empty<SeerrFolder>()));
+        }
+
+        return servers;
+    }
+
+    /// <summary>
+    /// Lit le détail d'un serveur, <c>GET /api/v1/service/{sonarr|radarr}/{id}</c>.
+    /// </summary>
+    /// <param name="detailsJson">La réponse de Seerr.</param>
+    /// <returns>Les profils de qualité et les dossiers racines du serveur.</returns>
+    public static (IReadOnlyList<SeerrProfile> Profiles, IReadOnlyList<SeerrFolder> Folders) ReadServerDetails(string detailsJson)
+    {
+        using var document = JsonDocument.Parse(detailsJson);
+        var root = document.RootElement;
+        var profiles = new List<SeerrProfile>();
+        var folders = new List<SeerrFolder>();
+
+        if (root.ValueKind == JsonValueKind.Object
+            && root.TryGetProperty("profiles", out var profileList)
+            && profileList.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var profile in profileList.EnumerateArray())
+            {
+                if (IntProperty(profile, "id") is int id)
+                {
+                    profiles.Add(new SeerrProfile(id, StringProperty(profile, "name") ?? "Profil " + id.ToString(CultureInfo.InvariantCulture)));
+                }
+            }
+        }
+
+        if (root.ValueKind == JsonValueKind.Object
+            && root.TryGetProperty("rootFolders", out var folderList)
+            && folderList.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var folder in folderList.EnumerateArray())
+            {
+                if (StringProperty(folder, "path") is { Length: > 0 } path)
+                {
+                    long? free = folder.TryGetProperty("freeSpace", out var space) && space.ValueKind == JsonValueKind.Number
+                        && space.TryGetInt64(out var bytes) ? bytes : null;
+                    folders.Add(new SeerrFolder(path, free));
+                }
+            }
+        }
+
+        return (profiles, folders);
+    }
+
+    /// <summary>
+    /// Indique si un choix de serveur, de profil et de dossier fait partie de ce que Seerr propose.
+    /// </summary>
+    /// <remarks>
+    /// Seerr transmet ces choix à Sonarr ou Radarr sans les filtrer selon les droits du compte :
+    /// sans cette vérification, n'importe quel compte connecté pourrait faire créer un dossier
+    /// n'importe où, par une demande portée par la clé d'administration.
+    /// </remarks>
+    /// <param name="servers">Les serveurs publiés par Seerr, avec leur détail.</param>
+    /// <param name="choice">Le choix reçu.</param>
+    /// <returns>Vrai si le serveur existe, et que le profil et le dossier sont les siens.</returns>
+    public static bool IsAllowedChoice(IReadOnlyList<SeerrServer> servers, SeerrChoice choice)
+    {
+        var server = servers.FirstOrDefault(s => s.Id == choice.ServerId);
+
+        return server is not null
+            && server.Profiles.Any(p => p.Id == choice.ProfileId)
+            && server.Folders.Any(f => string.Equals(f.Path, choice.RootFolder, StringComparison.Ordinal));
+    }
 
     /// <summary>
     /// Normalise l'adresse de Seerr saisie par l'administrateur.
@@ -515,11 +641,61 @@ public static class SeerrRules
                 ? number
                 : null;
 
+    private static string? StringProperty(JsonElement element, string name)
+        => element.ValueKind == JsonValueKind.Object
+            && element.TryGetProperty(name, out var property)
+            && property.ValueKind == JsonValueKind.String
+                ? property.GetString()
+                : null;
+
     private static bool BoolProperty(JsonElement element, string name)
         => element.ValueKind == JsonValueKind.Object
             && element.TryGetProperty(name, out var property)
             && property.ValueKind == JsonValueKind.True;
 }
+
+/// <summary>
+/// Un serveur Sonarr ou Radarr déclaré dans Seerr.
+/// </summary>
+/// <param name="Id">Identifiant du serveur dans Seerr.</param>
+/// <param name="Name">Nom donné dans Seerr.</param>
+/// <param name="Is4k">Vrai pour le serveur des demandes en 4K.</param>
+/// <param name="IsDefault">Vrai pour le serveur par défaut.</param>
+/// <param name="ActiveProfileId">Profil de qualité par défaut.</param>
+/// <param name="ActiveDirectory">Dossier racine par défaut.</param>
+/// <param name="Profiles">Profils de qualité.</param>
+/// <param name="Folders">Dossiers racines.</param>
+public sealed record SeerrServer(
+    int Id,
+    string Name,
+    bool Is4k,
+    bool IsDefault,
+    int? ActiveProfileId,
+    string? ActiveDirectory,
+    IReadOnlyList<SeerrProfile> Profiles,
+    IReadOnlyList<SeerrFolder> Folders);
+
+/// <summary>
+/// Un profil de qualité.
+/// </summary>
+/// <param name="Id">Identifiant du profil.</param>
+/// <param name="Name">Nom du profil.</param>
+public sealed record SeerrProfile(int Id, string Name);
+
+/// <summary>
+/// Un dossier racine.
+/// </summary>
+/// <param name="Path">Chemin du dossier.</param>
+/// <param name="FreeSpace">Espace libre, en octets, si Seerr le connaît.</param>
+public sealed record SeerrFolder(string Path, long? FreeSpace);
+
+/// <summary>
+/// Le choix de serveur, de profil et de dossier d'une demande.
+/// </summary>
+/// <param name="ServerId">Serveur de destination.</param>
+/// <param name="ProfileId">Profil de qualité.</param>
+/// <param name="RootFolder">Dossier racine.</param>
+public sealed record SeerrChoice(int ServerId, int ProfileId, string RootFolder);
 
 /// <summary>
 /// Une saison proposée dans le choix des saisons.

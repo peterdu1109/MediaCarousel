@@ -597,6 +597,42 @@ Check("SEERR: un film se demande sans saisons",
     SeerrRules.BuildRequestBody("movie", 27205) == """{"mediaType":"movie","mediaId":27205}""");
 Check("SEERR: une serie se demande saison par saison, comme la fenetre de Jellyfin Enhanced",
     SeerrRules.BuildRequestBody("tv", 1399, new[] { 1, 2 }) == """{"mediaType":"tv","mediaId":1399,"seasons":[1,2]}""");
+// Options avancees : serveurs, profils, dossiers, et le choix qu'on laisse passer.
+const string serveursSonarr = """
+    [{"id":0,"name":"Sonarr","is4k":false,"isDefault":true,"activeProfileId":4,"activeDirectory":"/series"},
+     {"id":1,"name":"Sonarr 4K","is4k":true,"isDefault":true,"activeProfileId":7,"activeDirectory":"/series-4k"},
+     {"name":"sans identifiant"}]
+    """;
+var lusServeurs = SeerrRules.ReadServers(serveursSonarr);
+Check("SEERR: les serveurs sont lus, un serveur sans identifiant ecarte",
+    lusServeurs.Count == 2 && lusServeurs[0].Name == "Sonarr" && lusServeurs[0].IsDefault && !lusServeurs[0].Is4k
+    && lusServeurs[0].ActiveProfileId == 4 && lusServeurs[0].ActiveDirectory == "/series" && lusServeurs[1].Is4k);
+var (profilsLus, dossiersLus) = SeerrRules.ReadServerDetails("""
+    {"server":{"id":0},"profiles":[{"id":4,"name":"HD-1080p"},{"id":6,"name":"Ultra-HD"}],
+     "rootFolders":[{"id":1,"path":"/series","freeSpace":4376499000000},{"id":2,"path":"/series2"}]}
+    """);
+Check("SEERR: le detail d'un serveur donne ses profils et ses dossiers, espace libre compris",
+    profilsLus.Count == 2 && profilsLus[0].Name == "HD-1080p" && dossiersLus.Count == 2
+    && dossiersLus[0].FreeSpace == 4376499000000 && dossiersLus[1].FreeSpace is null);
+var detailles = new[]
+{
+    lusServeurs[0] with { Profiles = profilsLus, Folders = dossiersLus },
+    lusServeurs[1] with { Profiles = new[] { new SeerrProfile(7, "4K") }, Folders = new[] { new SeerrFolder("/series-4k", null) } }
+};
+Check("SEERR: un choix publie par Seerr passe",
+    SeerrRules.IsAllowedChoice(detailles, new SeerrChoice(0, 6, "/series2")));
+Check("SEERR: un dossier invente ne passe pas — il finirait chez Sonarr",
+    !SeerrRules.IsAllowedChoice(detailles, new SeerrChoice(0, 4, "C:/Windows")));
+Check("SEERR: le profil d'un autre serveur ne passe pas",
+    !SeerrRules.IsAllowedChoice(detailles, new SeerrChoice(0, 7, "/series")));
+Check("SEERR: un serveur inconnu ne passe pas",
+    !SeerrRules.IsAllowedChoice(detailles, new SeerrChoice(9, 4, "/series")));
+Check("SEERR: les series vont a Sonarr, les films a Radarr",
+    SeerrRules.ServiceFor("tv") == "sonarr" && SeerrRules.ServiceFor("movie") == "radarr");
+Check("SEERR: le choix accompagne la demande",
+    SeerrRules.BuildRequestBody("tv", 1399, new[] { 1 }, new SeerrChoice(0, 6, "/series2"))
+        == """{"mediaType":"tv","mediaId":1399,"seasons":[1],"serverId":0,"profileId":6,"rootFolder":"/series2"}""");
+
 Check("SEERR: seuls movie et tv sont des types de media",
     SeerrRules.IsMediaType("movie") && SeerrRules.IsMediaType("tv")
     && !SeerrRules.IsMediaType("Movie") && !SeerrRules.IsMediaType("series") && !SeerrRules.IsMediaType(null));

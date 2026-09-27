@@ -181,7 +181,8 @@ public class TopListsController : ControllerBase
             ManageNativeSections = config.ManageNativeSections,
             HideNativeSections = config.HideNativeHomeSections,
             AllowUserPreferences = config.AllowUserPreferences,
-            SeerrRequests = SeerrController.IsConfigured(config)
+            SeerrRequests = SeerrController.IsConfigured(config),
+            SeerrAdvanced = SeerrController.IsAdvanced(config)
         };
 
         // Les réglages de l'administrateur ne sont qu'un défaut dès que la personnalisation

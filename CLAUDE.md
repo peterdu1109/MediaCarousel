@@ -68,7 +68,7 @@ MediaCarousel/
 │   ├── ClientOptionsDto.cs            # Réglages d'affichage, lisibles sans droits admin
 │   ├── AssetsController.cs            # Sert media-carousel.js depuis les ressources
 │   ├── UserPreferencesController.cs   # GET/POST/DELETE des choix propres à un compte
-│   ├── SeerrController.cs             # POST Seerr/Status, Seasons, Request ; Seerr/Test (admin)
+│   ├── SeerrController.cs             # POST Seerr/Status, Seasons, Options, Request ; Test (admin)
 │   └── PosterController.cs            # Relaie et met en cache les affiches TMDB
 ├── Configuration/
 │   ├── PluginConfiguration.cs         # Modèle de config + enums
@@ -220,6 +220,18 @@ sans recopier ses SVG. Un serveur qui utilise ce plugin retrouve le même geste.
   toutes les saisons redevenait « Demander ▼ ». Ici le bouton dit l'état réel — « En attente
   d'approbation », « Demandé », « Partiellement disponible » — et n'agit plus. Les épisodes
   spéciaux ne comptent que si Seerr les accepte.
+- **La fenêtre de demande est celle de Jellyfin Enhanced**, relevée règle par règle dans
+  `ui-styles.js` et `modal.js` de sa 12.8 : en-tête sous un voile à 80 %, titre en dégradé,
+  interrupteurs, une carte par saison, pastilles en capitales, pied « Annuler / Demander ». Deux
+  écarts : l'en-tête prend l'affiche déjà relayée plutôt que le fond TMDB — pas de nouveau relais
+  d'images, et TMDB ne voit pas le visiteur ; la colonne du nom perd son `min-width: 0`, qui
+  laissait un mot long chevaucher la colonne des épisodes sur un téléphone.
+- **Options avancées** (`SeerrAdvancedRequests`, l'option du même nom chez Jellyfin Enhanced) :
+  serveurs lus dans `/api/v1/service/{sonarr|radarr}` puis le détail de chacun, gardés 5 min, le
+  serveur par défaut non-4K présélectionné. Un film ouvre alors lui aussi sa fenêtre. **Seerr ne
+  filtre pas ces choix selon les droits du compte** — lu dans `MediaRequest.ts` : il les enregistre
+  tels quels. `SeerrRules.IsAllowedChoice` vérifie donc chacun contre les listes publiées, sinon
+  400 : aucun dossier arbitraire ne part vers Sonarr ou Radarr avec la clé d'administration.
 - **Le choix des saisons suit deux réglages de Seerr**, lus dans `/api/v1/settings/main` comme le
   fait Jellyfin Enhanced — seuls deux booléens, car la réponse contient la clé d'API. Sans
   demandes partielles, la série part en entière, épisodes spéciaux exceptés ; sans épisodes
@@ -824,7 +836,7 @@ dotnet run --project tests/ScriptTag.Tests -c Release
 cd tests/browser && npm install && node home-rows.test.mjs && node config-page.test.mjs
 ```
 
-Trois suites sans framework — 455 assertions — exécutées en CI avant la publication ; voir
+Trois suites sans framework — 474 assertions — exécutées en CI avant la publication ; voir
 `tests/README.md`. L'une charge un extrait des règles d'ElegantFin **après** les nôtres pour
 vérifier que la cohabitation tient.
 Les deux suites navigateur chargent le vrai `media-carousel.js` et le vrai `configPage.html`

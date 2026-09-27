@@ -311,7 +311,7 @@ await seerrPage.addInitScript(() => {
     MaxPlaysCountedPerUser: 3, CandidatesPerUser: 100, ExcludedUserIds: [], ExcludedLibraryIds: [],
     EnableGlobalTop: true, GlobalTopProvider: 'Tmdb', GlobalTopApiKey: 'cle-tmdb', GlobalTopMediaKind: 'Both',
     GlobalTopSize: 10, GlobalTopLibraryOnly: true, MetadataLanguage: 'fr-FR',
-    EnableSeerrRequests: false, SeerrUrl: '', SeerrApiKey: '',
+    EnableSeerrRequests: false, SeerrUrl: '', SeerrApiKey: '', SeerrAdvancedRequests: false,
     EnableHomeRows: true, LocalRowTitle: 'Top 10 sur ce serveur', GlobalRowTitle: 'Top 10 mondial',
     HighlightColor: '#775BF4', RefreshIntervalHours: 6, SyncCollections: false,
     LocalCollectionName: 'Top 10 du serveur', GlobalCollectionName: 'Top 10 mondial'
@@ -353,7 +353,7 @@ await seerrPage.waitForFunction(() => document.querySelectorAll('.mcCfg-tile').l
 const etatSeerrCfg = () => seerrPage.evaluate(() => ({
   groupe: !document.querySelector('#groupSeerr').hidden,
   champs: !document.querySelector('#SeerrUrl').disabled && !document.querySelector('#SeerrApiKey').disabled
-    && !document.querySelector('#seerrTestButton').disabled,
+    && !document.querySelector('#seerrTestButton').disabled && !document.querySelector('#SeerrAdvancedRequests').disabled,
   alerte: !document.querySelector('#mcSeerrAlert').hidden,
   ongletEteint: document.querySelector('#tabGlobal').classList.contains('mcCfg-tab-off')
 }));
@@ -406,6 +406,7 @@ await seerrPage.evaluate(() => {
   document.querySelector('#SeerrApiKey').value = 'cle-seerr-de-test';
   document.querySelector('#EnableSeerrRequests').checked = true;
   document.querySelector('#EnableSeerrRequests').dispatchEvent(new Event('change'));
+  document.querySelector('#SeerrAdvancedRequests').checked = true;
   document.querySelector('#seerrTestButton').click();
 });
 await seerrPage.waitForTimeout(300);
@@ -419,6 +420,7 @@ const seerrEnregistre = await seerrPage.evaluate(() => ({
   active: window.__saved.EnableSeerrRequests,
   adresse: window.__saved.SeerrUrl,
   cle: window.__saved.SeerrApiKey,
+  avancees: window.__saved.SeerrAdvancedRequests,
   typeCle: document.querySelector('#SeerrApiKey').type
 }));
 await seerrPage.close();
@@ -572,6 +574,7 @@ check('SEERR: activation, adresse et cle sont enregistrees',
   seerrEnregistre.active === true && seerrEnregistre.adresse === 'http://seerr.local:5055'
     && seerrEnregistre.cle === 'cle-seerr-de-test', seerrEnregistre);
 check('SEERR: la cle est masquee a l ecran', seerrEnregistre.typeCle === 'password', seerrEnregistre.typeCle);
+check('SEERR: les options avancees sont enregistrees', seerrEnregistre.avancees === true, seerrEnregistre.avancees);
 check('RETOUR: apres un retour sur la page, « Descendre » ne recule la rangee que d une place',
   ordreApresClic[0] === ordreAvantClic[1] && ordreApresClic[1] === ordreAvantClic[0]
     && ordreApresClic[2] === ordreAvantClic[2], [ordreAvantClic.slice(0, 3), ordreApresClic.slice(0, 3)]);

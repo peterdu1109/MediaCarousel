@@ -163,7 +163,40 @@ public class SeerrController : ControllerBase
             return Forbid();
         }
 
-        var outcome = await _seerr.RequestAsync(baseUrl, apiKey, userId, item.MediaType!, item.TmdbId, seasons, cancellationToken)
+        // Serveur, profil et dossier : tout ou rien, seulement si l'administrateur les propose, et
+        // seulement parmi ce que Seerr publie — voir SeerrRules.IsAllowedChoice.
+        SeerrChoice? choice = null;
+        if (item.ServerId.HasValue || item.ProfileId.HasValue || !string.IsNullOrEmpty(item.RootFolder))
+        {
+            if (!IsAdvanced(Plugin.Instance?.Configuration)
+                || item.ServerId is not int serverId
+                || item.ProfileId is not int profileId
+                || string.IsNullOrEmpty(item.RootFolder))
+            {
+                return BadRequest();
+            }
+
+            choice = new SeerrChoice(serverId, profileId, item.RootFolder);
+            var (servers, serversFailure) = await _seerr.GetServersAsync(baseUrl, apiKey, item.MediaType!, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (servers is null)
+            {
+                return StatusCode(StatusCodes.Status502BadGateway, new SeerrStateDto
+                {
+                    MediaType = item.MediaType!,
+                    TmdbId = item.TmdbId,
+                    Error = ErrorCode(serversFailure)
+                });
+            }
+
+            if (!SeerrRules.IsAllowedChoice(servers, choice))
+            {
+                return BadRequest();
+            }
+        }
+
+        var outcome = await _seerr.RequestAsync(baseUrl, apiKey, userId, item.MediaType!, item.TmdbId, seasons, choice, cancellationToken)
             .ConfigureAwait(false);
 
         var dto = new SeerrStateDto
@@ -181,6 +214,60 @@ public class SeerrController : ControllerBase
             SeerrFailure.Forbidden => StatusCode(StatusCodes.Status403Forbidden, dto),
             _ => StatusCode(StatusCodes.Status502BadGateway, dto)
         };
+    }
+
+    /// <summary>
+    /// Serveurs de destination, profils de qualité et dossiers racines que propose Seerr.
+    /// </summary>
+    /// <param name="item">Le type de média : les séries vont à Sonarr, les films à Radarr.</param>
+    /// <param name="cancellationToken">Jeton d'annulation.</param>
+    /// <response code="404">Les options avancées ne sont pas proposées.</response>
+    /// <returns>Les serveurs, avec leurs profils et leurs dossiers.</returns>
+    [HttpPost("Options")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status502BadGateway)]
+    public async Task<ActionResult<SeerrOptionsDto>> GetOptions(
+        [FromBody] SeerrItemDto? item,
+        CancellationToken cancellationToken)
+    {
+        if (!IsAdvanced(Plugin.Instance?.Configuration) || !TryGetSettings(out var baseUrl, out var apiKey))
+        {
+            return NotFound();
+        }
+
+        if (item is null || !SeerrRules.IsMediaType(item.MediaType))
+        {
+            return BadRequest();
+        }
+
+        var (servers, failure) = await _seerr.GetServersAsync(baseUrl, apiKey, item.MediaType!, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (servers is null)
+        {
+            return StatusCode(StatusCodes.Status502BadGateway, new SeerrStateDto
+            {
+                MediaType = item.MediaType!,
+                Error = ErrorCode(failure)
+            });
+        }
+
+        return Ok(new SeerrOptionsDto
+        {
+            Servers = servers.Select(s => new SeerrServerDto
+            {
+                Id = s.Id,
+                Name = s.Name,
+                Is4k = s.Is4k,
+                IsDefault = s.IsDefault,
+                ActiveProfileId = s.ActiveProfileId,
+                ActiveDirectory = s.ActiveDirectory,
+                Profiles = s.Profiles.Select(p => new SeerrProfileDto { Id = p.Id, Name = p.Name }).ToArray(),
+                RootFolders = s.Folders.Select(f => new SeerrFolderDto { Path = f.Path, FreeSpace = f.FreeSpace }).ToArray()
+            }).ToArray()
+        });
     }
 
     /// <summary>
@@ -273,6 +360,9 @@ public class SeerrController : ControllerBase
     /// </summary>
     /// <param name="config">La configuration du plugin.</param>
     /// <returns><see langword="true"/> si les demandes peuvent être proposées.</returns>
+    internal static bool IsAdvanced(Configuration.PluginConfiguration? config)
+        => IsConfigured(config) && config!.SeerrAdvancedRequests;
+
     internal static bool IsConfigured(Configuration.PluginConfiguration? config)
         => config is not null
             && config.EnableSeerrRequests
@@ -357,6 +447,78 @@ public sealed class SeerrItemDto
     /// Obtient ou définit les saisons demandées, pour une série.
     /// </summary>
     public int[]? Seasons { get; set; }
+
+    /// <summary>Obtient ou définit le serveur de destination choisi, avec les options avancées.</summary>
+    public int? ServerId { get; set; }
+
+    /// <summary>Obtient ou définit le profil de qualité choisi, avec les options avancées.</summary>
+    public int? ProfileId { get; set; }
+
+    /// <summary>Obtient ou définit le dossier racine choisi, avec les options avancées.</summary>
+    public string? RootFolder { get; set; }
+}
+
+/// <summary>
+/// Les serveurs que propose Seerr pour un type de média.
+/// </summary>
+public sealed class SeerrOptionsDto
+{
+    /// <summary>Obtient ou définit les serveurs.</summary>
+    public IReadOnlyList<SeerrServerDto> Servers { get; set; } = Array.Empty<SeerrServerDto>();
+}
+
+/// <summary>
+/// Un serveur Sonarr ou Radarr, avec ses profils et ses dossiers.
+/// </summary>
+public sealed class SeerrServerDto
+{
+    /// <summary>Obtient ou définit l'identifiant du serveur dans Seerr.</summary>
+    public int Id { get; set; }
+
+    /// <summary>Obtient ou définit le nom du serveur.</summary>
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>Obtient ou définit une valeur indiquant si le serveur reçoit les demandes en 4K.</summary>
+    public bool Is4k { get; set; }
+
+    /// <summary>Obtient ou définit une valeur indiquant si c'est le serveur par défaut.</summary>
+    public bool IsDefault { get; set; }
+
+    /// <summary>Obtient ou définit le profil de qualité par défaut.</summary>
+    public int? ActiveProfileId { get; set; }
+
+    /// <summary>Obtient ou définit le dossier racine par défaut.</summary>
+    public string? ActiveDirectory { get; set; }
+
+    /// <summary>Obtient ou définit les profils de qualité.</summary>
+    public IReadOnlyList<SeerrProfileDto> Profiles { get; set; } = Array.Empty<SeerrProfileDto>();
+
+    /// <summary>Obtient ou définit les dossiers racines.</summary>
+    public IReadOnlyList<SeerrFolderDto> RootFolders { get; set; } = Array.Empty<SeerrFolderDto>();
+}
+
+/// <summary>
+/// Un profil de qualité.
+/// </summary>
+public sealed class SeerrProfileDto
+{
+    /// <summary>Obtient ou définit l'identifiant du profil.</summary>
+    public int Id { get; set; }
+
+    /// <summary>Obtient ou définit le nom du profil.</summary>
+    public string Name { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Un dossier racine.
+/// </summary>
+public sealed class SeerrFolderDto
+{
+    /// <summary>Obtient ou définit le chemin du dossier.</summary>
+    public string Path { get; set; } = string.Empty;
+
+    /// <summary>Obtient ou définit l'espace libre, en octets.</summary>
+    public long? FreeSpace { get; set; }
 }
 
 /// <summary>
