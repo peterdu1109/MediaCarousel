@@ -148,14 +148,15 @@ public static class SeerrRules
     /// </summary>
     /// <remarks>
     /// Un titre que Seerr n'a jamais vu demander n'a pas de <c>mediaInfo</c> : il se demande.
-    /// L'état d'une série se déduit de ses saisons quand Seerr les détaille, comme chez
-    /// Jellyfin Enhanced — une série dont une saison est disponible et la suivante absente
-    /// n'est ni « disponible » ni « à demander », mais « partiellement disponible ».
+    /// L'état d'une série se déduit de ses saisons quand Seerr les détaille — une série dont
+    /// une saison est disponible et la suivante absente n'est ni « disponible » ni « à
+    /// demander », mais « partiellement disponible ».
     /// </remarks>
     /// <param name="mediaJson">La réponse de Seerr.</param>
     /// <param name="mediaType"><c>movie</c> ou <c>tv</c>.</param>
+    /// <param name="includeSpecials">Vrai si Seerr accepte les épisodes spéciaux.</param>
     /// <returns>L'état du bouton.</returns>
-    public static string ReadState(string mediaJson, string mediaType)
+    public static string ReadState(string mediaJson, string mediaType, bool includeSpecials = false)
     {
         using var document = JsonDocument.Parse(mediaJson);
         var info = MediaInfo(document.RootElement);
@@ -178,13 +179,7 @@ public static class SeerrRules
             }
         }
 
-        if (seasons.Count == 0)
-        {
-            return TvState(status, 0);
-        }
-
-        var (overall, available) = AnalyzeSeasons(seasons);
-        return TvState(overall, available);
+        return seasons.Count == 0 ? TvState(status) : SeasonsState(seasons, includeSpecials);
     }
 
     /// <summary>
@@ -208,68 +203,84 @@ public static class SeerrRules
     };
 
     /// <summary>
-    /// État du bouton d'une série, d'après son statut d'ensemble.
+    /// État du bouton d'une série dont Seerr ne détaille pas les saisons.
     /// </summary>
     /// <remarks>
-    /// Une série reste demandable tant qu'une saison peut l'être : « en attente » et
-    /// « en cours » laissent demander les autres saisons, et « partiellement disponible »
-    /// devient « Demander manquant ».
+    /// Une série « en cours » ou « partiellement disponible » laisse demander ses autres
+    /// saisons, comme chez Jellyfin Enhanced.
     /// </remarks>
-    /// <param name="overall">Statut d'ensemble, lu ou déduit des saisons.</param>
-    /// <param name="availableSeasons">Nombre de saisons au moins partiellement disponibles.</param>
+    /// <param name="status">Statut Seerr de la série.</param>
     /// <returns>L'état du bouton.</returns>
-    public static string TvState(int overall, int availableSeasons) => overall switch
+    public static string TvState(int status) => status switch
     {
         Pending => StatePending,
         PartiallyAvailable => StateRequestMissing,
         Available => StateAvailable,
         Blocked => StateBlocked,
-        Deleted => availableSeasons > 0 ? StateRequestMore : StateRequest,
         _ => StateRequest
     };
 
     /// <summary>
-    /// Déduit le statut d'ensemble d'une série de celui de ses saisons.
+    /// État du bouton d'une série, d'après celui de ses saisons.
     /// </summary>
     /// <remarks>
-    /// Reprend <c>analyzeSeasonStatuses</c> de Jellyfin Enhanced. Les épisodes spéciaux
-    /// (saison 0) ne comptent pas, sauf pour garder demandable une série dont toutes les
-    /// saisons sont disponibles mais pas les spéciaux.
+    /// <para>
+    /// Tant qu'une saison reste à demander, ce sont les libellés d'<c>analyzeSeasonStatuses</c>
+    /// de Jellyfin Enhanced : « Demander », « Demander manquant » quand une partie est
+    /// disponible, « Demander plus » quand il ne manque que les épisodes spéciaux.
+    /// </para>
+    /// <para>
+    /// Quand plus aucune ne l'est, le bouton dit l'état réel. Jellyfin Enhanced affiche alors
+    /// encore « Demander » — une série dont toutes les saisons venaient d'être demandées
+    /// redevenait demandable à l'écran, constaté sur un 12.1 —, en comptant sur ses pastilles
+    /// d'état, que ces rangées n'ont pas. Les épisodes spéciaux ne comptent que si Seerr les
+    /// accepte : sinon, « Demander plus » n'ouvrirait qu'une liste vide.
+    /// </para>
     /// </remarks>
     /// <param name="seasons">Numéro et statut Seerr de chaque saison.</param>
-    /// <returns>Le statut d'ensemble et le nombre de saisons au moins partiellement disponibles.</returns>
-    public static (int Overall, int AvailableSeasons) AnalyzeSeasons(IReadOnlyList<(int Number, int Status)> seasons)
+    /// <param name="includeSpecials">Vrai si Seerr accepte les épisodes spéciaux.</param>
+    /// <returns>L'état du bouton.</returns>
+    public static string SeasonsState(IReadOnlyList<(int Number, int Status)> seasons, bool includeSpecials)
     {
         var regular = seasons.Where(s => s.Number > 0).ToList();
         if (regular.Count == 0)
         {
-            return (Unknown, 0);
+            return StateRequest;
         }
 
-        var available = regular.Count(s => s.Status == Available || s.Status == PartiallyAvailable);
-        var requested = regular.Count(s => s.Status == Pending || s.Status == Processing);
-        var notRequested = regular.Count(s => s.Status == Unknown);
+        var available = regular.Count(s => s.Status == Available);
+        var somewhatAvailable = available + regular.Count(s => s.Status == PartiallyAvailable);
+        var requestable = regular.Count(s => IsRequestable(s.Status))
+            + (includeSpecials && seasons.Any(s => s.Number == 0 && IsRequestable(s.Status)) ? 1 : 0);
 
-        int overall;
-        if (notRequested == 0)
+        if (requestable > 0)
         {
-            overall = available == regular.Count ? Available : Deleted;
-        }
-        else if (requested + available > 0)
-        {
-            overall = available > 0 ? PartiallyAvailable : Processing;
-        }
-        else
-        {
-            overall = Unknown;
+            if (somewhatAvailable == 0)
+            {
+                return StateRequest;
+            }
+
+            return available == regular.Count ? StateRequestMore : StateRequestMissing;
         }
 
-        if (overall == Available && seasons.Any(s => s.Number == 0 && s.Status == Unknown))
+        if (available == regular.Count)
         {
-            overall = Deleted;
+            return StateAvailable;
         }
 
-        return (overall, available);
+        if (somewhatAvailable > 0)
+        {
+            return StatePartial;
+        }
+
+        if (regular.All(s => s.Status == Blocked))
+        {
+            return StateBlocked;
+        }
+
+        // Tout est demandé, rien n'est encore là : approuvé pour une saison au moins, ou en
+        // attente d'un administrateur pour toutes.
+        return regular.Any(s => s.Status == Processing) ? StateRequested : StatePending;
     }
 
     /// <summary>

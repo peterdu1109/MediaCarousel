@@ -126,6 +126,10 @@ public sealed class SeerrClient
             return SeerrOutcome.Ok(cached.State);
         }
 
+        // Les épisodes spéciaux ne comptent, pour une série, que si Seerr les accepte.
+        var specials = string.Equals(mediaType, SeerrRules.Tv, StringComparison.Ordinal)
+            && (await GetSettingsAsync(baseUrl, apiKey, cancellationToken).ConfigureAwait(false)).SpecialEpisodes;
+
         var (status, body) = await SendAsync(
             HttpMethod.Get,
             baseUrl + "/api/v1/" + mediaType + "/" + tmdbId.ToString(CultureInfo.InvariantCulture),
@@ -143,7 +147,7 @@ public sealed class SeerrClient
         string state;
         try
         {
-            state = SeerrRules.ReadState(body!, mediaType);
+            state = SeerrRules.ReadState(body!, mediaType, specials);
         }
         catch (JsonException)
         {
@@ -273,7 +277,7 @@ public sealed class SeerrClient
         try
         {
             var seasons = SeerrRules.ReadSeasons(body!, settings.SpecialEpisodes);
-            _states[StateKey(SeerrRules.Tv, tmdbId)] = (SeerrRules.ReadState(body!, SeerrRules.Tv), DateTime.UtcNow);
+            _states[StateKey(SeerrRules.Tv, tmdbId)] = (SeerrRules.ReadState(body!, SeerrRules.Tv, settings.SpecialEpisodes), DateTime.UtcNow);
             return (new SeerrSeasonChoice(settings.PartialRequests, seasons), SeerrFailure.None);
         }
         catch (JsonException)

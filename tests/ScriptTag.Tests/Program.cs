@@ -527,23 +527,29 @@ Check("SEERR: partiellement disponible, disponible, bloque",
     && Film(""","mediaInfo":{"status":6}""") == "blocked");
 Check("SEERR: un film supprime redevient demandable", Film(""","mediaInfo":{"status":7}""") == "request");
 
-// Series : l'etat d'ensemble, puis sa deduction depuis les saisons (analyzeSeasonStatuses).
+// Series : l'etat d'ensemble, puis sa deduction depuis les saisons.
 string Serie(string mediaInfo) => SeerrRules.ReadState("{\"id\":1399" + mediaInfo + "}", "tv");
-string Saisons(params (int N, int S)[] saisons) => Serie(",\"mediaInfo\":{\"status\":1,\"seasons\":["
-    + string.Join(",", saisons.Select(s => "{\"seasonNumber\":" + s.N + ",\"status\":" + s.S + "}")) + "]}");
+string Saisons(bool speciaux, params (int N, int S)[] saisons) => SeerrRules.ReadState("{\"id\":1399,\"mediaInfo\":{\"status\":1,\"seasons\":["
+    + string.Join(",", saisons.Select(s => "{\"seasonNumber\":" + s.N + ",\"status\":" + s.S + "}")) + "]}}", "tv", speciaux);
 Check("SEERR: une serie inconnue se demande", Serie("") == "request");
-Check("SEERR: une serie en attente reste « En attente d'approbation »", Serie(""","mediaInfo":{"status":2}""") == "pending");
-Check("SEERR: une serie en cours laisse demander d'autres saisons", Serie(""","mediaInfo":{"status":3}""") == "request");
-Check("SEERR: une serie partiellement disponible propose « Demander manquant »",
+Check("SEERR: sans detail des saisons, une serie en attente reste « En attente d'approbation »",
+    Serie(""","mediaInfo":{"status":2}""") == "pending");
+Check("SEERR: sans detail des saisons, une serie en cours laisse demander les autres",
+    Serie(""","mediaInfo":{"status":3}""") == "request");
+Check("SEERR: sans detail des saisons, partiellement disponible propose « Demander manquant »",
     Serie(""","mediaInfo":{"status":4}""") == "request-missing");
-Check("SEERR: toutes les saisons disponibles : « Disponible »", Saisons((1, 5), (2, 5)) == "available");
-Check("SEERR: des speciaux jamais demandes gardent la serie demandable",
-    Saisons((0, 1), (1, 5), (2, 5)) == "request-more");
-Check("SEERR: une saison disponible et une absente : « Demander manquant »", Saisons((1, 5), (2, 1)) == "request-missing");
-Check("SEERR: une saison demandee et une absente : « Demander »", Saisons((1, 2), (2, 1)) == "request");
-Check("SEERR: tout est demande, rien de disponible : « Demander »", Saisons((1, 2), (2, 3)) == "request");
-Check("SEERR: tout est couvert, une partie disponible : « Demander plus »", Saisons((1, 5), (2, 3)) == "request-more");
-Check("SEERR: les speciaux seuls ne decident de rien", Saisons((0, 5)) == "request");
+Check("SEERR: toutes les saisons disponibles : « Disponible »", Saisons(false, (1, 5), (2, 5)) == "available");
+Check("SEERR: des speciaux jamais demandes gardent la serie demandable, si Seerr les accepte",
+    Saisons(true, (0, 1), (1, 5), (2, 5)) == "request-more" && Saisons(false, (0, 1), (1, 5), (2, 5)) == "available");
+Check("SEERR: une saison disponible et une absente : « Demander manquant »", Saisons(false, (1, 5), (2, 1)) == "request-missing");
+Check("SEERR: une saison demandee et une absente : « Demander »", Saisons(false, (1, 2), (2, 1)) == "request");
+Check("SEERR: tout est demande et en attente : plus « Demander », mais « En attente d'approbation »",
+    Saisons(false, (1, 2), (2, 2)) == "pending");
+Check("SEERR: tout est demande, une saison approuvee : « Demande »", Saisons(false, (1, 2), (2, 3)) == "requested");
+Check("SEERR: rien a demander, une partie disponible : « Partiellement disponible »",
+    Saisons(false, (1, 5), (2, 3)) == "partial");
+Check("SEERR: toutes les saisons bloquees : « Bloque »", Saisons(false, (1, 6), (2, 6)) == "blocked");
+Check("SEERR: les speciaux seuls ne decident de rien", Saisons(true, (0, 5)) == "request");
 
 // Choix des saisons.
 const string serieDetaillee = """
