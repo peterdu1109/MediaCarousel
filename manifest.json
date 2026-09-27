@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/icon.png",
     "versions": [
       {
+        "version": "3.15.0.0",
+        "changelog": "Nouveautes :\n- Demander à Seerr un titre du Top mondial absent de la bibliothèque, comme dans Jellyfin Enhanced : choix des saisons, options avancées (serveur, profil, dossier)\nCorrections :\n- L'accueil ne relance plus en boucle un serveur qui échoue\n- Changer de compte n'affiche plus les rangées du précédent ; une connexion tardive a bien les siennes\n- L'intervalle de recalcul s'applique dès le démarrage\n- La page de configuration ne double plus les boutons d'ordre après un retour",
+        "targetAbi": "10.11.11.0",
+        "sourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/3.15.0/JellyfinCarouselPlugin.zip",
+        "checksum": "f0fb675bf161557c1c7c6003d1337f55",
+        "timestamp": "2026-09-27T19:10:38Z"
+      },
+      {
         "version": "3.14.1.0",
         "changelog": "Autres ameliorations :\n- Ramener main sur Jellyfin 10.11",
         "targetAbi": "10.11.11.0",
