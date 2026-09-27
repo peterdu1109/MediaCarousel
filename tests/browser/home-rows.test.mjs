@@ -1262,6 +1262,9 @@ async function pageAudit(reglages = {}) {
   await vue.goto('file://' + path.join(here, 'home.html'));
   await vue.evaluate((compte) => { window.__user = compte; }, reglages.compte === undefined ? 'A' : reglages.compte);
   await vue.evaluate(serveurParCompte);
+  // L'horloge simulee continue de s'ecouler seule : ce qui doit preceder le premier rendu
+  // passe ici, avant le script.
+  if (reglages.avant) { await vue.evaluate(reglages.avant); }
   await vue.evaluate(script);
   return vue;
 }
@@ -1349,6 +1352,47 @@ if (toutMasque.boutons === 1) {
   rangeesRevenues = await culDeSac.evaluate(() => document.querySelectorAll('.mc-ranked').length);
 }
 await culDeSac.close();
+
+// BOUCLE — constate en prod le 2026-09-27 : la build 10.11 sur Jellyfin 12.1 repondait 500 a
+// chaque liste, et chaque accueil ouvert relancait ses requetes a CHAQUE mutation de la page,
+// sans fin (4 388 erreurs en une journee). Horloge simulee : douze secondes de mutations,
+// une toutes les 400 ms, passent en un instant.
+const enPanne = () => {
+  const repondre = window.ApiClient.getJSON;
+  window.__panne = true;
+  window.ApiClient.getJSON = (url) => {
+    if (window.__panne && url.includes('Top/')) {
+      window.__appels.push(window.__user + ' ' + url.split('?')[0]);
+      return Promise.reject({ status: 500 });
+    }
+    return repondre(url);
+  };
+};
+const secouer = async (vue, fois) => {
+  for (let i = 0; i < fois; i++) {
+    await vue.evaluate(() => { document.body.appendChild(document.createElement('div')); });
+    await vue.clock.runFor(400);
+  }
+};
+const boucle = await pageAudit({ horloge: true, avant: enPanne });
+await secouer(boucle, 30);
+const enBoucle = await boucle.evaluate(() => ({
+  appels: window.__appels.filter(a => a === 'A MediaCarousel/Top/Local').length,
+  rangees: document.querySelectorAll('.mc-row').length
+}));
+// Nouvel affichage : l'essai part aussitot, quel que soit le delai en cours.
+await boucle.evaluate(() => { window.__panne = false; window.dispatchEvent(new HashChangeEvent('hashchange')); });
+await boucle.clock.runFor(1000);
+enBoucle.apresNavigation = await boucle.evaluate(() => document.querySelectorAll('.mc-ranked').length);
+await boucle.close();
+
+// Le meme affichage, sans navigation, se remet seul une fois le serveur retabli.
+const reprise = await pageAudit({ horloge: true, avant: enPanne });
+await secouer(reprise, 5);
+await reprise.evaluate(() => { window.__panne = false; });
+await secouer(reprise, 20);
+const repriseSeule = await reprise.evaluate(() => document.querySelectorAll('.mc-ranked').length);
+await reprise.close();
 
 // NAVIGATION — le panneau ne doit pas survivre a un changement de page.
 const navigation = await pageAudit();
@@ -2181,6 +2225,12 @@ check('CONNEXION: un compte connecte apres une minute a bien ses rangees',
 check('CUL-DE-SAC: tout masquer laisse un acces au panneau',
   toutMasque.rangees === 0 && toutMasque.boutons === 1, toutMasque);
 check('CUL-DE-SAC: et par lui, les rangees reviennent', rangeesRevenues === 3, rangeesRevenues);
+check('BOUCLE: le banc est bien en panne — aucune rangee posee', enBoucle.rangees === 0, enBoucle);
+check('BOUCLE: un serveur en echec n est plus relance a chaque mutation (30 en 12 s)',
+  enBoucle.appels <= 4, enBoucle);
+check('BOUCLE: le meme affichage reessaie quand meme, de plus en plus espace', enBoucle.appels >= 2, enBoucle);
+check('BOUCLE: une navigation reessaie aussitot', enBoucle.apresNavigation === 3, enBoucle);
+check('BOUCLE: sans navigation, l accueil se remet une fois le serveur retabli', repriseSeule === 3, repriseSeule);
 check('NAVIGATION: le panneau se ferme quand on quitte la page', panneauApresNavigation === false, panneauApresNavigation);
 check('PANNEAU: il herite de la couleur d accentuation', panneauStyle.accent.toLowerCase() === '#ff0000', panneauStyle);
 check('PANNEAU: le bouton Enregistrer porte cette couleur', panneauStyle.fondEnregistrer === 'rgb(255, 0, 0)', panneauStyle);

@@ -527,6 +527,14 @@ si l'administrateur supprime la collection, elle est recréée au recalcul suiva
 - **Réinjection** : `jellyfin-web` reconstruit entièrement `.homeSectionsContainer` à chaque
   affichage de l'accueil. Un `MutationObserver` débouncé, plus `hashchange` et `viewshow`,
   déclenchent un nouveau rendu ; le garde `container.querySelector('.mc-row')` évite les doublons.
+- **Un rendu qui ne pose rien espace les suivants.** Tant qu'aucune rangée n'est posée, chaque
+  mutation de la page relance un rendu — et ses requêtes, puisque rien de vide n'est mémorisé.
+  Constaté en prod le 2026-09-27 : la build 10.11 installée sur Jellyfin 12.1 répondait 500 à
+  chaque liste, 4 388 erreurs en une journée, une salve par mutation et par accueil ouvert.
+  Désormais, après un rendu vide, le même affichage attend 2 s, puis 4, 8… jusqu'à cinq minutes.
+  Une navigation (`hashchange`, `viewshow`), un changement de compte ou de préférences repart
+  aussitôt. Pas d'identité de conteneur pour reconnaître une nouvelle visite : jellyfin-web
+  réécrit le contenu du même `.homeSectionsContainer`.
 - **Accessibilité** : chaque rangée est reliée à son titre par `aria-labelledby`, la bande porte
   `role="list"` et les cartes `role="listitem"` avec un `aria-label` explicite (« Numéro 3 : … »).
   Les flèches sont un confort souris : `tabindex="-1"` et `aria-hidden="true"`, la navigation au
@@ -836,7 +844,7 @@ dotnet run --project tests/ScriptTag.Tests -c Release
 cd tests/browser && npm install && node home-rows.test.mjs && node config-page.test.mjs
 ```
 
-Trois suites sans framework — 474 assertions — exécutées en CI avant la publication ; voir
+Trois suites sans framework — 479 assertions — exécutées en CI avant la publication ; voir
 `tests/README.md`. L'une charge un extrait des règles d'ElegantFin **après** les nôtres pour
 vérifier que la cohabitation tient.
 Les deux suites navigateur chargent le vrai `media-carousel.js` et le vrai `configPage.html`
