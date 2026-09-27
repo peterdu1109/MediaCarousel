@@ -511,8 +511,10 @@
                flouté, en-tête illustré sous un voile sombre, titre en dégradé, une carte par
                saison avec son interrupteur et sa pastille, options avancées, pied « Annuler /
                Demander ». En HTML nu, comme le panneau de personnalisation, et pour la même
-               raison. Pas de `gap` en flexbox (Tizen) : des marges ; la grille, elle, porte le sien. */
-            '.mc-seerr-backdrop{position:fixed;left:0;right:0;top:0;bottom:0;z-index:1000;',
+               raison. Pas de `gap` en flexbox (Tizen) : des marges ; la grille, elle, porte le sien.
+               z-index 10000, comme chez Jellyfin Enhanced : jellyfin-web 12.1 place son en-tête
+               dans un conteneur `sticky` à z-index 1099, qui cachait le haut d'un voile à 1000. */
+            '.mc-seerr-backdrop{position:fixed;left:0;right:0;top:0;bottom:0;z-index:10000;',
             'display:flex;align-items:center;justify-content:center;background:rgba(0,10,20,.85);',
             '-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);}',
             '.mc-seerr-dialog{display:flex;flex-direction:column;box-sizing:border-box;width:90%;max-width:700px;',
@@ -610,7 +612,7 @@
             '.mc-seerr-foot .mc-seerr-cancel:hover{background:rgba(71,85,105,1);}',
             '.mc-seerr-foot button:focus{outline:2px solid var(--mc-accent);outline-offset:2px;}',
             '.mc-seerr-foot button:focus:not(:focus-visible){outline:none;}',
-            '.mc-toast{position:fixed;left:50%;bottom:2em;z-index:1001;max-width:90vw;box-sizing:border-box;',
+            '.mc-toast{position:fixed;left:50%;bottom:2em;z-index:10001;max-width:90vw;box-sizing:border-box;',
             'padding:.7em 1.1em;border-radius:8px;background:#1c1c1f;color:#fff;',
             'box-shadow:0 6px 24px rgba(0,0,0,.5);opacity:0;pointer-events:none;',
             'transform:translate3d(-50%,1em,0);transition:opacity .2s,transform .2s;}',
@@ -646,7 +648,7 @@
             '.mc-row.mc-prefs-only .sectionTitle{opacity:.6;font-size:1em;}',
             '.mc-prefs-open:focus{outline:2px solid var(--mc-accent);outline-offset:2px;}',
 
-            '.mc-prefs-backdrop{position:fixed;left:0;right:0;top:0;bottom:0;z-index:1000;',
+            '.mc-prefs-backdrop{position:fixed;left:0;right:0;top:0;bottom:0;z-index:10000;',
             'background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;',
             'padding:1em;}',
             '.mc-prefs{background:#1c1c1f;color:#fff;border-radius:8px;padding:1.2em;',
