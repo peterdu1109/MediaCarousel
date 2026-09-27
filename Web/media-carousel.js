@@ -37,6 +37,10 @@
     // jellyfin-web reconstruit le conteneur à chaque affichage.
     var CACHE_TTL = 5 * 60 * 1000;
 
+    // Premier délai avant de réessayer un accueil resté sans rangée. Il double à chaque
+    // rendu vide, jusqu'à CACHE_TTL ; une navigation le lève — voir render().
+    var EMPTY_RETRY_DELAY = 2000;
+
     var cache = {};
     var options = null;
     // Compte auquel appartiennent `cache` et `options` : voir scopeMemoryToUser().
@@ -48,6 +52,10 @@
     var seerrStates = {};
     var rendering = false;
     var scheduled = null;
+    // Rendus d'affilée qui n'ont posé aucune rangée, et heure avant laquelle ne pas en
+    // relancer un sans navigation : voir render().
+    var emptyStreak = 0;
+    var emptyUntil = 0;
     var sequence = 0;
     var supportsSmoothScroll = typeof document.documentElement.style.scrollBehavior === 'string';
 
@@ -2759,6 +2767,7 @@
     function rerender() {
         options = null;
         cache = {};
+        emptyUntil = 0;
 
         var container = findSectionsContainer();
 
@@ -3029,6 +3038,8 @@
             options = null;
             cache = {};
             seerrStates = {};
+            emptyStreak = 0;
+            emptyUntil = 0;
         }
     }
 
@@ -3064,6 +3075,15 @@
 
         var container = findSectionsContainer();
         if (!container || container.querySelector('.' + ROW_CLASS)) {
+            return Promise.resolve();
+        }
+
+        // Toute mutation de la page relance un rendu tant qu'aucune rangée n'est posée.
+        // Sans ce délai, un serveur en échec recevait une salve de requêtes à chacune, sans
+        // fin : 4 388 erreurs en une journée sur une prod passée en Jellyfin 12 avec la
+        // build 10.11. Une navigation repart aussitôt ; sur le même affichage, les essais
+        // s'espacent.
+        if (Date.now() < emptyUntil) {
             return Promise.resolve();
         }
 
@@ -3127,12 +3147,38 @@
             log('rendu impossible', error);
         }).then(function () {
             rendering = false;
+            noteRenderOutcome();
         });
+    }
+
+    /** Espace les rendus suivants quand celui-ci n'a posé aucune rangée : voir render(). */
+    function noteRenderOutcome() {
+        var container = findSectionsContainer();
+
+        if (!container) {
+            return;
+        }
+
+        if (container.querySelector('.' + ROW_CLASS)) {
+            emptyStreak = 0;
+            emptyUntil = 0;
+            return;
+        }
+
+        emptyStreak += 1;
+        emptyUntil = Date.now()
+            + Math.min(EMPTY_RETRY_DELAY * Math.pow(2, emptyStreak - 1), CACHE_TTL);
     }
 
     function schedule() {
         window.clearTimeout(scheduled);
         scheduled = window.setTimeout(render, 250);
+    }
+
+    /** Un nouvel affichage a droit à son essai, quel qu'ait été le sort du précédent. */
+    function onNavigation() {
+        emptyUntil = 0;
+        schedule();
     }
 
     // ------------------------------------------------------------------
@@ -3146,8 +3192,8 @@
         var observer = new MutationObserver(schedule);
         observer.observe(document.body, { childList: true, subtree: true });
 
-        window.addEventListener('hashchange', schedule);
-        document.addEventListener('viewshow', schedule);
+        window.addEventListener('hashchange', onNavigation);
+        document.addEventListener('viewshow', onNavigation);
 
         // Le panneau est accroché au corps du document : sans cela, un retour arrière le
         // laissait au-dessus de la page suivante.
