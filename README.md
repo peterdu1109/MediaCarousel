@@ -119,6 +119,11 @@ Ensuite, plus rien à faire : le recalcul se relance au démarrage du serveur et
 Les **épisodes comptent pour leur série** : c'est la série qui apparaît au classement, pas
 l'épisode isolé.
 
+**Avec le plugin Playback Reporting**, le Top suit ce qui a vraiment été regardé : une personne
+compte si elle a regardé le titre au moins 5 minutes, et le temps passé départage les ex æquo.
+Un épisode marqué « vu » sans être regardé, la musique ou une bande-annonce ne comptent plus.
+Sans Playback Reporting, le Top compte les titres marqués « vu ».
+
 </details>
 
 <details>

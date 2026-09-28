@@ -35,6 +35,7 @@ public sealed class LocalTopListBuilder
     private readonly ILibraryManager _libraryManager;
     private readonly IUserManager _userManager;
     private readonly IUserDataManager _userDataManager;
+    private readonly PlaybackReportingReader _playback;
     private readonly ILogger<LocalTopListBuilder> _logger;
 
     /// <summary>
@@ -43,16 +44,19 @@ public sealed class LocalTopListBuilder
     /// <param name="libraryManager">Gestionnaire de bibliothèque.</param>
     /// <param name="userManager">Gestionnaire d'utilisateurs.</param>
     /// <param name="userDataManager">Gestionnaire des données utilisateur.</param>
+    /// <param name="playback">Historique de Playback Reporting, s'il est installé.</param>
     /// <param name="logger">Journal.</param>
     public LocalTopListBuilder(
         ILibraryManager libraryManager,
         IUserManager userManager,
         IUserDataManager userDataManager,
+        PlaybackReportingReader playback,
         ILogger<LocalTopListBuilder> logger)
     {
         _libraryManager = libraryManager;
         _userManager = userManager;
         _userDataManager = userDataManager;
+        _playback = playback;
         _logger = logger;
     }
 
@@ -114,9 +118,23 @@ public sealed class LocalTopListBuilder
             return TopListSnapshot.Empty(kind);
         }
 
+        var seriesCache = new Dictionary<Guid, BaseItem?>();
+
+        // Les vraies lectures d'abord, quand Playback Reporting les tient : voir PlaybackTop.
+        // Le palmarès « de tous les temps » garde les compteurs de Jellyfin, dont l'histoire
+        // remonte plus loin que celle que Playback Reporting conserve.
+        if (kind == TopListKind.Local && windowDays > 0)
+        {
+            var fromPlayback = BuildFromPlayback(
+                config, kind, windowDays, size, excludedUsers, excludedLibraries, itemTypes, seriesCache, cancellationToken);
+            if (fromPlayback is not null)
+            {
+                return fromPlayback;
+            }
+        }
+
         // Agrégats par titre. Pour un épisode, le score est reporté sur sa série.
         var accumulator = new TopListAccumulator(playCap);
-        var seriesCache = new Dictionary<Guid, BaseItem?>();
         var usersCounted = 0;
 
         foreach (var user in _userManager.GetUsers())
@@ -259,6 +277,110 @@ public sealed class LocalTopListBuilder
                     ? PlaybackDate.AsUtc(userData.LastPlayedDate.Value)
                     : (DateTime?)null));
         }
+    }
+
+    /// <summary>
+    /// Classe d'après les vraies lectures tenues par Playback Reporting : voir <see cref="PlaybackTop"/>.
+    /// </summary>
+    /// <returns>
+    /// L'instantané, ou <c>null</c> quand Playback Reporting n'est pas installé, que sa base est
+    /// illisible ou qu'aucune lecture n'y est retenue sur la fenêtre : le calcul sur les titres
+    /// vus reprend alors la main.
+    /// </returns>
+    private TopListSnapshot? BuildFromPlayback(
+        PluginConfiguration config,
+        TopListKind kind,
+        int windowDays,
+        int size,
+        IReadOnlyCollection<Guid> excludedUsers,
+        IReadOnlyCollection<Guid> excludedLibraries,
+        BaseItemKind[] itemTypes,
+        Dictionary<Guid, BaseItem?> seriesCache,
+        CancellationToken cancellationToken)
+    {
+        // Playback Reporting écrit l'heure locale du serveur.
+        var rows = _playback.ReadSince(DateTime.Now.AddDays(-windowDays));
+        if (rows is null)
+        {
+            return null;
+        }
+
+        var users = _userManager.GetUsers()
+            .Where(u => !excludedUsers.Contains(u.Id) && !u.HasPermission(PermissionKind.IsDisabled))
+            .Select(u => u.Id)
+            .ToHashSet();
+        var types = itemTypes.Select(t => t.ToString()).ToHashSet(StringComparer.Ordinal);
+        var items = new Dictionary<Guid, BaseItem?>();
+        var titles = new Dictionary<Guid, BaseItem>();
+        var views = new List<PlaybackView>();
+
+        foreach (var row in rows)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (!types.Contains(row.ItemType)
+                || !Guid.TryParse(row.UserId, out var userId)
+                || !users.Contains(userId)
+                || !Guid.TryParse(row.ItemId, out var itemId))
+            {
+                continue;
+            }
+
+            if (!items.TryGetValue(itemId, out var item))
+            {
+                item = _libraryManager.GetItemById(itemId);
+                items[itemId] = item;
+            }
+
+            // Un élément supprimé depuis ne peut plus s'afficher.
+            if (item is null)
+            {
+                continue;
+            }
+
+            var target = item is Episode episode && episode.SeriesId != Guid.Empty
+                ? ResolveSeries(episode.SeriesId, seriesCache) ?? item
+                : item;
+
+            if (LibraryFilter.IsExcluded(target, excludedLibraries, config.ExcludeChannelContent))
+            {
+                continue;
+            }
+
+            titles[target.Id] = target;
+            views.Add(new PlaybackView(target.Id, userId, row.Seconds, row.PlayedAt));
+        }
+
+        var ranked = PlaybackTop.Rank(views, size);
+        if (ranked.Count == 0)
+        {
+            return null;
+        }
+
+        var entries = ranked
+            .Select((title, index) =>
+            {
+                var item = titles[title.TitleId];
+                return new TopListEntry
+                {
+                    Rank = index + 1,
+                    ItemId = item.Id,
+                    Name = item.Name ?? string.Empty,
+                    ProductionYear = item.ProductionYear,
+                    TmdbId = item.GetProviderId(MetadataProvider.Tmdb),
+                    ImdbId = item.GetProviderId(MetadataProvider.Imdb)
+                };
+            })
+            .ToArray();
+
+        _logger.LogInformation(
+            "Top local recalculé d'après Playback Reporting : {Count} entrées, {Plays} lecture(s) de films et d'épisodes sur {Days} jour(s), au moins {Minutes} min par spectateur.",
+            entries.Length,
+            views.Count,
+            windowDays,
+            PlaybackTop.MinSecondsPerViewer / 60);
+
+        return new TopListSnapshot(kind, "PlaybackReporting", entries);
     }
 
     /// <summary>

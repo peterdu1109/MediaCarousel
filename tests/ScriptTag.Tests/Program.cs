@@ -738,5 +738,38 @@ reglages["GlobalTopSplitByType"] = true;
 Check("REGLAGES: cocher la case separee compte comme un changement",
     SettingsSignature.Of(reglages) != empreinte);
 
+// ---------------------------------------------------------------------------
+// Top du serveur d'apres les vraies lectures (Playback Reporting). Les cas rejouent la
+// prod du 2026-09-28 : un compte a 0 minute faisait gagner une voix, et 96 heures de
+// visionnage ne pesaient pas plus que 25 minutes.
+// ---------------------------------------------------------------------------
+Guid Id(int n) => new Guid(n, 0, 0, new byte[8]);
+var lundi = new DateTime(2026, 9, 21, 20, 0, 0);
+var vues = new List<PlaybackView>
+{
+    // Mushoku : deux vrais spectateurs, et un compte qui n'a rien regarde.
+    new(Id(1), Id(101), 1380, lundi), new(Id(1), Id(102), 1020, lundi), new(Id(1), Id(103), 0, lundi),
+    // Rick et Morty : un seul spectateur, 96 heures.
+    new(Id(2), Id(101), 345600, lundi),
+    // Tempal : un seul spectateur, 25 minutes, mais plus recent.
+    new(Id(3), Id(102), 1500, lundi.AddDays(3)),
+    // Trois petites lectures de 2 minutes : 6 minutes en tout, le compte compte.
+    new(Id(4), Id(104), 120, lundi), new(Id(4), Id(104), 120, lundi), new(Id(4), Id(104), 120, lundi),
+    // Deux minutes seulement : personne ne l'a vraiment regarde.
+    new(Id(5), Id(101), 120, lundi)
+};
+var reel = PlaybackTop.Rank(vues, 10);
+Check("VRAIES LECTURES: un compte a 0 minute ne compte pas comme spectateur",
+    reel.First(t => t.TitleId == Id(1)).Viewers == 2);
+Check("VRAIES LECTURES: plusieurs courtes lectures s'additionnent, 6 min comptent",
+    reel.Any(t => t.TitleId == Id(4) && t.Viewers == 1));
+Check("VRAIES LECTURES: 2 minutes en tout ne font pas un spectateur, le titre disparait",
+    reel.All(t => t.TitleId != Id(5)));
+Check("VRAIES LECTURES: deux spectateurs passent devant un seul",
+    reel[0].TitleId == Id(1));
+Check("VRAIES LECTURES: entre spectateurs uniques, le temps passe departage, pas la recence",
+    reel[1].TitleId == Id(2) && reel[2].TitleId == Id(3));
+Check("VRAIES LECTURES: la taille est respectee", PlaybackTop.Rank(vues, 2).Count == 2);
+
 Console.WriteLine(failed == 0 ? "\nTous les tests passent." : $"\n{failed} echec(s).");
 return failed;

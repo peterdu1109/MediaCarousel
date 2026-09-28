@@ -162,6 +162,23 @@ Détails d'implémentation :
 changeant que ce qui les distingue. Les deux cohabitent sur l'accueil au lieu d'obliger à
 choisir entre tendance du moment et fond de catalogue.
 
+### Top du serveur d'après les vraies lectures
+
+Demandé par Elie le 2026-09-28 : « est-ce que le Top 10 reflète bien la réalité ? ». Comparé à
+Playback Reporting sur sa prod, 5 titres sur 10 seulement concordaient. Les compteurs de Jellyfin
+disent qu'un titre est « vu », pas qu'il a été regardé : un épisode marqué à la main ou ouvert
+quelques secondes valait un spectateur (48 lectures de moins d'une minute en une semaine), et
+96 heures de visionnage ne pesaient pas plus que 25 minutes.
+
+Quand `playback_reporting.db` existe dans le dossier de données, `PlaybackReportingReader` le lit
+en **lecture seule, sans pool** — films et épisodes seulement, jamais la musique, les vidéos ni la
+télé en direct — et `PlaybackTop` classe : un compte est spectateur au-delà de 5 minutes cumulées
+sur le titre, puis spectateurs, temps passé, lecture la plus récente. Playback Reporting écrit
+l'heure LOCALE du serveur : la fenêtre se calcule en `DateTime.Now`. Base absente, illisible ou
+sans lecture retenue : le calcul sur les titres vus reprend la main. Le palmarès de toujours
+garde les compteurs de Jellyfin, dont l'histoire remonte plus loin. `Microsoft.Data.Sqlite.Core`
+est une référence de compilation seulement : le serveur fournit et initialise son fournisseur.
+
 ### Top mondial
 
 `ITrendingProvider` abstrait la source ; `GlobalTopListBuilder` choisit l'implémentation d'après
@@ -843,7 +860,7 @@ dotnet run --project tests/ScriptTag.Tests -c Release
 cd tests/browser && npm install && node home-rows.test.mjs && node config-page.test.mjs
 ```
 
-Trois suites sans framework — 503 assertions — exécutées en CI avant la publication ; voir
+Trois suites sans framework — 509 assertions — exécutées en CI avant la publication ; voir
 `tests/README.md`. L'une charge un extrait des règles d'ElegantFin **après** les nôtres pour
 vérifier que la cohabitation tient.
 Les deux suites navigateur chargent le vrai `media-carousel.js` et le vrai `configPage.html`

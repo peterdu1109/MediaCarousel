@@ -33,6 +33,7 @@
     <Compile Include="../../Services/GlobalTopRematch.cs" />
     <Compile Include="../../Services/GlobalTopFallback.cs" />
     <Compile Include="../../Services/SettingsSignature.cs" />
+    <Compile Include="../../Services/PlaybackTop.cs" />
   </ItemGroup>
 
 </Project>
