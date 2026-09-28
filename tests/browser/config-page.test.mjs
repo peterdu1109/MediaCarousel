@@ -31,7 +31,10 @@ await page.addInitScript(() => {
     EnableHomeRows: true, LocalRowTitle: 'Top 10 sur ce serveur', GlobalRowTitle: 'Top 10 mondial',
     HighlightColor: '#e50914',
     RefreshIntervalHours: 6, SyncCollections: false,
-    LocalCollectionName: 'Top 10 du serveur', GlobalCollectionName: 'Top 10 mondial'
+    LocalCollectionName: 'Top 10 du serveur', GlobalCollectionName: 'Top 10 mondial',
+    // Un vrai serveur a toujours ces valeurs : sans elles, le formulaire du banc serait
+    // invalide, ce que le bouton « Recalculer maintenant » refuse désormais d'enregistrer.
+    AllTimeRowSize: 10, BecauseRowSize: 20, RankNumberScale: 100
   };
   window.ApiClient = {
     getUrl: (p) => p,
@@ -251,11 +254,18 @@ await page.waitForFunction(() => window.__saved !== null, { timeout: 5000 });
 const saved = await page.evaluate(() => window.__saved);
 const feedbackAfterSave = await page.evaluate(() => document.querySelector('#mcFeedback').textContent);
 
-await page.evaluate(() => document.querySelector('#refreshNowButton').click());
+// RECALCUL — constate en prod le 2026-09-28 : une case cochee puis « Recalculer
+// maintenant » presse, sans « Enregistrer », recalculait avec l'ancien reglage.
+await page.evaluate(() => {
+  window.__saved = null;
+  document.querySelector('#GlobalTopSplitByType').checked = true;
+  document.querySelector('#refreshNowButton').click();
+});
 await page.waitForTimeout(300);
 const refresh = await page.evaluate(() => ({
   calls: window.__refreshCalls,
-  feedback: document.querySelector('#mcFeedback').textContent
+  feedback: document.querySelector('#mcFeedback').textContent,
+  enregistreAvant: !!window.__saved && window.__saved.GlobalTopSplitByType === true
 }));
 
 // Second passage : le Top mondial a echoue au dernier recalcul. La tolerance aux
@@ -576,6 +586,8 @@ check('enregistrement : champ replie sous Reglages avances conserve',
 check('retour utilisateur apres enregistrement', feedbackAfterSave.startsWith('Réglages enregistrés'), feedbackAfterSave);
 check('recalcul declenche une seule requete', refresh.calls === 1, refresh.calls);
 check('retour utilisateur apres recalcul', refresh.feedback.startsWith('Recalcul lancé en arrière-plan'), refresh.feedback);
+check('RECALCUL: le bouton enregistre d abord la case cochee, sans « Enregistrer »',
+  refresh.enregistreAvant === true, refresh);
 check('SEERR: decoche, le groupe est masque et hors du parcours clavier',
   seerrAuChargement.groupe === false && seerrAuChargement.champs === false && seerrAuChargement.alerte === false,
   seerrAuChargement);

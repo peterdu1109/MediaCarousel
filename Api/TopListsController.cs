@@ -259,7 +259,9 @@ public class TopListsController : ControllerBase
 
     private TopListResponseDto BuildResponse(TopListKind kind, int? limit, Guid? userId)
     {
-        var snapshot = _store.Get(kind);
+        // Entre un changement de forme du Top mondial et le recalcul qui la produit, la liste
+        // demandée est tirée de celle qui existe : la rangée ne disparaît plus.
+        var snapshot = GlobalTopFallback.For(kind, _store.Get);
         var user = ResolveUser(userId);
         var take = Math.Clamp(limit ?? snapshot.Entries.Count, 0, 100);
 

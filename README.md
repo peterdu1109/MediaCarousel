@@ -84,7 +84,7 @@ décompresse-le dans `plugins/MediaCarousel/`, puis redémarre Jellyfin.
 1. **Tableau de bord → Extensions → Media Carousel**
 2. Règle le **Top du serveur** : nombre de titres, fenêtre d'observation.
 3. Pour le **Top mondial**, choisis TMDB ou Trakt et colle ta clé d'API.
-4. Clique sur **Recalculer maintenant**.
+4. Clique sur **Enregistrer** : les rangées se recalculent aussitôt.
 5. Ouvre ta page d'accueil. Si les rangées n'apparaissent pas tout de suite, vide le cache du
    navigateur (**Ctrl + Maj + R**) — l'interface web garde l'ancienne page en mémoire.
 
@@ -153,7 +153,7 @@ utilisateur, donc ses droits et ses quotas s'appliquent. Pour que le bouton appa
 
 - décoche « Ne garder que ce que j'ai », sinon aucun titre absent ne s'affiche ;
 - importe tes utilisateurs Jellyfin dans Seerr (Seerr → Utilisateurs → Importer depuis Jellyfin) ;
-- attends le prochain recalcul, ou lance-le depuis la page de configuration.
+- enregistre : les rangées se recalculent aussitôt.
 
 Comme dans Jellyfin Enhanced, le bouton apparaît au survol de l'affiche — et en permanence sur
 un écran tactile ou une télévision. Un film se demande d'un clic. Une série ouvre la fenêtre de

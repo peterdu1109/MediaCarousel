@@ -201,6 +201,18 @@ veilleur. Côté client, les deux rangées restent la seule rangée `global` —
 l'ordre, même case dans le panneau de personnalisation —, films d'abord. La collection réunit les
 deux moitiés.
 
+**Un réglage enregistré agit tout de suite.** Constaté en prod le 2026-09-28 : la case « séparées »
+cochée, les deux listes n'existaient qu'au recalcul suivant, et le Top mondial disparaissait
+jusque-là ; Elie a décoché. Deux parades :
+- `RefreshOnSettingsChange` écoute `ConfigurationChanged` et relance le recalcul 3 s après un
+  enregistrement qui change l'empreinte des réglages (`SettingsSignature`). Les identifiants de
+  collection, que le recalcul écrit lui-même, en sont exclus : sinon il se relancerait sans fin.
+  Un recalcul en cours a lu l'ancienne configuration : on attend qu'il finisse.
+- `GlobalTopFallback` : en attendant, une liste du Top mondial encore vide est tirée de l'autre
+  forme — films et séries filtrés de la liste mêlée, ou liste mêlée refaite des deux moitiés.
+Et « Recalculer maintenant » enregistre d'abord le formulaire : pressé après une case cochée,
+sans « Enregistrer », il recalculait avec l'ancien réglage.
+
 ### Demandes à Seerr
 
 Un titre du Top mondial absent de la bibliothèque porte un bouton « Demander », qui passe la
@@ -831,7 +843,7 @@ dotnet run --project tests/ScriptTag.Tests -c Release
 cd tests/browser && npm install && node home-rows.test.mjs && node config-page.test.mjs
 ```
 
-Trois suites sans framework — 495 assertions — exécutées en CI avant la publication ; voir
+Trois suites sans framework — 503 assertions — exécutées en CI avant la publication ; voir
 `tests/README.md`. L'une charge un extrait des règles d'ElegantFin **après** les nôtres pour
 vérifier que la cohabitation tient.
 Les deux suites navigateur chargent le vrai `media-carousel.js` et le vrai `configPage.html`
