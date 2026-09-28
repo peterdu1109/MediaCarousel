@@ -179,6 +179,15 @@ sans lecture retenue : le calcul sur les titres vus reprend la main. Le palmarè
 garde les compteurs de Jellyfin, dont l'histoire remonte plus loin. `Microsoft.Data.Sqlite.Core`
 est une référence de compilation seulement : le serveur fournit et initialise son fournisseur.
 
+**Un fichier remplacé garde ses lectures.** Playback Reporting retient l'identifiant de l'élément
+lu ; un fichier remplacé depuis (meilleure qualité téléchargée) en a un nouveau. Constaté en prod
+le 2026-09-28 : One Piece s23e25, vu par deux personnes, remplacé quelques heures plus tard — la
+série sortait du Top. `ResolveByName` retrouve alors le titre par le nom enregistré
+(`PlaybackNames.ParseEpisode` : « Série - sXXeYY - Titre ») : série, saison et numéro, jamais le
+titre de l'épisode, que le nouveau fichier peut donner dans une autre langue. Deux séries du même
+nom (l'anime de 1999 et la série de 2023) : celle qui a cet épisode ; aucune ou plusieurs : la
+lecture est écartée. Un film est retrouvé par son nom, s'il est le seul à le porter.
+
 ### Top mondial
 
 `ITrendingProvider` abstrait la source ; `GlobalTopListBuilder` choisit l'implémentation d'après
@@ -860,7 +869,7 @@ dotnet run --project tests/ScriptTag.Tests -c Release
 cd tests/browser && npm install && node home-rows.test.mjs && node config-page.test.mjs
 ```
 
-Trois suites sans framework — 509 assertions — exécutées en CI avant la publication ; voir
+Trois suites sans framework — 514 assertions — exécutées en CI avant la publication ; voir
 `tests/README.md`. L'une charge un extrait des règles d'ElegantFin **après** les nôtres pour
 vérifier que la cohabitation tient.
 Les deux suites navigateur chargent le vrai `media-carousel.js` et le vrai `configPage.html`

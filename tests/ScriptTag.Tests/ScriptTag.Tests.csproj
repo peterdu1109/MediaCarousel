@@ -34,6 +34,7 @@
     <Compile Include="../../Services/GlobalTopFallback.cs" />
     <Compile Include="../../Services/SettingsSignature.cs" />
     <Compile Include="../../Services/PlaybackTop.cs" />
+    <Compile Include="../../Services/PlaybackNames.cs" />
   </ItemGroup>
 
 </Project>
