@@ -690,5 +690,53 @@ Check("REMATCH: cles surveillees par type et par IMDb",
     string.Join(",", GlobalTopRematch.KeysFor("tv", "2", "tt123")) == "tv:2,imdb:tt123"
     && !GlobalTopRematch.KeysFor("movie", null, " ").Any());
 
+// ---------------------------------------------------------------------------
+// Passage d'une rangee melee a deux rangees separees : constate en prod le 2026-09-28, la
+// case cochee faisait disparaitre le Top mondial jusqu'au recalcul suivant.
+// ---------------------------------------------------------------------------
+var stock = new Dictionary<TopListKind, TopListSnapshot>
+{
+    [TopListKind.Global] = new(TopListKind.Global, "Tmdb", new[]
+    {
+        new TopListEntry { Rank = 1, Name = "Serie A", MediaType = "tv", TmdbId = "1" },
+        new TopListEntry { Rank = 2, Name = "Film A", MediaType = "movie", TmdbId = "2" },
+        new TopListEntry { Rank = 3, Name = "Film B", MediaType = "movie", TmdbId = "3" }
+    }),
+    [TopListKind.GlobalMovies] = TopListSnapshot.Empty(TopListKind.GlobalMovies),
+    [TopListKind.GlobalSeries] = TopListSnapshot.Empty(TopListKind.GlobalSeries)
+};
+TopListSnapshot Lire(TopListKind kind) => stock[kind];
+
+var filmsTires = GlobalTopFallback.For(TopListKind.GlobalMovies, Lire);
+Check("SECOURS: avant le recalcul, les films sont tires de la liste melee, renumerotes",
+    string.Join(",", filmsTires.Entries.Select(e => e.Rank + e.Name)) == "1Film A,2Film B"
+    && filmsTires.Kind == TopListKind.GlobalMovies);
+Check("SECOURS: et les series de meme",
+    string.Join(",", GlobalTopFallback.For(TopListKind.GlobalSeries, Lire).Entries.Select(e => e.Name)) == "Serie A");
+Check("SECOURS: une liste deja calculee est servie telle quelle",
+    ReferenceEquals(GlobalTopFallback.For(TopListKind.Global, Lire), stock[TopListKind.Global]));
+
+stock[TopListKind.GlobalMovies] = filmsTires;
+stock[TopListKind.Global] = TopListSnapshot.Empty(TopListKind.Global);
+Check("SECOURS: au retour a la liste melee, elle est refaite des deux moities",
+    GlobalTopFallback.For(TopListKind.Global, Lire).Entries.Count == 2);
+Check("SECOURS: rien a tirer, la liste vide reste vide",
+    GlobalTopFallback.For(TopListKind.GlobalSeries, Lire).Entries.Count == 0);
+
+// Le recalcul relance par un enregistrement ne doit pas se relancer lui-meme : il ecrit
+// les identifiants de ses collections dans la configuration.
+var reglages = new System.Text.Json.Nodes.JsonObject
+{
+    ["GlobalTopSplitByType"] = false,
+    ["GlobalCollectionId"] = "a"
+};
+var empreinte = SettingsSignature.Of(reglages);
+reglages["GlobalCollectionId"] = "b";
+Check("REGLAGES: les identifiants de collection ne comptent pas comme un changement",
+    SettingsSignature.Of(reglages) == empreinte);
+reglages["GlobalTopSplitByType"] = true;
+Check("REGLAGES: cocher la case separee compte comme un changement",
+    SettingsSignature.Of(reglages) != empreinte);
+
 Console.WriteLine(failed == 0 ? "\nTous les tests passent." : $"\n{failed} echec(s).");
 return failed;

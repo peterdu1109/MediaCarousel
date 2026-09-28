@@ -61,6 +61,12 @@ public sealed class TopListRefreshService
     }
 
     /// <summary>
+    /// Obtient une valeur indiquant si un recalcul est en cours : il a lu la configuration
+    /// à son départ, et un nouvel appel serait ignoré.
+    /// </summary>
+    public bool IsRefreshing => _gate.CurrentCount == 0;
+
+    /// <summary>
     /// Recalcule les classements activés.
     /// </summary>
     /// <remarks>

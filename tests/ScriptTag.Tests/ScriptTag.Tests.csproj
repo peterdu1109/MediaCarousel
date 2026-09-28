@@ -31,6 +31,8 @@
     <Compile Include="../../Models/TopListSnapshot.cs" />
     <Compile Include="../../Providers/TrendingTitle.cs" />
     <Compile Include="../../Services/GlobalTopRematch.cs" />
+    <Compile Include="../../Services/GlobalTopFallback.cs" />
+    <Compile Include="../../Services/SettingsSignature.cs" />
   </ItemGroup>
 
 </Project>

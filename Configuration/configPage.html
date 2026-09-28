@@ -1460,44 +1460,74 @@
                     });
                 });
 
-                page.querySelector('#mediaCarouselConfigForm').addEventListener('submit', function (event) {
-                    event.preventDefault();
+                /* Enregistre le formulaire. « Recalculer maintenant » passe aussi par là : une
+                   case cochée puis ce bouton pressé, sans « Enregistrer », recalculait avec
+                   l'ancien réglage, et le choix était perdu (constaté en prod le 2026-09-28). */
+                function save() {
                     Dashboard.showLoadingMsg();
-                    say('');
 
-                    ApiClient.getPluginConfiguration(pluginId).then(function (config) {
+                    return ApiClient.getPluginConfiguration(pluginId).then(function (config) {
                         checkboxes.forEach(function (id) { config[id] = field(id).checked; });
                         numbers.forEach(function (id) { config[id] = parseInt(field(id).value, 10) || 0; });
                         decimals.forEach(function (id) { config[id] = parseFloat(field(id).value) || 0; });
                         texts.forEach(function (id) { config[id] = field(id).value; });
                         lists.forEach(function (id) { config[id] = toList(field(id).value); });
 
-                        ApiClient.updatePluginConfiguration(pluginId, config).then(function (result) {
-                            Dashboard.processPluginConfigurationUpdateResult(result);
-                            say('Réglages enregistrés. Les rangées se mettront à jour au prochain recalcul.');
+                        return ApiClient.updatePluginConfiguration(pluginId, config);
+                    }).then(function (result) {
+                        Dashboard.processPluginConfigurationUpdateResult(result);
+                        return true;
+                    }, function () {
+                        Dashboard.hideLoadingMsg();
+                        say('L\'enregistrement a échoué.');
+                        return false;
+                    });
+                }
+
+                page.querySelector('#mediaCarouselConfigForm').addEventListener('submit', function (event) {
+                    event.preventDefault();
+                    say('');
+
+                    save().then(function (saved) {
+                        if (saved) {
+                            // Le serveur relance lui-même le recalcul dès qu'un réglage change.
+                            say('Réglages enregistrés. Les rangées se mettent à jour dans un instant.');
                             loadStatus();
-                        }, function () {
-                            Dashboard.hideLoadingMsg();
-                            say('L\'enregistrement a échoué.');
-                        });
+                            window.setTimeout(loadStatus, 10000);
+                        }
                     });
 
                     return false;
                 });
 
                 page.querySelector('#refreshNowButton').addEventListener('click', function () {
+                    var form = page.querySelector('#mediaCarouselConfigForm');
+
+                    // Les mêmes contrôles qu'« Enregistrer » : un nombre vidé serait sinon
+                    // enregistré à zéro.
+                    if (!form.checkValidity()) {
+                        form.reportValidity();
+                        return;
+                    }
+
                     say('Recalcul lancé…');
 
-                    ApiClient.ajax({
-                        type: 'POST',
-                        url: ApiClient.getUrl('MediaCarousel/Top/Refresh')
-                    }).then(function () {
-                        say('Recalcul lancé en arrière-plan. L\'état ci-dessus se met à jour une fois terminé.');
-                        // Le recalcul est asynchrone : on relit l'état un peu plus tard.
-                        window.setTimeout(loadStatus, 5000);
-                        window.setTimeout(loadStatus, 20000);
-                    }, function () {
-                        say('Le recalcul n\'a pas pu être lancé.');
+                    save().then(function (saved) {
+                        if (!saved) {
+                            return;
+                        }
+
+                        ApiClient.ajax({
+                            type: 'POST',
+                            url: ApiClient.getUrl('MediaCarousel/Top/Refresh')
+                        }).then(function () {
+                            say('Recalcul lancé en arrière-plan. L\'état ci-dessus se met à jour une fois terminé.');
+                            // Le recalcul est asynchrone : on relit l'état un peu plus tard.
+                            window.setTimeout(loadStatus, 5000);
+                            window.setTimeout(loadStatus, 20000);
+                        }, function () {
+                            say('Le recalcul n\'a pas pu être lancé.');
+                        });
                     });
                 });
             })();

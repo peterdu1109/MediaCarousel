@@ -42,6 +42,9 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         // y passe « présent » sans attendre le recalcul suivant.
         serviceCollection.AddHostedService<GlobalTopLibraryWatcher>();
 
+        // Un réglage enregistré prend effet tout de suite, pas au recalcul suivant.
+        serviceCollection.AddHostedService<RefreshOnSettingsChange>();
+
         // Les sources externes sont injectées en liste ; le fournisseur actif est choisi à l'exécution.
         serviceCollection.AddSingleton<ITrendingProvider, TmdbTrendingProvider>();
         serviceCollection.AddSingleton<ITrendingProvider, TraktTrendingProvider>();
