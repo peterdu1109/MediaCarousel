@@ -1743,9 +1743,27 @@
             + '<button type="button" class="mc-arrow mc-arrow-next" tabindex="-1" aria-hidden="true">&#10095;</button>'
             + '</div>';
 
+        // En quittant l'accueil, jellyfin-web 12.1 appelle `pause()` sur chaque `.itemsContainer`
+        // qu'il contient, sans vérifier qu'elle existe (`homeSections.pause`, lu dans son code) :
+        // sur nos bandes, simples `div`, l'exception remontait jusqu'à React, qui remplaçait la
+        // page par son écran d'erreur. Elles n'ont rien à suspendre ni à reprendre.
+        var containers = section.querySelectorAll('.itemsContainer');
+        for (var i = 0; i < containers.length; i++) {
+            containers[i].pause = pauseNothing;
+            containers[i].resume = resumeNothing;
+        }
+
         wireArrows(section);
         watchImages(section.querySelector('.mc-strip'));
         return section;
+    }
+
+    // Le contrat d'un `emby-itemscontainer` qui n'a rien à faire : voir buildRow().
+    function pauseNothing() {
+    }
+
+    function resumeNothing() {
+        return Promise.resolve();
     }
 
     function wireArrows(section) {
