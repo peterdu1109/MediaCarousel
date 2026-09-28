@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/icon.png",
     "versions": [
       {
+        "version": "3.15.1.0",
+        "changelog": "Corrections :\n- Quitter l'accueil ne provoque plus d'erreur dans jellyfin-web (« t.value.pause is not a function »)",
+        "targetAbi": "10.11.11.0",
+        "sourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/3.15.1/JellyfinCarouselPlugin.zip",
+        "checksum": "0a86d8eec17a9e9c1546892c854d7be5",
+        "timestamp": "2026-09-28T05:40:18Z"
+      },
+      {
         "version": "3.15.0.0",
         "changelog": "Nouveautes :\n- Demander à Seerr un titre du Top mondial absent de la bibliothèque, comme dans Jellyfin Enhanced : choix des saisons, options avancées (serveur, profil, dossier)\nCorrections :\n- L'accueil ne relance plus en boucle un serveur qui échoue\n- Changer de compte n'affiche plus les rangées du précédent ; une connexion tardive a bien les siennes\n- L'intervalle de recalcul s'applique dès le démarrage\n- La page de configuration ne double plus les boutons d'ordre après un retour",
         "targetAbi": "10.11.11.0",
