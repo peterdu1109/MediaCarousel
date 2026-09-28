@@ -1,0 +1,10 @@
+/* Règles des cases à cocher de jellyfin-web 12.1, relevées telles quelles dans son bundle
+   (C:\Program Files\Jellyfin\Server\jellyfin-web, le 2026-09-28). Sans elles, le banc de la
+   page de configuration ne voyait pas le défaut du téléphone : `.checkboxContainer` en ligne,
+   libellé à hauteur fixe centré, qui débordait sur le texte du dessus dès qu'il passait sur
+   plusieurs lignes. */
+.checkboxContainer{display:-webkit-flex;display:flex}
+.checkboxContainer,.checkboxListContainer{margin-bottom:1.8em}
+.checkboxContainer-withDescription{-webkit-flex-direction:column;flex-direction:column}
+.checkboxFieldDescription{padding-left:2.4em}
+.emby-checkbox-label{-webkit-align-items:center;align-items:center;box-sizing:border-box;cursor:pointer;display:-webkit-inline-flex;display:inline-flex;height:2.35em;margin:0;padding:0;padding-left:2.4em;position:relative;vertical-align:middle;width:100%;z-index:1}
