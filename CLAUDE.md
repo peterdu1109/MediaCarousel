@@ -180,6 +180,17 @@ deux indépendamment), IMDb, et titre normalisé + année en dernier recours.
 Sur-échantillonnage `size × 5` quand `GlobalTopLibraryOnly` est actif, pour remplir les places
 après filtrage.
 
+**La présence suit la bibliothèque entre deux recalculs.** Un titre demandé via Seerr arrive des
+heures avant le recalcul suivant : il restait « absent », bouton compris. `GlobalTopLibraryWatcher`
+écoute `ItemAdded`, `ItemUpdated` (les identifiants TMDB arrivent souvent avec les métadonnées,
+après l'ajout) et `ItemRemoved`. Quand un film ou une série du classement est concerné — recherche
+dans un ensemble de clés `movie:tmdb` / `tv:tmdb` / `imdb:`, rien de plus coûteux, scans compris —
+il relance après 30 s le seul rapprochement (`GlobalTopRematch`), sans rappeler la source. Rang et
+date de calcul sont conservés. `ITopListStore.TryReplace` ne remplace l'instantané que s'il est
+toujours celui d'origine : un recalcul publié entre-temps a le dernier mot. Pas de verrou commun
+avec le recalcul, qu'un verrou pris ferait abandonner ; la collection suit au recalcul suivant.
+Rien sous `GlobalTopLibraryOnly` : la liste n'y contient aucun absent.
+
 ### Demandes à Seerr
 
 Un titre du Top mondial absent de la bibliothèque porte un bouton « Demander », qui passe la
@@ -810,7 +821,7 @@ dotnet run --project tests/ScriptTag.Tests -c Release
 cd tests/browser && npm install && node home-rows.test.mjs && node config-page.test.mjs
 ```
 
-Trois suites sans framework — 484 assertions — exécutées en CI avant la publication ; voir
+Trois suites sans framework — 492 assertions — exécutées en CI avant la publication ; voir
 `tests/README.md`. L'une charge un extrait des règles d'ElegantFin **après** les nôtres pour
 vérifier que la cohabitation tient.
 Les deux suites navigateur chargent le vrai `media-carousel.js` et le vrai `configPage.html`

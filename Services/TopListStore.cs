@@ -15,6 +15,7 @@ namespace JellyfinCarouselPlugin.Services;
 public sealed class TopListStore : ITopListStore
 {
     private readonly ConcurrentDictionary<TopListKind, TopListSnapshot> _snapshots = new();
+    private readonly object _writeLock = new();
     private readonly SnapshotStorage _storage;
 
     /// <summary>
@@ -40,7 +41,31 @@ public sealed class TopListStore : ITopListStore
     {
         ArgumentNullException.ThrowIfNull(snapshot);
 
-        _snapshots[snapshot.Kind] = snapshot;
-        _storage.SaveTopList(snapshot);
+        lock (_writeLock)
+        {
+            _snapshots[snapshot.Kind] = snapshot;
+            _storage.SaveTopList(snapshot);
+        }
+    }
+
+    /// <inheritdoc />
+    public bool TryReplace(TopListSnapshot expected, TopListSnapshot replacement)
+    {
+        ArgumentNullException.ThrowIfNull(expected);
+        ArgumentNullException.ThrowIfNull(replacement);
+
+        // Sous le même verrou que Publish : la mémoire et le disque finissent sur le même
+        // instantané, quel que soit l'ordre d'arrivée des deux écritures.
+        lock (_writeLock)
+        {
+            if (!_snapshots.TryGetValue(replacement.Kind, out var current) || !ReferenceEquals(current, expected))
+            {
+                return false;
+            }
+
+            _snapshots[replacement.Kind] = replacement;
+            _storage.SaveTopList(replacement);
+            return true;
+        }
     }
 }

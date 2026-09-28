@@ -75,18 +75,7 @@ public sealed class GlobalTopListBuilder
             return new TopListSnapshot(TopListKind.Global, provider.Kind.ToString(), Array.Empty<TopListEntry>());
         }
 
-        // Les bibliothèques exclues ne sont pas indexées : leurs titres apparaissent comme
-        // absents du serveur au lieu d'être rapprochés puis affichés.
-        var excludedLibraries = new HashSet<Guid>();
-        foreach (var value in config.ExcludedLibraryIds)
-        {
-            if (Guid.TryParse(value, out var parsed))
-            {
-                excludedLibraries.Add(parsed);
-            }
-        }
-
-        var index = LibraryTitleIndex.Build(_libraryManager, excludedLibraries, config.ExcludeChannelContent);
+        var index = BuildIndex(config);
         var entries = new List<TopListEntry>(size);
 
         // Dernier filet contre les doublons. La source en produit — une liste « tendances »
@@ -145,6 +134,40 @@ public sealed class GlobalTopListBuilder
             index.Count);
 
         return new TopListSnapshot(TopListKind.Global, provider.Kind.ToString(), entries);
+    }
+
+    /// <summary>
+    /// Refait le seul rapprochement avec la bibliothèque, sans rappeler la source externe :
+    /// voir <see cref="GlobalTopRematch"/>.
+    /// </summary>
+    /// <param name="snapshot">Instantané publié.</param>
+    /// <param name="config">Configuration courante du plugin.</param>
+    /// <returns>Le nouvel instantané, ou <c>null</c> si aucune présence n'a changé.</returns>
+    public TopListSnapshot? Rematch(TopListSnapshot snapshot, PluginConfiguration config)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        ArgumentNullException.ThrowIfNull(config);
+
+        var index = BuildIndex(config);
+        return GlobalTopRematch.Apply(snapshot, title => index.TryResolve(title, out var itemId) ? itemId : Guid.Empty);
+    }
+
+    /// <summary>
+    /// Index de la bibliothèque, bibliothèques exclues comprises : leurs titres ne sont pas
+    /// indexés et apparaissent donc absents du serveur, au lieu d'être rapprochés puis affichés.
+    /// </summary>
+    private LibraryTitleIndex BuildIndex(PluginConfiguration config)
+    {
+        var excludedLibraries = new HashSet<Guid>();
+        foreach (var value in config.ExcludedLibraryIds)
+        {
+            if (Guid.TryParse(value, out var parsed))
+            {
+                excludedLibraries.Add(parsed);
+            }
+        }
+
+        return LibraryTitleIndex.Build(_libraryManager, excludedLibraries, config.ExcludeChannelContent);
     }
 
     /// <summary>
