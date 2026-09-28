@@ -158,6 +158,28 @@ public class PluginConfiguration : BasePluginConfiguration
     public bool GlobalTopLibraryOnly { get; set; } = true;
 
     /// <summary>
+    /// Obtient ou définit une valeur indiquant si films et séries ont chacun leur rangée,
+    /// au lieu d'un classement mêlé. Sans effet si les types de médias ne sont pas « Films et séries ».
+    /// </summary>
+    public bool GlobalTopSplitByType { get; set; }
+
+    /// <summary>
+    /// Obtient ou définit le titre de la rangée des films, quand films et séries sont séparés.
+    /// </summary>
+    public string GlobalMoviesRowTitle { get; set; } = "Top 10 des films";
+
+    /// <summary>
+    /// Obtient ou définit le titre de la rangée des séries, quand films et séries sont séparés.
+    /// </summary>
+    public string GlobalSeriesRowTitle { get; set; } = "Top 10 des séries";
+
+    /// <summary>
+    /// Obtient une valeur indiquant si le Top mondial est calculé en deux listes séparées.
+    /// </summary>
+    /// <returns><c>true</c> si films et séries ont chacun leur rangée.</returns>
+    public bool IsGlobalTopSplit() => GlobalTopSplitByType && GlobalTopMediaKind == TopListMediaKind.Both;
+
+    /// <summary>
     /// Obtient ou définit la langue des métadonnées demandées au fournisseur (code BCP-47).
     /// </summary>
     public string MetadataLanguage { get; set; } = "fr-FR";

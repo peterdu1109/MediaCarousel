@@ -42,12 +42,31 @@ public sealed class GlobalTopListBuilder
     }
 
     /// <summary>
-    /// Construit le classement global.
+    /// Construit le classement global, mêlant les types de médias configurés.
     /// </summary>
     /// <param name="config">Configuration courante du plugin.</param>
     /// <param name="cancellationToken">Jeton d'annulation.</param>
     /// <returns>Un instantané classé par rang croissant.</returns>
-    public async Task<TopListSnapshot> BuildAsync(PluginConfiguration config, CancellationToken cancellationToken)
+    public Task<TopListSnapshot> BuildAsync(PluginConfiguration config, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(config);
+        return BuildAsync(config, TopListKind.Global, config.GlobalTopMediaKind, cancellationToken);
+    }
+
+    /// <summary>
+    /// Construit une liste du classement global : mêlée, ou réduite aux films ou aux séries
+    /// quand chacun a sa rangée. Chaque moitié compte alors ses propres {size} places.
+    /// </summary>
+    /// <param name="config">Configuration courante du plugin.</param>
+    /// <param name="kind">Nature de la liste produite.</param>
+    /// <param name="mediaKind">Types de médias demandés à la source.</param>
+    /// <param name="cancellationToken">Jeton d'annulation.</param>
+    /// <returns>Un instantané classé par rang croissant.</returns>
+    public async Task<TopListSnapshot> BuildAsync(
+        PluginConfiguration config,
+        TopListKind kind,
+        TopListMediaKind mediaKind,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(config);
 
@@ -61,7 +80,7 @@ public sealed class GlobalTopListBuilder
         var fetchLimit = config.GlobalTopLibraryOnly ? Math.Min(size * 5, 100) : size;
 
         var request = new TrendingRequest(
-            config.GlobalTopMediaKind,
+            mediaKind,
             fetchLimit,
             string.IsNullOrWhiteSpace(config.MetadataLanguage) ? "en-US" : config.MetadataLanguage,
             config.GlobalTopApiKey,
@@ -72,7 +91,7 @@ public sealed class GlobalTopListBuilder
         if (titles.Count == 0)
         {
             _logger.LogWarning("{Provider} n'a renvoyé aucun titre.", provider.Kind);
-            return new TopListSnapshot(TopListKind.Global, provider.Kind.ToString(), Array.Empty<TopListEntry>());
+            return new TopListSnapshot(kind, provider.Kind.ToString(), Array.Empty<TopListEntry>());
         }
 
         var index = BuildIndex(config);
@@ -127,29 +146,33 @@ public sealed class GlobalTopListBuilder
         }
 
         _logger.LogInformation(
-            "Top global recalculé via {Provider} : {Count} entrée(s) sur {Fetched} titre(s) reçus ({Indexed} éléments indexés).",
+            "Top global ({Kind}) recalculé via {Provider} : {Count} entrée(s) sur {Fetched} titre(s) reçus ({Indexed} éléments indexés).",
+            kind,
             provider.Kind,
             entries.Count,
             titles.Count,
             index.Count);
 
-        return new TopListSnapshot(TopListKind.Global, provider.Kind.ToString(), entries);
+        return new TopListSnapshot(kind, provider.Kind.ToString(), entries);
     }
 
     /// <summary>
-    /// Refait le seul rapprochement avec la bibliothèque, sans rappeler la source externe :
-    /// voir <see cref="GlobalTopRematch"/>.
+    /// Prépare le seul rapprochement avec la bibliothèque, sans rappeler la source externe :
+    /// voir <see cref="GlobalTopRematch"/>. L'index est construit une fois, pour toutes les
+    /// listes à rapprocher.
     /// </summary>
-    /// <param name="snapshot">Instantané publié.</param>
     /// <param name="config">Configuration courante du plugin.</param>
-    /// <returns>Le nouvel instantané, ou <c>null</c> si aucune présence n'a changé.</returns>
-    public TopListSnapshot? Rematch(TopListSnapshot snapshot, PluginConfiguration config)
+    /// <returns>
+    /// Une fonction qui rend le nouvel instantané, ou <c>null</c> si aucune présence n'a changé.
+    /// </returns>
+    public Func<TopListSnapshot, TopListSnapshot?> CreateRematcher(PluginConfiguration config)
     {
-        ArgumentNullException.ThrowIfNull(snapshot);
         ArgumentNullException.ThrowIfNull(config);
 
         var index = BuildIndex(config);
-        return GlobalTopRematch.Apply(snapshot, title => index.TryResolve(title, out var itemId) ? itemId : Guid.Empty);
+        return snapshot => GlobalTopRematch.Apply(
+            snapshot,
+            title => index.TryResolve(title, out var itemId) ? itemId : Guid.Empty);
     }
 
     /// <summary>

@@ -321,6 +321,30 @@
                                     </div>
                                 </div>
 
+                                <div class="checkboxContainer">
+                                    <label class="emby-checkbox-label">
+                                        <input is="emby-checkbox" type="checkbox" id="GlobalTopSplitByType"
+                                               aria-describedby="hintGlobalSplit" data-toggles="groupGlobalSplit" />
+                                        <span>Une rangée pour les films, une pour les séries</span>
+                                    </label>
+                                    <div class="fieldDescription checkboxFieldDescription" id="hintGlobalSplit">
+                                        Avec « Films et séries » : deux classements séparés au lieu d'un seul mélangé.
+                                    </div>
+                                </div>
+
+                                <div id="groupGlobalSplit">
+                                    <div class="mcCfg-grid">
+                                        <div class="inputContainer">
+                                            <input is="emby-input" type="text" id="GlobalMoviesRowTitle"
+                                                   label="Titre — films" />
+                                        </div>
+                                        <div class="inputContainer">
+                                            <input is="emby-input" type="text" id="GlobalSeriesRowTitle"
+                                                   label="Titre — séries" />
+                                        </div>
+                                    </div>
+                                </div>
+
                                 <div class="inputContainer">
                                     <input is="emby-input" type="password" id="GlobalTopApiKey" autocomplete="off"
                                            label="Clé d'API" aria-describedby="hintApiKey" />
@@ -802,7 +826,7 @@
                     'EnableHomeRows', 'HideNativeHomeSections', 'ManageNativeSections', 'SyncCollections',
                     'AllowUserPreferences',
                     'ExcludeChannelContent',
-                    'EnableSeerrRequests', 'SeerrAdvancedRequests'
+                    'EnableSeerrRequests', 'SeerrAdvancedRequests', 'GlobalTopSplitByType'
                 ];
                 var numbers = [
                     'LocalTopSize', 'LocalTopWindowDays', 'MaxPlaysCountedPerUser', 'CandidatesPerUser',
@@ -819,7 +843,7 @@
                     'GlobalTopFeed',
                     'MetadataLanguage', 'StudioRowTitle', 'ReturningRowTitle', 'NeverPlayedRowTitle',
                     'BecauseRowTitle', 'AllTimeRowTitle', 'RowOrder',
-                    'LocalRowTitle', 'GlobalRowTitle',
+                    'LocalRowTitle', 'GlobalRowTitle', 'GlobalMoviesRowTitle', 'GlobalSeriesRowTitle',
                     'HighlightColor', 'LocalCollectionName', 'GlobalCollectionName',
                     'SeerrUrl', 'SeerrApiKey'
                 ];

@@ -174,22 +174,37 @@ public sealed class TopListRefreshService
 
         try
         {
-            var current = _store.Get(TopListKind.Global);
-            var updated = _globalBuilder.Rematch(current, config);
-            if (updated is null || !_store.TryReplace(current, updated))
+            // Un seul index pour les trois listes : mêlée, ou films et séries séparés.
+            var rematch = _globalBuilder.CreateRematcher(config);
+            var changed = false;
+
+            foreach (var kind in GlobalTopKinds.All)
             {
-                return false;
+                var current = _store.Get(kind);
+                if (current.Entries.Count == 0)
+                {
+                    continue;
+                }
+
+                var updated = rematch(current);
+                if (updated is null || !_store.TryReplace(current, updated))
+                {
+                    continue;
+                }
+
+                changed = true;
+                _logger.LogInformation(
+                    "Top mondial ({Kind}) : présence dans la bibliothèque mise à jour sans recalcul, {Count} titre(s) présent(s) sur {Total}.",
+                    kind,
+                    updated.Entries.Count(e => e.IsInLibrary),
+                    updated.Entries.Count);
             }
 
-            _logger.LogInformation(
-                "Top mondial : présence dans la bibliothèque mise à jour sans recalcul, {Count} titre(s) présent(s) sur {Total}.",
-                updated.Entries.Count(e => e.IsInLibrary),
-                updated.Entries.Count);
-            return true;
+            return changed;
         }
         catch (Exception ex)
         {
-            // L'instantané publié reste valable : il attendra le recalcul suivant.
+            // Les instantanés publiés restent valables : ils attendront le recalcul suivant.
             _logger.LogWarning(ex, "Échec du rapprochement du Top mondial avec la bibliothèque.");
             return false;
         }
@@ -301,13 +316,41 @@ public sealed class TopListRefreshService
     {
         try
         {
-            var snapshot = await _globalBuilder.BuildAsync(config, cancellationToken).ConfigureAwait(false);
-            _store.Publish(snapshot);
+            TopListSnapshot collection;
+
+            if (config.IsGlobalTopSplit())
+            {
+                // Chaque moitié a ses propres places : un Top 10 des films et un Top 10 des
+                // séries, et non les deux parts d'un classement mêlé.
+                var movies = await _globalBuilder.BuildAsync(
+                    config, TopListKind.GlobalMovies, TopListMediaKind.Movies, cancellationToken).ConfigureAwait(false);
+                _store.Publish(movies);
+
+                var series = await _globalBuilder.BuildAsync(
+                    config, TopListKind.GlobalSeries, TopListMediaKind.Series, cancellationToken).ConfigureAwait(false);
+                _store.Publish(series);
+
+                // La liste mêlée ne sert plus : vidée, elle ne peut plus autoriser de demande.
+                _store.Publish(TopListSnapshot.Empty(TopListKind.Global));
+
+                // La collection réunit les deux moitiés, films d'abord.
+                collection = new TopListSnapshot(
+                    TopListKind.Global,
+                    movies.Source,
+                    movies.Entries.Concat(series.Entries).ToArray());
+            }
+            else
+            {
+                collection = await _globalBuilder.BuildAsync(config, cancellationToken).ConfigureAwait(false);
+                _store.Publish(collection);
+                _store.Publish(TopListSnapshot.Empty(TopListKind.GlobalMovies));
+                _store.Publish(TopListSnapshot.Empty(TopListKind.GlobalSeries));
+            }
 
             if (config.SyncCollections)
             {
                 var id = await _collectionSynchronizer.SyncAsync(
-                    snapshot,
+                    collection,
                     config.GlobalCollectionName,
                     ParseGuid(config.GlobalCollectionId),
                     cancellationToken).ConfigureAwait(false);

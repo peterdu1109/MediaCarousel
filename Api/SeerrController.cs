@@ -386,19 +386,23 @@ public class SeerrController : ControllerBase
     }
 
     /// <summary>
-    /// Les titres absents de la bibliothèque dans le Top mondial publié.
+    /// Les titres absents de la bibliothèque dans le Top mondial publié — liste mêlée, ou
+    /// films et séries séparés.
     /// </summary>
     private HashSet<string> PublishedTitles()
     {
         var titles = new HashSet<string>(StringComparer.Ordinal);
 
-        foreach (var entry in _store.Get(TopListKind.Global).Entries)
+        foreach (var kind in GlobalTopKinds.All)
         {
-            if (!entry.IsInLibrary
-                && SeerrRules.IsMediaType(entry.MediaType)
-                && int.TryParse(entry.TmdbId, NumberStyles.None, CultureInfo.InvariantCulture, out var tmdbId))
+            foreach (var entry in _store.Get(kind).Entries)
             {
-                titles.Add(Key(entry.MediaType!, tmdbId));
+                if (!entry.IsInLibrary
+                    && SeerrRules.IsMediaType(entry.MediaType)
+                    && int.TryParse(entry.TmdbId, NumberStyles.None, CultureInfo.InvariantCulture, out var tmdbId))
+                {
+                    titles.Add(Key(entry.MediaType!, tmdbId));
+                }
             }
         }
 

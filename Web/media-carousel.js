@@ -2511,15 +2511,21 @@
     }
 
     function collectRows(opts) {
+        var globalSize = { limit: opts.GlobalRowSize || 10 };
+        // Films et séries séparés : deux classements, chacun avec ses propres places.
+        var globalSplit = opts.ShowGlobalRow && opts.GlobalSplit === true;
         var requests = [
             opts.ShowLocalRow ? loadCached('MediaCarousel/Top/Local', { limit: opts.LocalRowSize || 10 }) : [],
             opts.ShowAllTimeRow ? loadCached('MediaCarousel/Top/AllTime', { limit: opts.AllTimeRowSize || 10 }) : [],
-            opts.ShowGlobalRow ? loadCached('MediaCarousel/Top/Global', { limit: opts.GlobalRowSize || 10 }) : [],
+            opts.ShowGlobalRow
+                ? loadCached(globalSplit ? 'MediaCarousel/Top/GlobalMovies' : 'MediaCarousel/Top/Global', globalSize)
+                : [],
             opts.ShowReturningRow ? loadCached('MediaCarousel/Rows/Returning', { limit: opts.ReturningRowSize || 20 }) : [],
             opts.ShowNeverPlayedRow ? loadCached('MediaCarousel/Rows/NeverPlayed', { limit: opts.NeverPlayedRowSize || 20 }) : [],
             opts.ShowStudioRow ? loadCached('MediaCarousel/Studios', { limit: opts.StudioRowSize || 20 }) : [],
             opts.ShowGenreRows ? loadCached('MediaCarousel/Genres', { limit: opts.GenreRowCount || 6 }) : [],
-            opts.ShowBecauseRow ? loadBecause(opts) : null
+            opts.ShowBecauseRow ? loadBecause(opts) : null,
+            globalSplit ? loadCached('MediaCarousel/Top/GlobalSeries', globalSize) : []
         ];
 
         return Promise.all(requests).then(function (results) {
@@ -2556,8 +2562,15 @@
                 alltime: function () {
                     addRanked(results[1], opts.AllTimeRowTitle || 'Les plus regardés de tous les temps');
                 },
+                // Séparés, films et séries restent une seule rangée pour l'ordre et pour le
+                // panneau de personnalisation : ils se suivent, films d'abord.
                 global: function () {
-                    addRanked(results[2], opts.GlobalRowTitle || 'Top 10 mondial');
+                    if (globalSplit) {
+                        addRanked(results[2], opts.GlobalMoviesRowTitle || 'Top 10 des films');
+                        addRanked(results[8], opts.GlobalSeriesRowTitle || 'Top 10 des séries');
+                    } else {
+                        addRanked(results[2], opts.GlobalRowTitle || 'Top 10 mondial');
+                    }
                 },
                 returning: function () {
                     addPlain(results[3], opts.ReturningRowTitle || 'De retour cette semaine');

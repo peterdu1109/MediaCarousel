@@ -47,7 +47,10 @@ public class StatusController : ControllerBase
         var config = plugin?.Configuration;
 
         var local = _topListStore.Get(TopListKind.Local);
-        var global = _topListStore.Get(TopListKind.Global);
+
+        // Le Top mondial se lit sur ses trois listes : mêlée, ou films et séries séparés. La
+        // tuile compte leurs titres ensemble et date le plus récent des calculs.
+        var globals = GlobalTopKinds.All.Select(_topListStore.Get).Where(s => s.Entries.Count > 0).ToArray();
         var allTime = _topListStore.Get(TopListKind.LocalAllTime);
         var neverPlayed = _topListStore.Get(TopListKind.NeverPlayed);
         var returning = _topListStore.Get(TopListKind.ReturningSeries);
@@ -68,9 +71,9 @@ public class StatusController : ControllerBase
             GlobalTop = new SectionStatusDto
             {
                 Enabled = config?.EnableGlobalTop ?? false,
-                Count = global.Entries.Count,
-                Source = global.Source,
-                GeneratedUtc = global.Entries.Count > 0 ? global.GeneratedUtc : null
+                Count = globals.Sum(s => s.Entries.Count),
+                Source = globals.Length > 0 ? globals[0].Source : "None",
+                GeneratedUtc = globals.Length > 0 ? globals.Max(s => s.GeneratedUtc) : null
             },
             AllTime = new SectionStatusDto
             {

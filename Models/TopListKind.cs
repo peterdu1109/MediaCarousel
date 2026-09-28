@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace JellyfinCarouselPlugin.Models;
 
 /// <summary>
@@ -32,5 +34,31 @@ public enum TopListKind
     /// Même calcul que <see cref="Local"/>, fenêtre en moins : les deux cohabitent pour
     /// opposer la tendance du moment au palmarès de fond.
     /// </remarks>
-    LocalAllTime = 4
+    LocalAllTime = 4,
+
+    /// <summary>
+    /// Films du classement externe, quand films et séries ont chacun leur rangée.
+    /// </summary>
+    GlobalMovies = 5,
+
+    /// <summary>
+    /// Séries du classement externe, quand films et séries ont chacun leur rangée.
+    /// </summary>
+    GlobalSeries = 6
+}
+
+/// <summary>
+/// Les listes issues du classement externe : la liste mêlée, ou ses deux moitiés séparées.
+/// </summary>
+public static class GlobalTopKinds
+{
+    /// <summary>
+    /// Obtient les trois natures, dans l'ordre d'affichage.
+    /// </summary>
+    public static IReadOnlyList<TopListKind> All { get; } = new[]
+    {
+        TopListKind.Global,
+        TopListKind.GlobalMovies,
+        TopListKind.GlobalSeries
+    };
 }

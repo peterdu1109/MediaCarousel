@@ -70,6 +70,8 @@ const stub = () => {
           ManageNativeSections: window.__manageNatives === true,
           HideNativeSections: window.__hideNative === true,
           LocalRowTitle: 'Top 10 sur ce serveur', GlobalRowTitle: 'Top 10 mondial',
+          GlobalSplit: window.__globalSplit === true,
+          GlobalMoviesRowTitle: 'Top 10 des films', GlobalSeriesRowTitle: 'Top 10 des séries',
           StudioRowTitle: 'Par studio',
           HighlightColor: window.__accent === undefined ? '#775BF4' : window.__accent,
           LocalRowSize: 10, GlobalRowSize: 10, StudioRowSize: 20,
@@ -79,6 +81,18 @@ const stub = () => {
       if (url.includes('Top/AllTime')) return Promise.resolve({ Items: ranked(3) });
       // Dix entrees, pour que le rang « 10 » — le cas ou le chiffre change de largeur — soit couvert.
       if (url.includes('Top/Local')) return Promise.resolve({ Items: ranked(10) });
+      // Avant « Top/Global », qui les engloberait : films et series separes.
+      if (url.includes('Top/GlobalMovies')) return Promise.resolve({
+        Items: [
+          { Rank: 1, Name: 'Film absent', ProductionYear: 2026, PosterUrl: 'https://img/f.jpg', Item: null },
+          { Rank: 2, Name: 'Film present', Item: { Id: 'gm', Name: 'Film present', ServerId: 'server-1', Type: 'Movie', IsFolder: false, ImageTags: { Primary: 't' } } }
+        ]
+      });
+      if (url.includes('Top/GlobalSeries')) return Promise.resolve({
+        Items: [
+          { Rank: 1, Name: 'Serie presente', Item: { Id: 'gs', Name: 'Serie presente', ServerId: 'server-1', Type: 'Series', IsFolder: true, ImageTags: { Primary: 't' } } }
+        ]
+      });
       if (url.includes('Top/Global')) return Promise.resolve({
         Items: [
           { Rank: 1, Name: 'Absent & "cité"', ProductionYear: 2024, PosterUrl: 'https://img/x.jpg', Item: null },
@@ -813,6 +827,29 @@ const lightMode = await light.evaluate(() => {
   };
 });
 await light.close();
+
+// SEPARES — demande d'Elie le 2026-09-28 : le Top mondial en deux rangees, films puis
+// series, chacune avec ses propres places. Elles suivent la meme rangee « global ».
+const separes = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+separes.on('pageerror', e => errors.push('pageerror(separes): ' + e.message));
+await separes.addInitScript(() => { window.__globalSplit = true; });
+await separes.goto('file://' + path.join(here, 'home.html'));
+await separes.evaluate(stub);
+await separes.evaluate(script);
+await separes.waitForFunction(() => document.querySelectorAll('.mc-row').length === 11, { timeout: 8000 });
+const topSepare = await separes.evaluate(() => {
+  const titres = Array.from(document.querySelectorAll('.mc-row .sectionTitle')).map(h => h.textContent);
+  const films = titres.indexOf('Top 10 des films');
+  return {
+    titres,
+    aLaSuite: films >= 0 && titres[films + 1] === 'Top 10 des séries',
+    melange: titres.includes('Top 10 mondial'),
+    classees: Array.from(document.querySelectorAll('.mc-row'))
+      .filter(r => /Top 10 des (films|séries)/.test(r.textContent) && r.querySelector('.mc-ranked')).length,
+    appels: [...new Set(window.__calls.filter(u => u.includes('Top/Global')).map(u => u.split('?')[0]))].sort()
+  };
+});
+await separes.close();
 
 // Second passage, sections natives masquees.
 const hidePage = await browser.newPage({ viewport: { width: 1280, height: 900 } });
@@ -2046,6 +2083,12 @@ check('CACHE: aucun endpoint du plugin refait apres reconstruction de l accueil'
   extraCalls.every(c => !c.startsWith('MediaCarousel/')), extraCalls);
 check('CACHE: seul le genre vide est re-interroge (resultat vide non memorise)',
   extraCalls.length === 1 && extraCalls[0].includes('GenreIds=g3'), extraCalls);
+check('SEPARES: une rangee pour les films puis une pour les series, a la suite',
+  topSepare.aLaSuite === true && topSepare.melange === false, topSepare);
+check('SEPARES: les deux sont des rangees classees', topSepare.classees === 2, topSepare);
+check('SEPARES: deux listes demandees, jamais la liste melangee',
+  JSON.stringify(topSepare.appels) === JSON.stringify(['MediaCarousel/Top/GlobalMovies', 'MediaCarousel/Top/GlobalSeries']),
+  topSepare);
 check('MASQUAGE: bibliotheques conservees', hidden.libraryVisible && hidden.libraryDisplayed, hidden);
 check('MASQUAGE: 3 sections natives masquees', hidden.nativeHidden === 3, hidden.nativeHidden);
 check('MASQUAGE: nos 10 rangees restent visibles', hidden.ourRowsVisible === 10, hidden.ourRowsVisible);

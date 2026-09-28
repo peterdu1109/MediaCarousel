@@ -92,6 +92,30 @@ public class TopListsController : ControllerBase
         => Ok(BuildResponse(TopListKind.Global, limit, userId));
 
     /// <summary>
+    /// Renvoie les films du classement mondial, quand films et séries ont chacun leur rangée.
+    /// </summary>
+    /// <param name="limit">Nombre maximal d'entrées renvoyées.</param>
+    /// <param name="userId">Utilisateur pour lequel filtrer la visibilité. Par défaut, l'appelant.</param>
+    /// <response code="200">Les films du classement mondial.</response>
+    /// <returns>Les films du classement mondial.</returns>
+    [HttpGet("Top/GlobalMovies")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public ActionResult<TopListResponseDto> GetGlobalMoviesTop([FromQuery] int? limit, [FromQuery] Guid? userId)
+        => Ok(BuildResponse(TopListKind.GlobalMovies, limit, userId));
+
+    /// <summary>
+    /// Renvoie les séries du classement mondial, quand films et séries ont chacun leur rangée.
+    /// </summary>
+    /// <param name="limit">Nombre maximal d'entrées renvoyées.</param>
+    /// <param name="userId">Utilisateur pour lequel filtrer la visibilité. Par défaut, l'appelant.</param>
+    /// <response code="200">Les séries du classement mondial.</response>
+    /// <returns>Les séries du classement mondial.</returns>
+    [HttpGet("Top/GlobalSeries")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public ActionResult<TopListResponseDto> GetGlobalSeriesTop([FromQuery] int? limit, [FromQuery] Guid? userId)
+        => Ok(BuildResponse(TopListKind.GlobalSeries, limit, userId));
+
+    /// <summary>
     /// Renvoie le classement des titres les plus lus depuis toujours.
     /// </summary>
     /// <param name="limit">Nombre maximal d'entrées renvoyées.</param>
@@ -155,6 +179,9 @@ public class TopListsController : ControllerBase
             ShowGlobalRow = config.EnableGlobalTop,
             LocalRowTitle = config.LocalRowTitle,
             GlobalRowTitle = config.GlobalRowTitle,
+            GlobalSplit = config.IsGlobalTopSplit(),
+            GlobalMoviesRowTitle = config.GlobalMoviesRowTitle,
+            GlobalSeriesRowTitle = config.GlobalSeriesRowTitle,
             HighlightColor = config.HighlightColor,
             LocalRowSize = config.LocalTopSize,
             GlobalRowSize = config.GlobalTopSize,
