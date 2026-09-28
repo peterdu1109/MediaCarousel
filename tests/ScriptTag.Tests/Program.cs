@@ -771,5 +771,19 @@ Check("VRAIES LECTURES: entre spectateurs uniques, le temps passe departage, pas
     reel[1].TitleId == Id(2) && reel[2].TitleId == Id(3));
 Check("VRAIES LECTURES: la taille est respectee", PlaybackTop.Rank(vues, 2).Count == 2);
 
+// Fichier remplace apres lecture : l'episode est retrouve par serie, saison et numero,
+// lus dans le nom que Playback Reporting enregistre (noms releves sur la prod).
+Check("NOMS: « One Piece - s23e25 - … » donne la serie, la saison et le numero",
+    PlaybackNames.ParseEpisode("One Piece - s23e25 - Le désespoir envahit Elbaf") == new PlaybackEpisodeName("One Piece", 23, 25));
+Check("NOMS: une serie dont le nom porte des tirets reste entiere",
+    PlaybackNames.ParseEpisode("Re:ZERO -Starting Life in Another World- - s03e05 - Titre")
+        == new PlaybackEpisodeName("Re:ZERO -Starting Life in Another World-", 3, 5));
+Check("NOMS: un titre d'episode avec deux-points ne gene pas",
+    PlaybackNames.ParseEpisode("The Mandalorian - s02e02 - Chapitre 10 : La passagère") == new PlaybackEpisodeName("The Mandalorian", 2, 2));
+Check("NOMS: sans titre d'episode, en capitales",
+    PlaybackNames.ParseEpisode("Lioness - S01E08") == new PlaybackEpisodeName("Lioness", 1, 8));
+Check("NOMS: un nom de film n'est pas pris pour un episode",
+    PlaybackNames.ParseEpisode("Transformers : Le Commencement") is null && PlaybackNames.ParseEpisode("") is null);
+
 Console.WriteLine(failed == 0 ? "\nTous les tests passent." : $"\n{failed} echec(s).");
 return failed;

@@ -16,7 +16,9 @@ namespace JellyfinCarouselPlugin.Services;
 /// <param name="ItemType"><c>Movie</c> ou <c>Episode</c>.</param>
 /// <param name="Seconds">Durée réellement regardée.</param>
 /// <param name="PlayedAt">Moment de la lecture, à l'heure du serveur.</param>
-public readonly record struct PlaybackRow(string UserId, string ItemId, string ItemType, int Seconds, DateTime PlayedAt);
+/// <param name="ItemName">Nom enregistré — « Série - sXXeYY - Titre » pour un épisode : il retrouve un
+/// fichier remplacé depuis.</param>
+public readonly record struct PlaybackRow(string UserId, string ItemId, string ItemType, int Seconds, DateTime PlayedAt, string ItemName);
 
 /// <summary>
 /// Lit l'historique des lectures tenu par le plugin Playback Reporting, s'il est installé.
@@ -77,7 +79,7 @@ public sealed class PlaybackReportingReader
 
             using var command = connection.CreateCommand();
             command.CommandText =
-                "SELECT UserId, ItemId, ItemType, PlayDuration, DateCreated FROM PlaybackActivity "
+                "SELECT UserId, ItemId, ItemType, PlayDuration, DateCreated, ItemName FROM PlaybackActivity "
                 + "WHERE DateCreated >= $since AND ItemType IN ('Movie', 'Episode')";
             command.Parameters.AddWithValue("$since", sinceLocal.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture));
 
@@ -100,7 +102,8 @@ public sealed class PlaybackReportingReader
                     Convert.ToString(reader.GetValue(1), CultureInfo.InvariantCulture) ?? string.Empty,
                     Convert.ToString(reader.GetValue(2), CultureInfo.InvariantCulture) ?? string.Empty,
                     int.TryParse(Convert.ToString(reader.GetValue(3), CultureInfo.InvariantCulture), NumberStyles.Integer, CultureInfo.InvariantCulture, out var seconds) ? seconds : 0,
-                    playedAt));
+                    playedAt,
+                    Convert.ToString(reader.GetValue(5), CultureInfo.InvariantCulture) ?? string.Empty));
             }
 
             return rows;

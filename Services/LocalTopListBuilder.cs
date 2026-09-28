@@ -311,6 +311,7 @@ public sealed class LocalTopListBuilder
             .ToHashSet();
         var types = itemTypes.Select(t => t.ToString()).ToHashSet(StringComparer.Ordinal);
         var items = new Dictionary<Guid, BaseItem?>();
+        var namesCache = new Dictionary<string, BaseItem?>(StringComparer.Ordinal);
         var titles = new Dictionary<Guid, BaseItem>();
         var views = new List<PlaybackView>();
 
@@ -332,15 +333,18 @@ public sealed class LocalTopListBuilder
                 items[itemId] = item;
             }
 
-            // Un élément supprimé depuis ne peut plus s'afficher.
-            if (item is null)
+            // Un élément disparu depuis la lecture — un fichier remplacé par une meilleure
+            // qualité, typiquement — est retrouvé par son nom ; sinon, la lecture est écartée.
+            var target = item is null
+                ? ResolveByName(row, namesCache)
+                : item is Episode episode && episode.SeriesId != Guid.Empty
+                    ? ResolveSeries(episode.SeriesId, seriesCache) ?? item
+                    : item;
+
+            if (target is null)
             {
                 continue;
             }
-
-            var target = item is Episode episode && episode.SeriesId != Guid.Empty
-                ? ResolveSeries(episode.SeriesId, seriesCache) ?? item
-                : item;
 
             if (LibraryFilter.IsExcluded(target, excludedLibraries, config.ExcludeChannelContent))
             {
@@ -381,6 +385,71 @@ public sealed class LocalTopListBuilder
             PlaybackTop.MinSecondsPerViewer / 60);
 
         return new TopListSnapshot(kind, "PlaybackReporting", entries);
+    }
+
+    /// <summary>
+    /// Retrouve le titre d'une lecture dont l'élément n'existe plus, d'après le nom que
+    /// Playback Reporting a enregistré : voir <see cref="PlaybackNames"/>.
+    /// </summary>
+    /// <remarks>
+    /// Constaté en prod le 2026-09-28 : One Piece s23e25, regardé par deux personnes, a été
+    /// remplacé quelques heures plus tard par un autre fichier, sous un autre identifiant. Un
+    /// épisode est retrouvé par série, saison et numéro — pas par son titre, que le nouveau
+    /// fichier peut donner dans une autre langue. Deux séries du même nom (l'anime de 1999 et la
+    /// série de 2023) : celle qui a cet épisode. Un film l'est par son nom, s'il est le seul.
+    /// </remarks>
+    /// <returns>La série ou le film, ou <c>null</c> si le nom ne désigne rien sans ambiguïté.</returns>
+    private BaseItem? ResolveByName(PlaybackRow row, Dictionary<string, BaseItem?> cache)
+    {
+        var key = row.ItemType + "|" + row.ItemName;
+        if (cache.TryGetValue(key, out var cached))
+        {
+            return cached;
+        }
+
+        BaseItem? found = null;
+
+        if (string.Equals(row.ItemType, nameof(BaseItemKind.Episode), StringComparison.Ordinal))
+        {
+            if (PlaybackNames.ParseEpisode(row.ItemName) is { } episode)
+            {
+                var candidates = _libraryManager.GetItemList(new InternalItemsQuery
+                {
+                    IncludeItemTypes = new[] { BaseItemKind.Series },
+                    Name = episode.Series,
+                    Recursive = true
+                });
+
+                var withEpisode = candidates
+                    .Where(series => _libraryManager.GetItemList(new InternalItemsQuery
+                    {
+                        IncludeItemTypes = new[] { BaseItemKind.Episode },
+                        AncestorIds = new[] { series.Id },
+                        ParentIndexNumber = episode.Season,
+                        IndexNumber = episode.Episode,
+                        Recursive = true,
+                        Limit = 1
+                    }).Count > 0)
+                    .ToArray();
+
+                found = withEpisode.Length == 1 ? withEpisode[0] : null;
+            }
+        }
+        else if (string.Equals(row.ItemType, nameof(BaseItemKind.Movie), StringComparison.Ordinal)
+                 && !string.IsNullOrWhiteSpace(row.ItemName))
+        {
+            var movies = _libraryManager.GetItemList(new InternalItemsQuery
+            {
+                IncludeItemTypes = new[] { BaseItemKind.Movie },
+                Name = row.ItemName.Trim(),
+                Recursive = true
+            });
+
+            found = movies.Count == 1 ? movies[0] : null;
+        }
+
+        cache[key] = found;
+        return found;
     }
 
     /// <summary>
