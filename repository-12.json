@@ -10,6 +10,14 @@
     "imageUrl": "https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/icon.png",
     "versions": [
       {
+        "version": "4.2.0.0",
+        "changelog": "<a style='color:white;text-decoration:none' href=\"https://github.com/peterdu1109/MediaCarousel/releases/tag/4.2.0-jf12\">📋 <span style='text-decoration:underline'>Release Notes v4.2.0</span></a>",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/4.2.0-jf12/JellyfinCarouselPlugin.zip",
+        "checksum": "fcfa6c10be7d0e2d921c5ce54bddbd43",
+        "timestamp": "2026-09-28T17:10:06Z"
+      },
+      {
         "version": "4.1.1.0",
         "changelog": "<a style='color:white;text-decoration:none' href=\"https://github.com/peterdu1109/MediaCarousel/releases/tag/4.1.1-jf12\">📋 <span style='text-decoration:underline'>Release Notes v4.1.1</span></a>",
         "targetAbi": "12.0.0.0",
