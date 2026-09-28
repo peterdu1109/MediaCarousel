@@ -295,6 +295,25 @@ await page.evaluate(() => {
 });
 await page.waitForFunction(() => document.querySelectorAll('.mc-row').length === 10, { timeout: 8000 });
 const afterRebuild = await page.evaluate(() => document.querySelectorAll('.mc-row').length);
+
+// PAUSE 12.1 — en quittant l'accueil, jellyfin-web 12.1 appelle pause() sur chaque
+// .itemsContainer, sans verifier (homeSections.pause, lu dans son code). Sur une simple div,
+// l'exception remontait jusqu'a React : ecran d'erreur en prod le 2026-09-28. Les sections
+// natives du banc sont de simples div : elles recoivent le pause() d'un vrai
+// emby-itemscontainer, pour ne mettre a l'epreuve que les notres.
+const pause121 = await page.evaluate(() => {
+  const accueil = document.querySelector('#homeTab .homeSectionsContainer');
+  const notres = accueil.querySelectorAll('.mc-row .itemsContainer').length;
+  accueil.querySelectorAll('.itemsContainer').forEach((e) => {
+    if (!e.closest('.mc-row')) { e.pause = () => {}; }
+  });
+  try {
+    for (const e of accueil.querySelectorAll('.itemsContainer')) { e.pause(); }
+    return { notres, resultat: 'ok' };
+  } catch (e) {
+    return { notres, resultat: String(e) };
+  }
+});
 await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
 await page.waitForTimeout(900);
 const callsAfterRebuild = await page.evaluate(() => window.__calls.slice());
@@ -2020,6 +2039,8 @@ check('PARITE: la forme native est bien celle des rangees d accueil',
 check('STUDIO: vignette au format paysage natif', result.tileIsBackdrop === true, result.tileIsBackdrop);
 check('pas de duplication sur mutation', afterMutation === 10, afterMutation);
 check('reinjection apres reconstruction', afterRebuild === 10, afterRebuild);
+check('PAUSE 12.1: quitter l accueil n echoue plus sur nos bandes, etalons compris',
+  pause121.resultat === 'ok' && pause121.notres > 10, pause121);
 const extraCalls = callsAfterRebuild.slice(callsBeforeRebuild.length);
 check('CACHE: aucun endpoint du plugin refait apres reconstruction de l accueil',
   extraCalls.every(c => !c.startsWith('MediaCarousel/')), extraCalls);

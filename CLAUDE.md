@@ -486,6 +486,13 @@ si l'administrateur supprime la collection, elle est recréée au recalcul suiva
 - **Réinjection** : `jellyfin-web` reconstruit entièrement `.homeSectionsContainer` à chaque
   affichage de l'accueil. Un `MutationObserver` débouncé, plus `hashchange` et `viewshow`,
   déclenchent un nouveau rendu ; le garde `container.querySelector('.mc-row')` évite les doublons.
+- **Nos `.itemsContainer` répondent à `pause()` et `resume()`.** La classe est là pour le thème
+  (gouttière, `.itemsContainer .card`), mais jellyfin-web 12.1 appelle `pause()` sur CHAQUE
+  `.itemsContainer` de l'accueil quand on le quitte, sans vérifier qu'elle existe
+  (`homeSections.pause`, lu dans son code ; `resume` est gardé par `e.resume &&`). Sur une
+  simple `div`, l'exception remontait jusqu'à React : en prod le 2026-09-28, passer à l'onglet
+  Favoris laissait une page vide ou l'écran d'erreur. `buildRow()` pose donc des méthodes vides
+  sur la bande et sur son étalon.
 - **Un rendu qui ne pose rien espace les suivants.** Tant qu'aucune rangée n'est posée, chaque
   mutation de la page relance un rendu — et ses requêtes, puisque rien de vide n'est mémorisé.
   Constaté en prod le 2026-09-27 : la build 10.11 installée sur Jellyfin 12.1 répondait 500 à
@@ -803,7 +810,7 @@ dotnet run --project tests/ScriptTag.Tests -c Release
 cd tests/browser && npm install && node home-rows.test.mjs && node config-page.test.mjs
 ```
 
-Trois suites sans framework — 481 assertions — exécutées en CI avant la publication ; voir
+Trois suites sans framework — 482 assertions — exécutées en CI avant la publication ; voir
 `tests/README.md`. L'une charge un extrait des règles d'ElegantFin **après** les nôtres pour
 vérifier que la cohabitation tient.
 Les deux suites navigateur chargent le vrai `media-carousel.js` et le vrai `configPage.html`
