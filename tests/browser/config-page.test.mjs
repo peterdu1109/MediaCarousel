@@ -425,6 +425,35 @@ const seerrEnregistre = await seerrPage.evaluate(() => ({
 }));
 await seerrPage.close();
 
+// TELEPHONE 12.1 — releve en prod le 2026-09-28 : jellyfin-web 12.1 met `.checkboxContainer`
+// en ligne et fixe la hauteur du libelle. Sur un telephone, le libelle serre sur six lignes
+// debordait sur le texte du dessus. Le banc charge les regles de jellyfin-web concernees.
+await page.setViewportSize({ width: 375, height: 812 });
+await page.addStyleTag({ path: path.join(repo, 'tests', 'browser', 'jellyfin-checkbox.css') });
+const telephone = await page.evaluate(async () => {
+  document.querySelectorAll('#mediaCarouselConfigPage details').forEach((d) => { d.open = true; });
+  const aCote = [];
+  const debordes = [];
+  let cases = 0;
+  for (const onglet of document.querySelectorAll('#mediaCarouselConfigPage [role="tab"]')) {
+    onglet.click();
+    await new Promise((r) => setTimeout(r, 50));
+    const panneau = document.getElementById(onglet.getAttribute('aria-controls'));
+    for (const boite of panneau.querySelectorAll('div.checkboxContainer')) {
+      const label = boite.querySelector('label');
+      if (!label || !label.getBoundingClientRect().height) continue;
+      cases++;
+      const texte = label.querySelector('span');
+      const l = label.getBoundingClientRect();
+      const t = texte.getBoundingClientRect();
+      if (t.top < l.top - 1 || t.bottom > l.bottom + 1) debordes.push(texte.textContent.trim().slice(0, 40));
+      const aide = boite.querySelector('.fieldDescription');
+      if (aide && aide.getBoundingClientRect().top < l.bottom - 1) aCote.push(texte.textContent.trim().slice(0, 40));
+    }
+  }
+  return { cases, aCote, debordes };
+});
+
 await browser.close();
 
 let failed = 0;
@@ -578,6 +607,10 @@ check('SEERR: les options avancees sont enregistrees', seerrEnregistre.avancees 
 check('RETOUR: apres un retour sur la page, « Descendre » ne recule la rangee que d une place',
   ordreApresClic[0] === ordreAvantClic[1] && ordreApresClic[1] === ordreAvantClic[0]
     && ordreApresClic[2] === ordreAvantClic[2], [ordreAvantClic.slice(0, 3), ordreApresClic.slice(0, 3)]);
+check('TELEPHONE 12.1: chaque explication passe sous sa case, jamais a cote',
+  telephone.aCote.length === 0 && telephone.cases > 10, telephone);
+check('TELEPHONE 12.1: aucun libelle de case ne deborde sur le texte voisin',
+  telephone.debordes.length === 0, telephone);
 check('aucune erreur js', errors.length === 0, errors);
 
 console.log(failed === 0 ? '\nTous les tests passent.' : '\n' + failed + ' echec(s).');

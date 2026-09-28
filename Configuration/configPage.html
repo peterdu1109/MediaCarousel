@@ -89,6 +89,15 @@
                     #mediaCarouselConfigPage :focus-visible { outline: 3px solid currentColor;
                         outline-offset: 2px; border-radius: 3px; }
 
+                    /* jellyfin-web 12.1 met `.checkboxContainer` en ligne et fixe la hauteur du
+                       libellé (2,35em) en le centrant : la case et son explication se partageaient
+                       la largeur, et sur un téléphone le libellé, serré sur six lignes, débordait
+                       sur le texte du dessus. L'explication passe dessous — ce que fait
+                       `checkboxContainer-withDescription` chez Jellyfin — et le libellé grandit
+                       avec son texte. */
+                    #mediaCarouselConfigPage div.checkboxContainer { flex-direction: column; }
+                    #mediaCarouselConfigPage .emby-checkbox-label { height: auto; min-height: 2.35em; }
+
                     @media (prefers-reduced-motion: reduce) {
                         #mediaCarouselConfigPage * { transition: none !important; }
                     }

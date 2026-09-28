@@ -810,7 +810,7 @@ dotnet run --project tests/ScriptTag.Tests -c Release
 cd tests/browser && npm install && node home-rows.test.mjs && node config-page.test.mjs
 ```
 
-Trois suites sans framework — 482 assertions — exécutées en CI avant la publication ; voir
+Trois suites sans framework — 484 assertions — exécutées en CI avant la publication ; voir
 `tests/README.md`. L'une charge un extrait des règles d'ElegantFin **après** les nôtres pour
 vérifier que la cohabitation tient.
 Les deux suites navigateur chargent le vrai `media-carousel.js` et le vrai `configPage.html`
@@ -866,6 +866,11 @@ gardée en cache, sans relancer son script. Les écouteurs se posent une seule f
 `wired`. Seul l'état relu de la configuration se réapplique à chaque affichage (`applyToggles`,
 `applySeerrToggle`, `renderRowOrder`). Un écouteur anonyme posé à chaque affichage s'ajoute aux
 précédents : c'est ainsi que « Descendre » faisait reculer une rangée de deux places.
+
+**Cases à cocher sous jellyfin-web 12.1** : `.checkboxContainer` y est en ligne et le libellé a une
+hauteur fixe (2,35em) centrée. Sur un téléphone, le libellé serré débordait sur le texte du dessus.
+La page remet l'explication sous la case et laisse le libellé grandir ; le banc charge ces règles
+(`tests/browser/jellyfin-checkbox.css`) et vérifie à 375 px.
 
 ## Ajouter une source de tendances
 
