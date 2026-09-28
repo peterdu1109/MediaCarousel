@@ -19,6 +19,7 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton<ITopListStore, TopListStore>();
         serviceCollection.AddSingleton<ICatalogStore, CatalogStore>();
 
+        serviceCollection.AddSingleton<PlaybackReportingReader>();
         serviceCollection.AddSingleton<LocalTopListBuilder>();
         serviceCollection.AddSingleton<GlobalTopListBuilder>();
         serviceCollection.AddSingleton<CatalogBuilder>();

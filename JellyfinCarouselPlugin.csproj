@@ -39,6 +39,12 @@
       <PrivateAssets>all</PrivateAssets>
       <ExcludeAssets>runtime</ExcludeAssets>
     </PackageReference>
+    <!-- Lecture de l'historique de Playback Reporting. Jellyfin embarque déjà ce fournisseur,
+         et l'a initialisé : on compile contre lui, on ne le livre pas. -->
+    <PackageReference Include="Microsoft.Data.Sqlite.Core" Version="10.0.10">
+      <PrivateAssets>all</PrivateAssets>
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </PackageReference>
   </ItemGroup>
 
   <!--

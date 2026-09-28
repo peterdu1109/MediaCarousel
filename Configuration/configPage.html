@@ -151,8 +151,10 @@
                         <fieldset class="mcCfg-group">
                             <legend>Top du serveur</legend>
                             <p class="mcCfg-group-hint" id="hintLocal">
-                                Classement établi à partir des statistiques de lecture de tous les comptes.
-                                Les épisodes sont comptabilisés au profit de leur série.
+                                Classement établi à partir des lectures de tous les comptes. Les épisodes
+                                comptent pour leur série. Avec le plugin Playback Reporting, seules les
+                                vraies lectures comptent : au moins 5 minutes de film ou d'épisode par
+                                personne, puis le temps passé. La musique ne compte pas.
                             </p>
                             <p class="mcCfg-section-state" data-state-for="LocalTop,AllTime"></p>
 
@@ -1254,7 +1256,8 @@
                                 parts.push(sectionLabels[keys[k]] + ' : désactivé');
                             } else if (when) {
                                 parts.push(sectionLabels[keys[k]] + ' : ' + (data.Count || 0)
-                                    + ' entrée(s), calculé le ' + when);
+                                    + ' entrée(s), calculé le ' + when
+                                    + (data.Source === 'PlaybackReporting' ? ' d’après les vraies lectures' : ''));
                             } else {
                                 parts.push(sectionLabels[keys[k]] + ' : en attente du premier calcul');
                             }
