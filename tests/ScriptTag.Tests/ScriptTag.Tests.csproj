@@ -26,6 +26,11 @@
     <Compile Include="../../Services/UserPreferenceRules.cs" />
     <Compile Include="../../Configuration/UserRowPreferences.cs" />
     <Compile Include="../../Api/ClientOptionsDto.cs" />
+    <Compile Include="../../Models/TopListEntry.cs" />
+    <Compile Include="../../Models/TopListKind.cs" />
+    <Compile Include="../../Models/TopListSnapshot.cs" />
+    <Compile Include="../../Providers/TrendingTitle.cs" />
+    <Compile Include="../../Services/GlobalTopRematch.cs" />
   </ItemGroup>
 
 </Project>

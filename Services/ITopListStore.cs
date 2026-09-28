@@ -20,4 +20,13 @@ public interface ITopListStore
     /// </summary>
     /// <param name="snapshot">L'instantané à publier.</param>
     void Publish(TopListSnapshot snapshot);
+
+    /// <summary>
+    /// Remplace un instantané seulement s'il est toujours celui publié : une correction
+    /// calculée à partir d'un instantané périmé n'écrase jamais un recalcul plus récent.
+    /// </summary>
+    /// <param name="expected">L'instantané à partir duquel le remplaçant a été calculé.</param>
+    /// <param name="replacement">Le remplaçant, de même nature.</param>
+    /// <returns><c>true</c> si le remplacement a eu lieu.</returns>
+    bool TryReplace(TopListSnapshot expected, TopListSnapshot replacement);
 }

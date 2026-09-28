@@ -38,6 +38,10 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         // service, le réglage « intervalle de recalcul » n'avait plus aucun effet ensuite.
         serviceCollection.AddHostedService<RefreshScheduleSynchronizer>();
 
+        // Un titre du Top mondial qui arrive dans la bibliothèque — une demande Seerr servie —
+        // y passe « présent » sans attendre le recalcul suivant.
+        serviceCollection.AddHostedService<GlobalTopLibraryWatcher>();
+
         // Les sources externes sont injectées en liste ; le fournisseur actif est choisi à l'exécution.
         serviceCollection.AddSingleton<ITrendingProvider, TmdbTrendingProvider>();
         serviceCollection.AddSingleton<ITrendingProvider, TraktTrendingProvider>();

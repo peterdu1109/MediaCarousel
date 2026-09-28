@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using JellyfinCarouselPlugin.Configuration;
@@ -139,6 +140,58 @@ public sealed class TopListRefreshService
         {
             _health.EndRun();
             _gate.Release();
+        }
+    }
+
+    /// <summary>
+    /// Rapproche de nouveau le Top mondial de la bibliothèque, sans rappeler la source :
+    /// un titre arrivé depuis le calcul y passe « présent », un titre supprimé « absent ».
+    /// </summary>
+    /// <remarks>
+    /// Rien à faire sous « ne garder que les titres présents » : la liste ne contient alors
+    /// aucun absent, et un titre n'y entre qu'au recalcul.
+    ///
+    /// Pas de verrou commun avec <see cref="RefreshAsync"/> : un recalcul planifié qui le
+    /// trouverait pris serait abandonné. La correction ne remplace l'instantané que s'il est
+    /// toujours celui dont elle part (<see cref="ITopListStore.TryReplace"/>) : un recalcul
+    /// publié entre-temps a le dernier mot, et il a rapproché tout seul. La collection, elle,
+    /// suit au recalcul suivant.
+    /// </remarks>
+    /// <returns><c>true</c> si une présence a changé.</returns>
+    public bool RematchGlobal()
+    {
+        var plugin = Plugin.Instance;
+        if (plugin is null)
+        {
+            return false;
+        }
+
+        var config = plugin.Configuration;
+        if (!config.EnableGlobalTop || config.GlobalTopLibraryOnly)
+        {
+            return false;
+        }
+
+        try
+        {
+            var current = _store.Get(TopListKind.Global);
+            var updated = _globalBuilder.Rematch(current, config);
+            if (updated is null || !_store.TryReplace(current, updated))
+            {
+                return false;
+            }
+
+            _logger.LogInformation(
+                "Top mondial : présence dans la bibliothèque mise à jour sans recalcul, {Count} titre(s) présent(s) sur {Total}.",
+                updated.Entries.Count(e => e.IsInLibrary),
+                updated.Entries.Count);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            // L'instantané publié reste valable : il attendra le recalcul suivant.
+            _logger.LogWarning(ex, "Échec du rapprochement du Top mondial avec la bibliothèque.");
+            return false;
         }
     }
 

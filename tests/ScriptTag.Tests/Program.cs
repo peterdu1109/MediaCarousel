@@ -1,5 +1,7 @@
 using JellyfinCarouselPlugin.Api;
 using JellyfinCarouselPlugin.Configuration;
+using JellyfinCarouselPlugin.Models;
+using JellyfinCarouselPlugin.Providers;
 using JellyfinCarouselPlugin.Services;
 
 // Vérifie l'insertion de la balise script dans index.html : idempotence, migration depuis
@@ -641,6 +643,52 @@ Check("SEERR: l'adresse perd sa barre finale",
 Check("SEERR: seules les adresses http et https sont acceptees",
     SeerrRules.NormalizeBaseUrl("ftp://seerr") is null && SeerrRules.NormalizeBaseUrl("javascript:alert(1)") is null
     && SeerrRules.NormalizeBaseUrl("") is null && SeerrRules.NormalizeBaseUrl(null) is null);
+
+// ---------------------------------------------------------------------------
+// Rapprochement du Top mondial sans recalcul : un titre demande qui arrive dans la
+// bibliotheque passe « present », un titre supprime redevient absent.
+// ---------------------------------------------------------------------------
+var arrive = Guid.NewGuid();
+var dejaPresent = Guid.NewGuid();
+var calcul = TopListSnapshot.Restore(TopListKind.Global, "Tmdb", new[]
+{
+    new TopListEntry { Rank = 1, ItemId = dejaPresent, Name = "Present", TmdbId = "1", MediaType = "movie" },
+    new TopListEntry { Rank = 2, Name = "Demande", TmdbId = "2", MediaType = "tv", PosterUrl = "p.jpg" },
+    new TopListEntry { Rank = 3, Name = "Ancien", TmdbId = "3" }
+}, new DateTime(2026, 9, 28, 18, 20, 0, DateTimeKind.Utc));
+
+var biblio = new Dictionary<string, Guid> { ["movie:1"] = dejaPresent, ["tv:2"] = arrive, ["movie:3"] = Guid.NewGuid() };
+Guid Resoudre(TrendingTitle t) => biblio.TryGetValue((t.IsMovie ? "movie:" : "tv:") + t.TmdbId, out var id) ? id : Guid.Empty;
+
+var rapproche = GlobalTopRematch.Apply(calcul, Resoudre);
+Check("REMATCH: le titre demande arrive dans la bibliotheque et passe present",
+    rapproche is not null && rapproche.Entries[1].ItemId == arrive);
+Check("REMATCH: rang, affiche et type sont conserves",
+    rapproche is not null && rapproche.Entries[1].Rank == 2 && rapproche.Entries[1].PosterUrl == "p.jpg"
+    && rapproche.Entries[1].MediaType == "tv");
+Check("REMATCH: la date reste celle du calcul, la tuile ne pretend pas a un recalcul",
+    rapproche is not null && rapproche.GeneratedUtc == calcul.GeneratedUtc && rapproche.Kind == TopListKind.Global);
+Check("REMATCH: une entree calculee avant les types attend le recalcul",
+    rapproche is not null && rapproche.Entries[2].ItemId == Guid.Empty);
+Check("REMATCH: rien de change, rien a publier", GlobalTopRematch.Apply(rapproche!, Resoudre) is null);
+
+biblio.Remove("movie:1");
+var retire = GlobalTopRematch.Apply(rapproche!, Resoudre);
+Check("REMATCH: un titre supprime de la bibliotheque redevient absent",
+    retire is not null && retire.Entries[0].ItemId == Guid.Empty);
+
+biblio["movie:9"] = arrive;
+var doublon = GlobalTopRematch.Apply(TopListSnapshot.Restore(TopListKind.Global, "Tmdb", new[]
+{
+    new TopListEntry { Rank = 1, Name = "Film", TmdbId = "9", MediaType = "movie" },
+    new TopListEntry { Rank = 2, Name = "Film bis", TmdbId = "9", MediaType = "movie" }
+}, DateTime.UtcNow), Resoudre);
+Check("REMATCH: deux entrees ne montrent jamais la meme affiche",
+    doublon is not null && doublon.Entries[0].ItemId == arrive && doublon.Entries[1].ItemId == Guid.Empty);
+
+Check("REMATCH: cles surveillees par type et par IMDb",
+    string.Join(",", GlobalTopRematch.KeysFor("tv", "2", "tt123")) == "tv:2,imdb:tt123"
+    && !GlobalTopRematch.KeysFor("movie", null, " ").Any());
 
 Console.WriteLine(failed == 0 ? "\nTous les tests passent." : $"\n{failed} echec(s).");
 return failed;
