@@ -131,7 +131,9 @@ l'épisode isolé.
 | Clé d'API | — | Voir le tableau ci-dessus |
 | Liste | Tendances du moment | Ou « à l'affiche », ou « prochaines sorties ». Propre à TMDB ; Trakt ne publie que les tendances |
 | Types de médias | Films | Ce qui est classé |
-| Nombre d'entrées | `10` | Taille du classement |
+| Une rangée pour les films, une pour les séries | ❌ | Avec « Films et séries » : deux classements séparés au lieu d'un seul mélangé |
+| Titre — films / Titre — séries | `Top 10 des films` / `Top 10 des séries` | Titres des deux rangées séparées |
+| Nombre d'entrées | `10` | Taille du classement (de chaque rangée, si séparées) |
 | Ne garder que ce que j'ai | ✅ | Masque les titres absents de ta bibliothèque |
 | Langue des métadonnées | `fr-FR` | Langue demandée à la source |
 | Demander les titres absents à Seerr | ❌ | Un bouton « Demander » sur l'affiche de chaque titre absent |
@@ -141,6 +143,9 @@ l'épisode isolé.
 
 Si la source est injoignable, le classement précédent est conservé — une coupure réseau ne vide
 jamais la liste.
+
+Un titre qui arrive dans ta bibliothèque — une demande Seerr servie, par exemple — y passe
+« présent » dans la minute, sans attendre le recalcul suivant.
 
 **Demander à Seerr** (Jellyseerr, Overseerr ou leur successeur) fonctionne comme dans
 Jellyfin Enhanced, avec les mêmes libellés. La demande part au nom du compte Seerr de chaque

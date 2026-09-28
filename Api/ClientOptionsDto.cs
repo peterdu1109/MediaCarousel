@@ -25,6 +25,18 @@ public sealed class ClientOptionsDto
     /// <summary>Obtient ou définit le titre de la rangée du Top mondial.</summary>
     public string GlobalRowTitle { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Obtient ou définit une valeur indiquant si le Top mondial se présente en deux rangées,
+    /// une pour les films et une pour les séries.
+    /// </summary>
+    public bool GlobalSplit { get; set; }
+
+    /// <summary>Obtient ou définit le titre de la rangée des films du Top mondial.</summary>
+    public string GlobalMoviesRowTitle { get; set; } = string.Empty;
+
+    /// <summary>Obtient ou définit le titre de la rangée des séries du Top mondial.</summary>
+    public string GlobalSeriesRowTitle { get; set; } = string.Empty;
+
     /// <summary>Obtient ou définit la couleur d'accentuation.</summary>
     public string HighlightColor { get; set; } = string.Empty;
 

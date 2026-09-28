@@ -191,6 +191,16 @@ toujours celui d'origine : un recalcul publié entre-temps a le dernier mot. Pas
 avec le recalcul, qu'un verrou pris ferait abandonner ; la collection suit au recalcul suivant.
 Rien sous `GlobalTopLibraryOnly` : la liste n'y contient aucun absent.
 
+**Films et séries séparés** (`GlobalTopSplitByType`, effectif seulement avec « Films et séries » :
+`IsGlobalTopSplit()`). Deux listes, `GlobalMovies` et `GlobalSeries`, chacune avec ses propres
+`GlobalTopSize` places — un Top 10 des films et un Top 10 des séries, pas les deux parts d'un
+classement mêlé. La liste mêlée est alors publiée vide, pour ne plus autoriser de demande Seerr ;
+à l'inverse, les deux moitiés sont vidées quand on revient au mêlé. Tout ce qui lit le Top mondial
+passe par `GlobalTopKinds.All` : autorisation des demandes Seerr, tuile d'état, rapprochement et
+veilleur. Côté client, les deux rangées restent la seule rangée `global` — même place dans
+l'ordre, même case dans le panneau de personnalisation —, films d'abord. La collection réunit les
+deux moitiés.
+
 ### Demandes à Seerr
 
 Un titre du Top mondial absent de la bibliothèque porte un bouton « Demander », qui passe la
@@ -821,7 +831,7 @@ dotnet run --project tests/ScriptTag.Tests -c Release
 cd tests/browser && npm install && node home-rows.test.mjs && node config-page.test.mjs
 ```
 
-Trois suites sans framework — 492 assertions — exécutées en CI avant la publication ; voir
+Trois suites sans framework — 495 assertions — exécutées en CI avant la publication ; voir
 `tests/README.md`. L'une charge un extrait des règles d'ElegantFin **après** les nôtres pour
 vérifier que la cohabitation tient.
 Les deux suites navigateur chargent le vrai `media-carousel.js` et le vrai `configPage.html`

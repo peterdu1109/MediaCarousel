@@ -34,7 +34,7 @@ public sealed class GlobalTopLibraryWatcher : IHostedService, IDisposable
     private readonly ILogger<GlobalTopLibraryWatcher> _logger;
     private readonly Timer _timer;
     private readonly object _lock = new();
-    private TopListSnapshot? _watchedSnapshot;
+    private TopListSnapshot?[] _watchedSnapshots = new TopListSnapshot?[GlobalTopKinds.All.Count];
     private HashSet<string> _absentKeys = new(StringComparer.OrdinalIgnoreCase);
     private HashSet<Guid> _presentItems = new();
 
@@ -131,12 +131,21 @@ public sealed class GlobalTopLibraryWatcher : IHostedService, IDisposable
     }
 
     /// <summary>
-    /// Recalcule les ensembles surveillés quand un nouvel instantané a été publié.
+    /// Recalcule les ensembles surveillés quand l'une des listes du Top mondial — mêlée, ou
+    /// films et séries séparés — a été republiée.
     /// </summary>
     private void Refresh()
     {
-        var snapshot = _store.Get(TopListKind.Global);
-        if (ReferenceEquals(snapshot, _watchedSnapshot))
+        var snapshots = new TopListSnapshot?[GlobalTopKinds.All.Count];
+        var unchanged = true;
+
+        for (var i = 0; i < snapshots.Length; i++)
+        {
+            snapshots[i] = _store.Get(GlobalTopKinds.All[i]);
+            unchanged &= ReferenceEquals(snapshots[i], _watchedSnapshots[i]);
+        }
+
+        if (unchanged)
         {
             return;
         }
@@ -144,19 +153,22 @@ public sealed class GlobalTopLibraryWatcher : IHostedService, IDisposable
         var absent = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var present = new HashSet<Guid>();
 
-        foreach (var entry in snapshot.Entries)
+        foreach (var snapshot in snapshots)
         {
-            if (entry.IsInLibrary)
+            foreach (var entry in snapshot!.Entries)
             {
-                present.Add(entry.ItemId);
-            }
-            else if (SeerrRules.IsMediaType(entry.MediaType))
-            {
-                absent.UnionWith(GlobalTopRematch.KeysFor(entry.MediaType!, entry.TmdbId, entry.ImdbId));
+                if (entry.IsInLibrary)
+                {
+                    present.Add(entry.ItemId);
+                }
+                else if (SeerrRules.IsMediaType(entry.MediaType))
+                {
+                    absent.UnionWith(GlobalTopRematch.KeysFor(entry.MediaType!, entry.TmdbId, entry.ImdbId));
+                }
             }
         }
 
-        _watchedSnapshot = snapshot;
+        _watchedSnapshots = snapshots;
         _absentKeys = absent;
         _presentItems = present;
     }
