@@ -1,3 +1,5 @@
+using System.Xml;
+using System.Xml.Serialization;
 using JellyfinCarouselPlugin.Api;
 using JellyfinCarouselPlugin.Configuration;
 using JellyfinCarouselPlugin.Models;
@@ -785,5 +787,112 @@ Check("NOMS: sans titre d'episode, en capitales",
 Check("NOMS: un nom de film n'est pas pris pour un episode",
     PlaybackNames.ParseEpisode("Transformers : Le Commencement") is null && PlaybackNames.ParseEpisode("") is null);
 
+// ---------------------------------------------------------------------------
+// Fichier des reglages. Rejoue la prod du 2026-09-29 : une ecriture tombee en panne en route
+// avait deja vide le fichier, et Jellyfin remplace par les valeurs par defaut tout fichier
+// qu'il n'arrive pas a lire. Tous les reglages etaient perdus.
+// ---------------------------------------------------------------------------
+var dossierReglages = Path.Combine(Path.GetTempPath(), "mc-reglages-" + Guid.NewGuid().ToString("N"));
+var fichierReglages = Path.Combine(dossierReglages, "JellyfinCarouselPlugin.xml");
+
+var absent = ConfigurationFile.Read<ReglagesDeTest>(fichierReglages, out var problemeAbsent);
+Check("REGLAGES SURS: fichier absent, valeurs par defaut sans rien ecrire",
+    absent.Titre == "defaut" && problemeAbsent is null && !File.Exists(fichierReglages));
+
+ConfigurationFile.Write(fichierReglages, new ReglagesDeTest { Titre = "Top 10 des films", Taille = 20 });
+var relu = ConfigurationFile.Read<ReglagesDeTest>(fichierReglages, out var problemeRelu);
+Check("REGLAGES SURS: ce qui est ecrit se relit",
+    relu.Titre == "Top 10 des films" && relu.Taille == 20 && problemeRelu is null);
+Check("REGLAGES SURS: aucun fichier temporaire ne reste apres une ecriture",
+    Directory.GetFiles(dossierReglages).Length == 1);
+
+// Une ecriture qui tombe en panne en route laisse l'ancien fichier intact.
+var avantPanne = File.ReadAllBytes(fichierReglages);
+var panne = false;
+try
+{
+    ConfigurationFile.Write(fichierReglages, new ReglagesPieges());
+}
+catch (InvalidOperationException)
+{
+    panne = true;
+}
+
+Check("REGLAGES SURS: une ecriture en panne laisse l'ancien fichier intact",
+    panne && File.ReadAllBytes(fichierReglages).SequenceEqual(avantPanne));
+Check("REGLAGES SURS: ni fichier temporaire apres la panne",
+    Directory.GetFiles(dossierReglages).Length == 1);
+
+// Temoin : ecrit comme Jellyfin (FileMode.Create), la meme panne perdait le fichier.
+var temoin = Path.Combine(dossierReglages, "temoin.xml");
+File.WriteAllBytes(temoin, avantPanne);
+try
+{
+    using var fluxTemoin = new FileStream(temoin, FileMode.Create, FileAccess.Write);
+    new XmlSerializer(typeof(ReglagesPieges)).Serialize(fluxTemoin, new ReglagesPieges());
+}
+catch (InvalidOperationException)
+{
+}
+
+Check("REGLAGES SURS: temoin, l'ecriture de Jellyfin perdait le fichier sur la meme panne",
+    !File.ReadAllBytes(temoin).SequenceEqual(avantPanne));
+File.Delete(temoin);
+
+// Le fichier vide que la prod a laisse : illisible, mais laisse tel quel.
+File.WriteAllBytes(fichierReglages, Array.Empty<byte>());
+var vide = ConfigurationFile.Read<ReglagesDeTest>(fichierReglages, out var problemeVide);
+Check("REGLAGES SURS: fichier vide, valeurs par defaut et probleme signale",
+    vide.Titre == "defaut" && problemeVide is not null);
+Check("REGLAGES SURS: fichier vide, rien n'est reecrit", new FileInfo(fichierReglages).Length == 0);
+
+var coupe = avantPanne.Take(avantPanne.Length / 2).ToArray();
+File.WriteAllBytes(fichierReglages, coupe);
+var tronque = ConfigurationFile.Read<ReglagesDeTest>(fichierReglages, out var problemeTronque);
+Check("REGLAGES SURS: fichier coupe au milieu, valeurs par defaut et fichier laisse tel quel",
+    tronque.Titre == "defaut" && problemeTronque is not null && File.ReadAllBytes(fichierReglages).SequenceEqual(coupe));
+
+// Un fichier ecrit par Jellyfin lui-meme, celui de toutes les installations, se relit.
+using (var fluxJellyfin = new FileStream(fichierReglages, FileMode.Create, FileAccess.Write))
+using (var texte = new StreamWriter(fluxJellyfin, null, 1024, leaveOpen: true))
+using (var xml = new XmlTextWriter(texte) { Formatting = Formatting.Indented })
+{
+    new XmlSerializer(typeof(ReglagesDeTest)).Serialize(xml, new ReglagesDeTest { Titre = "ecrit par Jellyfin", Taille = 7 });
+}
+
+var jellyfin = ConfigurationFile.Read<ReglagesDeTest>(fichierReglages, out var problemeJellyfin);
+Check("REGLAGES SURS: un fichier ecrit par Jellyfin se relit",
+    jellyfin.Titre == "ecrit par Jellyfin" && jellyfin.Taille == 7 && problemeJellyfin is null);
+
+Directory.Delete(dossierReglages, recursive: true);
+
 Console.WriteLine(failed == 0 ? "\nTous les tests passent." : $"\n{failed} echec(s).");
 return failed;
+
+/// <summary>
+/// Reglages de test : deux champs et leurs valeurs par defaut.
+/// </summary>
+public class ReglagesDeTest
+{
+    /// <summary>Obtient ou definit un titre.</summary>
+    public string Titre { get; set; } = "defaut";
+
+    /// <summary>Obtient ou definit une taille.</summary>
+    public int Taille { get; set; } = 10;
+}
+
+/// <summary>
+/// Reglages dont l'ecriture tombe en panne en route, apres un premier champ.
+/// </summary>
+public class ReglagesPieges
+{
+    /// <summary>Obtient ou definit le champ ecrit avant la panne.</summary>
+    public string Premier { get; set; } = "ecrit";
+
+    /// <summary>Obtient ou definit le champ qui tombe en panne.</summary>
+    public string Second
+    {
+        get => throw new InvalidOperationException("panne en route");
+        set { }
+    }
+}

@@ -55,6 +55,7 @@ MediaCarousel/
 │   └── PosterController.cs            # Relaie et met en cache les affiches TMDB
 ├── Configuration/
 │   ├── PluginConfiguration.cs         # Modèle de config + enums
+│   ├── ConfigurationFile.cs           # Lecture et écriture sûres du fichier des réglages
 │   ├── UserRowPreferences.cs          # Choix d'affichage d'un compte (tout nullable)
 │   └── configPage.html                # UI admin, ressource embarquée
 ├── Models/
@@ -467,6 +468,13 @@ bibliothèque, ou attendre le réseau pour le Top mondial. L'écriture passe par
 temporaire puis un `File.Move` : un arrêt brutal ne laisse jamais un fichier tronqué, et un
 fichier illisible est simplement ignoré au démarrage.
 
+Le fichier des réglages suit la même règle, par `ConfigurationFile` : `Plugin` le lit dans son
+constructeur avec son propre sérialiseur et surcharge `SaveConfiguration`. `BasePlugin` ne le
+charge donc jamais lui-même — voir « Deux versions chargées ensemble » dans les pièges. Un
+fichier illisible donne les valeurs par défaut **sans être réécrit**, et les enregistrements
+automatiques (identifiants de collection) sont suspendus jusqu'à ce que l'administrateur
+enregistre la page de configuration.
+
 ### Tolérance aux pannes
 
 `TopListRefreshService` traite les deux classements indépendamment et **conserve l'instantané
@@ -492,6 +500,11 @@ l'ordre des `LinkedChildren` **est** l'ordre affiché, donc le rang est préserv
 réécrit l'ensemble (`RemoveFromCollectionAsync` puis `AddToCollectionAsync`) plutôt que le delta,
 car l'ordre fait partie du résultat. L'identifiant de la collection est mémorisé dans la config ;
 si l'administrateur supprime la collection, elle est recréée au recalcul suivant.
+
+Le recalcul écrit ses identifiants par `Plugin.SaveCollectionIds`, sur les réglages **du
+moment** : il appelait `UpdateConfiguration` avec ceux qu'il avait lus à son départ, et un
+enregistrement fait pendant le recalcul était alors remplacé par les réglages précédents. Un
+identifiant perdu coûte cher : sans lui, `CollectionSynchronizer` crée une nouvelle collection.
 
 ---
 
@@ -869,7 +882,7 @@ dotnet run --project tests/ScriptTag.Tests -c Release
 cd tests/browser && npm install && node home-rows.test.mjs && node config-page.test.mjs
 ```
 
-Trois suites sans framework — 514 assertions — exécutées en CI avant la publication ; voir
+Trois suites sans framework — 524 assertions — exécutées en CI avant la publication ; voir
 `tests/README.md`. L'une charge un extrait des règles d'ElegantFin **après** les nôtres pour
 vérifier que la cohabitation tient.
 Les deux suites navigateur chargent le vrai `media-carousel.js` et le vrai `configPage.html`
@@ -942,6 +955,28 @@ La page remet l'explication sous la case et laisse le libellé grandir ; le banc
 ---
 
 ## Pièges et contraintes
+
+**Deux versions chargées ensemble effacent les réglages.** Constaté en prod le 2026-09-29, à
+la mise à jour 4.3.0 → 4.3.1 : le serveur n'a pas démarré, puis tous les réglages étaient
+perdus. La chaîne, lue dans le code de Jellyfin 12.1 :
+- au démarrage, Jellyfin ne garde qu'une version par **nom** — celui du `meta.json`, pas le
+  GUID. Au premier chargement, il y écrit `Plugin.Name` ; une version tout juste installée porte
+  le nom du catalogue. Le catalogue 12 s'appelait « Media Carousel (Jellyfin 12) » : l'ancienne
+  et la nouvelle version passaient pour deux plugins ;
+- l'installation marque l'ancienne « Superseded », mais **chaque lecture du catalogue** (page
+  Catalogue, tâche « Mettre à jour les plugins ») réécrit le `meta.json` de toute version
+  installée qui y figure encore, en « Active » ;
+- au redémarrage, les deux se chargent. Le sérialiseur XML de Jellyfin est rangé par nom de
+  type : la seconde version reçoit celui de la première et lève `InvalidCastException`.
+  `BasePlugin.LoadConfiguration` rattrape **toute** erreur en réécrivant les valeurs par défaut,
+  et cette écriture ouvre le fichier en `FileMode.Create` — il est vidé avant d'échouer à son
+  tour. L'erreur partait d'un `StartAsync` : tout le démarrage s'arrêtait.
+
+Parades, toutes nécessaires : le nom du paquet dans **chaque** catalogue (`manifest.json`,
+`repository-12.json`) est exactement `Plugin.Name` ; les réglages passent par
+`ConfigurationFile` (voir « Persistance ») ; rien dans un `StartAsync` ne peut lever. `Plugin`
+écrit un avertissement au journal s'il trouve une autre version chargée. XFusion, dont le
+catalogue 12 s'appelle « XFusion (Jellyfin 12 Preview) », a le même défaut.
 
 **Tri par `PlayCount` sans utilisateur :** `OrderMapper` déréférence `query.User`. Toute requête triée
 par `PlayCount`, `DatePlayed`, `IsPlayed` ou `IsFavoriteOrLiked` **doit** porter un utilisateur.

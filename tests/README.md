@@ -13,6 +13,10 @@ Couvre l'idempotence de l'insertion, le retrait des balises des versions 1.x et 
 comportement sur un HTML sans `</body>`. Une régression ici laisse les navigateurs demander
 un script disparu, ou duplique la balise à chaque démarrage du serveur.
 
+Elle vérifie aussi, sous `REGLAGES SURS`, le fichier des réglages : écriture qui tombe en panne en
+route, fichier vide ou coupé, fichier écrit par Jellyfin. Un témoin rejoue l'écriture de Jellyfin
+sur la même panne et constate qu'elle perdait le fichier.
+
 ## `browser/home-rows.test.mjs` — rendu de la page d'accueil
 
 ```bash
