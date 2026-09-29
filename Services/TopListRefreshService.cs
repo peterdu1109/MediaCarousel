@@ -100,13 +100,14 @@ public sealed class TopListRefreshService
         try
         {
             var config = plugin.Configuration;
-            var configurationChanged = false;
+            string? localCollectionId = null;
+            string? globalCollectionId = null;
 
             progress?.Report(0);
 
             if (config.EnableLocalTop)
             {
-                configurationChanged |= await RefreshLocalAsync(config, cancellationToken).ConfigureAwait(false);
+                localCollectionId = await RefreshLocalAsync(config, cancellationToken).ConfigureAwait(false);
             }
 
             if (config.EnableAllTimeRow)
@@ -122,7 +123,7 @@ public sealed class TopListRefreshService
 
             if (config.EnableGlobalTop)
             {
-                configurationChanged |= await RefreshGlobalAsync(config, cancellationToken).ConfigureAwait(false);
+                globalCollectionId = await RefreshGlobalAsync(config, cancellationToken).ConfigureAwait(false);
             }
 
             progress?.Report(65);
@@ -135,9 +136,11 @@ public sealed class TopListRefreshService
 
             PurgePosterCache();
 
-            if (configurationChanged)
+            // Seuls les identifiants sont écrits, sur les réglages du moment : un enregistrement
+            // fait pendant le recalcul n'est plus remplacé par les réglages lus à son départ.
+            if (localCollectionId is not null || globalCollectionId is not null)
             {
-                plugin.UpdateConfiguration(config);
+                plugin.SaveCollectionIds(localCollectionId, globalCollectionId);
             }
 
             progress?.Report(100);
@@ -287,7 +290,7 @@ public sealed class TopListRefreshService
         }
     }
 
-    private async Task<bool> RefreshLocalAsync(PluginConfiguration config, CancellationToken cancellationToken)
+    private async Task<string?> RefreshLocalAsync(PluginConfiguration config, CancellationToken cancellationToken)
     {
         try
         {
@@ -302,7 +305,7 @@ public sealed class TopListRefreshService
                     ParseGuid(config.LocalCollectionId),
                     cancellationToken).ConfigureAwait(false);
 
-                return TryStoreCollectionId(id, config.LocalCollectionId, value => config.LocalCollectionId = value);
+                return NewCollectionId(id, config.LocalCollectionId);
             }
         }
         catch (OperationCanceledException)
@@ -315,10 +318,10 @@ public sealed class TopListRefreshService
             _logger.LogError(ex, "Échec du calcul du Top local ; l'instantané précédent est conservé.");
         }
 
-        return false;
+        return null;
     }
 
-    private async Task<bool> RefreshGlobalAsync(PluginConfiguration config, CancellationToken cancellationToken)
+    private async Task<string?> RefreshGlobalAsync(PluginConfiguration config, CancellationToken cancellationToken)
     {
         try
         {
@@ -361,7 +364,7 @@ public sealed class TopListRefreshService
                     ParseGuid(config.GlobalCollectionId),
                     cancellationToken).ConfigureAwait(false);
 
-                return TryStoreCollectionId(id, config.GlobalCollectionId, value => config.GlobalCollectionId = value);
+                return NewCollectionId(id, config.GlobalCollectionId);
             }
         }
         catch (OperationCanceledException)
@@ -374,7 +377,7 @@ public sealed class TopListRefreshService
             _logger.LogError(ex, "Échec de la récupération du Top global ; l'instantané précédent est conservé.");
         }
 
-        return false;
+        return null;
     }
 
     /// <summary>
@@ -427,21 +430,18 @@ public sealed class TopListRefreshService
         }
     }
 
-    private static bool TryStoreCollectionId(Guid id, string? current, Action<string> setter)
+    /// <summary>
+    /// Donne l'identifiant à enregistrer, ou <c>null</c> s'il n'a pas changé.
+    /// </summary>
+    private static string? NewCollectionId(Guid id, string? current)
     {
         if (id == Guid.Empty)
         {
-            return false;
+            return null;
         }
 
         var value = id.ToString("N", CultureInfo.InvariantCulture);
-        if (string.Equals(current, value, StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        setter(value);
-        return true;
+        return string.Equals(current, value, StringComparison.OrdinalIgnoreCase) ? null : value;
     }
 
     private static Guid ParseGuid(string? value)

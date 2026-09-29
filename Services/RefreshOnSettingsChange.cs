@@ -45,21 +45,35 @@ public sealed class RefreshOnSettingsChange : IHostedService, IDisposable
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// Rien ici ne doit lever : une exception d'un service hébergé arrête le démarrage de tout
+    /// le serveur. C'est arrivé en prod le 2026-09-29 — la lecture des réglages y échouait,
+    /// voir ConfigurationFile. Sans empreinte de départ, le premier enregistrement relance
+    /// simplement un recalcul.
+    /// </remarks>
     public Task StartAsync(CancellationToken cancellationToken)
     {
-        var plugin = Plugin.Instance;
-        if (plugin is null)
+        try
         {
-            return Task.CompletedTask;
+            var plugin = Plugin.Instance;
+            if (plugin is null)
+            {
+                return Task.CompletedTask;
+            }
+
+            _handler = (_, configuration) => OnChanged(configuration as PluginConfiguration ?? plugin.Configuration);
+            plugin.ConfigurationChanged += _handler;
+
+            lock (_lock)
+            {
+                _signature = Signature(plugin.Configuration);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Suivi des enregistrements de réglages indisponible au démarrage.");
         }
 
-        lock (_lock)
-        {
-            _signature = Signature(plugin.Configuration);
-        }
-
-        _handler = (_, configuration) => OnChanged(configuration as PluginConfiguration ?? plugin.Configuration);
-        plugin.ConfigurationChanged += _handler;
         return Task.CompletedTask;
     }
 
@@ -87,12 +101,23 @@ public sealed class RefreshOnSettingsChange : IHostedService, IDisposable
 
     private void OnChanged(PluginConfiguration configuration)
     {
-        var signature = Signature(configuration);
+        string signature;
+
+        try
+        {
+            signature = Signature(configuration);
+        }
+        catch (Exception ex)
+        {
+            // L'enregistrement a déjà eu lieu : il ne doit pas échouer pour autant.
+            _logger.LogError(ex, "Réglages enregistrés, mais leur comparaison a échoué : pas de recalcul immédiat.");
+            return;
+        }
 
         lock (_lock)
         {
-            // Le recalcul enregistre lui-même les identifiants de ses collections : cet
-            // enregistrement-là ne change rien d'autre, il ne relance rien.
+            // Un enregistrement qui ne change que les identifiants des collections ne relance
+            // rien : c'est le recalcul lui-même qui les écrit.
             if (string.Equals(signature, _signature, StringComparison.Ordinal))
             {
                 return;

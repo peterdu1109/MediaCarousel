@@ -56,11 +56,27 @@ public sealed class RefreshScheduleSynchronizer : IHostedService
     /// <inheritdoc />
     public Task StartAsync(CancellationToken cancellationToken)
     {
+        // Rien ici ne doit lever : une exception d'un service hébergé arrête le démarrage de
+        // tout le serveur (prod, 2026-09-29).
+        try
+        {
+            Start();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Suivi de l'intervalle de recalcul indisponible au démarrage.");
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private void Start()
+    {
         var plugin = Plugin.Instance;
 
         if (plugin is null)
         {
-            return Task.CompletedTask;
+            return;
         }
 
         // Au démarrage aussi : c'est ce qui rattrape les installations existantes, dont le
@@ -85,8 +101,6 @@ public sealed class RefreshScheduleSynchronizer : IHostedService
 
         _handler = (_, _) => Apply(reportMissing: true);
         plugin.ConfigurationChanged += _handler;
-
-        return Task.CompletedTask;
     }
 
     /// <inheritdoc />

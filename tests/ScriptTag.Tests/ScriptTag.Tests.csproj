@@ -35,6 +35,7 @@
     <Compile Include="../../Services/SettingsSignature.cs" />
     <Compile Include="../../Services/PlaybackTop.cs" />
     <Compile Include="../../Services/PlaybackNames.cs" />
+    <Compile Include="../../Configuration/ConfigurationFile.cs" />
   </ItemGroup>
 
 </Project>
