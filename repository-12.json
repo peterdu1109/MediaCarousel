@@ -2,7 +2,7 @@
   {
     "category": "General",
     "guid": "191bd290-1054-4b55-a137-46c72181266b",
-    "name": "Media Carousel (Jellyfin 12)",
+    "name": "Media Carousel",
     "description": "🚀 JELLYFIN 12 — Media Carousel built for Jellyfin 12.0 and newer. File Transformation is optional: without it the plugin writes its script tag into index.html, as on 10.11. For Jellyfin 10.11.x use the regular repository.\n\nNetflix-style home rows for Jellyfin: a Top 10 of your server computed from real playback, a worldwide Top 10 from TMDB or Trakt, plus library rows — never watched, back this week, by studio, by genre.\n\n🚀 JELLYFIN 12 — Media Carousel compilé pour Jellyfin 12.0 et plus récent. File Transformation est facultatif : sans lui, le plugin inscrit sa balise dans index.html, comme en 10.11. Pour Jellyfin 10.11.x, utilisez le dépôt standard.\n\nDes rangées d'accueil façon Netflix pour Jellyfin : un Top 10 du serveur calculé sur les lectures réelles, un Top 10 mondial depuis TMDB ou Trakt, et des rangées tirées de la bibliothèque — jamais vu, de retour cette semaine, par studio, par genre.",
     "owner": "peterdu1109",
     "overview": "🚀 Jellyfin 12 channel for Media Carousel. On Jellyfin 10.11.x use the main repository.\n🚀 Canal Jellyfin 12 pour Media Carousel. Sur Jellyfin 10.11.x, utilisez le dépôt principal.",

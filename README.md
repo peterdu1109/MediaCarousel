@@ -20,9 +20,9 @@ Same plugin, same features as the Jellyfin 10.11 build — a separate branch onl
 
 ## Repository / Dépôt
 
-Add this in **Dashboard → Plugins → Repositories**, then install **Media Carousel (Jellyfin 12)** from the catalog.
+Add this in **Dashboard → Plugins → Repositories**, then install **Media Carousel** from the catalog.
 
-*À ajouter dans **Tableau de bord → Extensions → Dépôts**, puis installez **Media Carousel (Jellyfin 12)** depuis le catalogue.*
+*À ajouter dans **Tableau de bord → Extensions → Dépôts**, puis installez **Media Carousel** depuis le catalogue.*
 
 ```
 https://raw.githubusercontent.com/peterdu1109/MediaCarousel/refs/heads/jellyfin-12/repository-12.json
