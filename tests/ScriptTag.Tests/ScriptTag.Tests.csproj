@@ -36,6 +36,7 @@
     <Compile Include="../../Services/PlaybackTop.cs" />
     <Compile Include="../../Services/PlaybackNames.cs" />
     <Compile Include="../../Configuration/ConfigurationFile.cs" />
+    <Compile Include="../../Services/PluginDescription.cs" />
   </ItemGroup>
 
 </Project>

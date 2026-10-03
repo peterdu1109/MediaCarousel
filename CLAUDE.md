@@ -927,7 +927,7 @@ dotnet run --project tests/ScriptTag.Tests -c Release
 cd tests/browser && npm install && node home-rows.test.mjs && node config-page.test.mjs
 ```
 
-Trois suites sans framework — 542 assertions — exécutées en CI avant la publication ; voir
+Trois suites sans framework — 546 assertions — exécutées en CI avant la publication ; voir
 `tests/README.md`. L'une charge un extrait des règles d'ElegantFin **après** les nôtres pour
 vérifier que la cohabitation tient.
 Les deux suites navigateur chargent le vrai `media-carousel.js` et le vrai `configPage.html`
@@ -1021,6 +1021,14 @@ La page remet l'explication sous la case et laisse le libellé grandir ; le banc
 ---
 
 ## Pièges et contraintes
+
+**Le texte de la fiche de l'extension a deux sources.** Une fois le plugin chargé, Jellyfin
+affiche `Plugin.Description`, relu à chaque affichage : `PluginDescription` le donne en français
+sur un serveur en français (`UICulture`), en anglais pour toute autre langue. Avant le
+redémarrage qui suit une installation, et dans le catalogue, il affiche la `description` du
+dépôt : un fichier fixe, qui porte donc les deux textes, à garder identiques à ceux de
+`PluginDescription`. Constaté le 2026-10-03 : la fiche montrait le long texte du catalogue,
+anglais puis français, avec des consignes d'installation.
 
 **Deux versions chargées ensemble effacent les réglages.** Constaté en prod le 2026-09-29, à
 la mise à jour 4.3.0 → 4.3.1 : le serveur n'a pas démarré, puis tous les réglages étaient
