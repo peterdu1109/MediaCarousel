@@ -4,7 +4,7 @@
     "name": "Media Carousel",
     "description": "Génère automatiquement, côté serveur, un Top du serveur à partir des statistiques de lecture Jellyfin et un Top mondial à partir de TMDB ou Trakt. Publié en collections et via l'API REST, sans aucune modification de l'interface web.",
     "overview": "Classements dynamiques côté serveur : Top du serveur et Top mondial",
-    "owner": "peterdu1109",
+    "owner": "ElieM & Peterdu1109",
     "category": "General",
     "imageUrl": "https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/icon.png",
     "versions": [

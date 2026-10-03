@@ -4,7 +4,7 @@ name: Media Carousel
 description: "Genere automatiquement un Top du serveur (statistiques de lecture) et un Top mondial (TMDB / Trakt), entierement cote serveur"
 overview: "Classements dynamiques cote serveur : Top local et Top mondial"
 category: General
-owner: peterdu1109
+owner: "ElieM & Peterdu1109"
 versions:
   # Source de verite des versions publiees : manifest.json, que la CI met a jour a chaque
   # release. Ce fichier ne decrit que les metadonnees du registre, et n'etait plus tenu :
