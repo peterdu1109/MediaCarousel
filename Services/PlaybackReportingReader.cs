@@ -52,6 +52,12 @@ public sealed class PlaybackReportingReader
     public string DatabasePath => Path.Combine(_paths.DataPath, "playback_reporting.db");
 
     /// <summary>
+    /// Obtient une valeur indiquant si la base de Playback Reporting existe : le Top du serveur
+    /// suit alors les vraies lectures.
+    /// </summary>
+    public bool IsAvailable => File.Exists(DatabasePath);
+
+    /// <summary>
     /// Lit les lectures de films et d'épisodes depuis une date.
     /// </summary>
     /// <param name="sinceLocal">Début de la fenêtre, à l'heure du serveur — celle qu'écrit Playback Reporting.</param>

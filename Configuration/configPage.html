@@ -33,39 +33,29 @@
                     .mcCfg-tile[data-state="warn"] .mcCfg-tile-dot { opacity: 1; color: #c98a1b; }
                     .mcCfg-tile-value { font-size: 1.45em; font-weight: 700; line-height: 1.2; margin-top: .1em; }
                     .mcCfg-tile-detail { font-size: .76em; opacity: .65; }
+
                     .mcCfg-order { list-style: none; margin: .4em 0 0; padding: 0; }
                     .mcCfg-order li { display: flex; align-items: center; gap: .5em;
                         border: 1px solid rgba(128, 128, 128, .35); border-radius: 6px;
-                        padding: .45em .6em; margin-bottom: .35em; }
+                        padding: .3em .6em; margin-bottom: .35em; }
                     .mcCfg-order-rank { font-size: .8em; opacity: .6; min-width: 1.4em; }
                     .mcCfg-order-name { flex: 1; }
+                    /* La case d'une rangée tient lieu de nom : son libellé s'étire, les
+                       flèches restent au bout de la ligne. */
+                    .mcCfg-order .emby-checkbox-label { flex: 1; margin: 0; }
+                    .mcCfg-order-native { opacity: .8; }
                     .mcCfg-order button { min-width: 2.4em; }
                     .mcCfg-order button[disabled] { opacity: .3; }
 
-                    /* Avertissement de doublon : hors des onglets, car il compare deux champs
-                       qui vivent dans deux onglets différents. */
                     .mcCfg-alert { display: flex; gap: .6em; align-items: flex-start; font-size: .9em;
                         border: 1px solid #c98a1b; border-left-width: 4px; border-radius: 6px;
                         padding: .75em 1em; margin: 0 0 1.4em; background: rgba(201, 138, 27, .1); }
-                    .mcCfg-alert[hidden] { display: none; }
                     .mcCfg-alert strong { display: block; margin-bottom: .15em; }
-
-                    .mcCfg-tabs { display: flex; gap: .3em; overflow-x: auto; overflow-y: hidden;
-                        border-bottom: 1px solid rgba(128, 128, 128, .35); margin-bottom: 1.2em; }
-                    .mcCfg-tab { flex: 0 0 auto; background: none; border: 0; border-bottom: 2px solid transparent;
-                        color: inherit; opacity: .6; font: inherit; font-weight: 600; cursor: pointer;
-                        padding: .7em .95em; white-space: nowrap; display: flex; align-items: center; gap: .45em;
-                        margin: 0; text-transform: none; letter-spacing: normal; min-width: 0; }
-                    .mcCfg-tab[aria-selected="true"] { opacity: 1; border-bottom-color: currentColor; }
-                    .mcCfg-tab-count { font-size: .72em; font-weight: 700; border-radius: 10px;
-                        padding: .05em .5em; background: rgba(128, 128, 128, .3); }
-                    .mcCfg-tab-off .mcCfg-tab-count { opacity: .45; }
 
                     .mcCfg-group { border: 1px solid rgba(128, 128, 128, .35); border-radius: 8px;
                         padding: 1.1em 1.3em 1.4em; margin: 0 0 1.4em; }
                     .mcCfg-group > legend { font-size: 1.12em; font-weight: 600; padding: 0 .45em; }
                     .mcCfg-group-hint { margin: .1em 0 1em; opacity: .75; max-width: 62ch; }
-                    .mcCfg-group[hidden], [role="tabpanel"][hidden] { display: none; }
 
                     .mcCfg-section-state { font-size: .82em; opacity: .7; margin: -.4em 0 1.1em; }
                     .mcCfg-section-state:empty { display: none; }
@@ -73,10 +63,14 @@
                     .mcCfg-grid { display: grid; gap: 0 1.4em;
                         grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
 
-                    .mcCfg-advanced { border: 1px dashed rgba(128, 128, 128, .45); border-radius: 6px;
-                        padding: .5em .9em; margin-top: 1em; }
-                    .mcCfg-advanced[open] { padding-bottom: .6em; }
-                    .mcCfg-advanced > summary { cursor: pointer; font-weight: 600; font-size: .95em; }
+                    /* Réglages d'une rangée ou d'un thème, à l'intérieur d'un bloc ou du pli. */
+                    .mcCfg-sub { margin-top: 1.3em; }
+                    .mcCfg-sub-title { font-size: 1em; font-weight: 600; margin: 0 0 .4em; }
+
+                    .mcCfg-advanced { border: 1px solid rgba(128, 128, 128, .35); border-radius: 8px;
+                        padding: .9em 1.3em; margin: 0 0 1.4em; }
+                    .mcCfg-advanced > summary { cursor: pointer; font-weight: 600; font-size: 1.12em; }
+                    .mcCfg-advanced[open] { padding-bottom: 1.4em; }
 
                     .mcCfg-actions { display: flex; gap: .8em; flex-wrap: wrap; margin: 1.6em 0 1em; }
                     .mcCfg-actions .raised { flex: 1 1 220px; margin: 0; }
@@ -84,6 +78,10 @@
                     .mcCfg-feedback { margin-top: 1em; padding: .8em 1em; border-radius: 6px;
                         border: 1px solid rgba(128, 128, 128, .35); background: rgba(128, 128, 128, .08); }
                     .mcCfg-feedback:empty { display: none; }
+
+                    /* `hidden` doit l'emporter partout : une grille, une case à cocher de
+                       jellyfin-web ou une alerte reçoivent un `display` qui primerait sinon. */
+                    #mediaCarouselConfigPage [hidden] { display: none !important; }
 
                     /* Le contour de focus ne doit jamais dépendre du thème actif. */
                     #mediaCarouselConfigPage :focus-visible { outline: 3px solid currentColor;
@@ -108,9 +106,8 @@
                     <span class="mcCfg-version" id="mcVersion"></span>
                 </div>
                 <p class="mcCfg-intro">
-                    Les classements sont calculés côté serveur, puis affichés sur la page d'accueil
-                    sous vos bibliothèques. Le recalcul est automatique : au démarrage du serveur,
-                    puis à intervalle régulier.
+                    Des rangées façon Netflix sur la page d'accueil. Cochez-les et rangez-les
+                    ci-dessous : elles se recalculent toutes seules.
                 </p>
 
                 <div class="mcCfg-status" id="mcStatus" role="status" aria-live="polite"
@@ -118,687 +115,538 @@
 
                 <p class="mcCfg-alert" id="mcDuplicateAlert" role="status" aria-live="polite" hidden></p>
 
+                <!-- Un bloc porteur de `data-show-if` n'apparaît que si sa condition tient :
+                     voir `applyVisibility`. Les identifiants des champs sont ceux de la
+                     configuration ; le script ne connaît qu'eux. -->
                 <form id="mediaCarouselConfigForm">
 
-                    <div class="mcCfg-tabs scrollX hiddenScrollX" role="tablist" aria-label="Sections des réglages">
-                        <button is="emby-button" type="button" class="mcCfg-tab" role="tab" id="tabLocal"
-                                aria-controls="panelLocal" aria-selected="true">
-                            <span>Top du serveur</span><span class="mcCfg-tab-count">6</span>
-                        </button>
-                        <button is="emby-button" type="button" class="mcCfg-tab" role="tab" id="tabGlobal"
-                                aria-controls="panelGlobal" aria-selected="false">
-                            <span>Top mondial</span><span class="mcCfg-tab-count">8</span>
-                        </button>
-                        <button is="emby-button" type="button" class="mcCfg-tab" role="tab" id="tabCatalog"
-                                aria-controls="panelCatalog" aria-selected="false">
-                            <span>Studios et genres</span><span class="mcCfg-tab-count">6</span>
-                        </button>
-                        <button is="emby-button" type="button" class="mcCfg-tab" role="tab" id="tabNews"
-                                aria-controls="panelNews" aria-selected="false">
-                            <span>Actualité</span><span class="mcCfg-tab-count">11</span>
-                        </button>
-                        <button is="emby-button" type="button" class="mcCfg-tab" role="tab" id="tabHome"
-                                aria-controls="panelHome" aria-selected="false">
-                            <span>Affichage</span><span class="mcCfg-tab-count">7</span>
-                        </button>
-                        <button is="emby-button" type="button" class="mcCfg-tab" role="tab" id="tabRefresh"
-                                aria-controls="panelRefresh" aria-selected="false">
-                            <span>Rafraîchissement</span><span class="mcCfg-tab-count">4</span>
-                        </button>
-                    </div>
+                    <fieldset class="mcCfg-group" id="blockRows">
+                        <legend>Rangées de l'accueil</legend>
 
-                    <div role="tabpanel" id="panelLocal" aria-labelledby="tabLocal">
-                        <fieldset class="mcCfg-group">
-                            <legend>Top du serveur</legend>
-                            <p class="mcCfg-group-hint" id="hintLocal">
-                                Classement établi à partir des lectures de tous les comptes. Les épisodes
-                                comptent pour leur série. Avec le plugin Playback Reporting, seules les
-                                vraies lectures comptent : au moins 5 minutes de film ou d'épisode par
-                                personne, puis le temps passé. La musique ne compte pas.
-                            </p>
-                            <p class="mcCfg-section-state" data-state-for="LocalTop,AllTime"></p>
-
-                            <div class="checkboxContainer">
-                                <label class="emby-checkbox-label">
-                                    <input is="emby-checkbox" type="checkbox" id="EnableLocalTop"
-                                           aria-describedby="hintLocal" data-toggles="groupLocal" />
-                                    <span>Activer le Top du serveur</span>
-                                </label>
+                        <div class="checkboxContainer">
+                            <label class="emby-checkbox-label">
+                                <input is="emby-checkbox" type="checkbox" id="EnableHomeRows"
+                                       aria-describedby="hintHomeRows" />
+                                <span>Afficher les rangées sur la page d'accueil</span>
+                            </label>
+                            <div class="fieldDescription" id="hintHomeRows">
+                                Décoché, aucune rangée ne s'affiche ; les collections restent à jour.
                             </div>
+                        </div>
 
-                            <div id="groupLocal">
-                                <div class="mcCfg-grid">
-                                    <div class="inputContainer">
-                                        <input is="emby-input" type="number" id="LocalTopSize" min="1" max="100" step="1"
-                                               label="Nombre d'entrées" required />
-                                    </div>
-                                    <div class="selectContainer">
-                                        <select is="emby-select" id="LocalTopMediaKind" label="Types de médias">
-                                            <option value="Movies">Films</option>
-                                            <option value="Series">Séries</option>
-                                            <option value="Both">Films et séries</option>
-                                        </select>
-                                    </div>
-                                </div>
-
-                                <details class="mcCfg-advanced">
-                                    <summary>Réglages avancés</summary>
-
-                                    <div class="inputContainer">
-                                        <input is="emby-input" type="number" id="LocalTopWindowDays" min="0" max="3650" step="1"
-                                               label="Fenêtre d'observation (jours)" required aria-describedby="hintWindow" />
-                                        <div class="fieldDescription" id="hintWindow">
-                                            30 pour une tendance du mois, 0 pour un palmarès depuis toujours.
-                                        </div>
-                                    </div>
-
-                                    <div class="inputContainer">
-                                        <input is="emby-input" type="number" id="MaxPlaysCountedPerUser" min="0" max="100" step="1"
-                                               label="Lectures comptées au maximum par utilisateur" required
-                                               aria-describedby="hintCap" />
-                                        <div class="fieldDescription" id="hintCap">
-                                            Empêche qu'un seul spectateur qui revoit le même titre en boucle fausse
-                                            le classement. 0 pour ne pas plafonner.
-                                            <strong>Sans effet dès que la fenêtre ci-dessus est active</strong> :
-                                            Jellyfin ne compte pas les lectures par période, seul le cumul depuis
-                                            toujours existe. Sous fenêtre, chaque compte pèse donc une voix.
-                                        </div>
-                                    </div>
-
-                                    <div class="inputContainer">
-                                        <input is="emby-input" type="number" id="CandidatesPerUser" min="10" max="1000" step="10"
-                                               label="Titres candidats extraits par utilisateur" required
-                                               aria-describedby="hintCandidates" />
-                                        <div class="fieldDescription" id="hintCandidates">
-                                            Plus la valeur est élevée, plus le classement est précis et plus le calcul est long.
-                                        </div>
-                                    </div>
-
-                                    <div class="inputContainer">
-                                        <textarea is="emby-textarea" id="ExcludedUserIds" rows="2"
-                                                  label="Utilisateurs exclus" aria-describedby="hintExcluded"></textarea>
-                                        <div class="fieldDescription" id="hintExcluded">
-                                            Un identifiant par ligne. Comptes de service, invités.
-                                        </div>
-                                    </div>
-
-                                    <div class="inputContainer">
-                                        <label class="checkboxContainer">
-                                            <input is="emby-checkbox" type="checkbox" id="ExcludeChannelContent" />
-                                            <span>Ignorer le contenu des plugins de chaîne</span>
-                                        </label>
-                                        <div class="fieldDescription">
-                                            XFusion et les autres passerelles IPTV publient leurs
-                                            catalogues comme des films et des épisodes ordinaires.
-                                            Laissé actif, ce réglage garde les rangées sur la
-                                            bibliothèque locale : sans lui, un catalogue IPTV — souvent
-                                            plus fourni que la bibliothèque, et redaté à chaque
-                                            rafraîchissement du fournisseur — remplit à lui seul
-                                            « de retour cette semaine », les studios et les genres.
-                                            Sans plugin de chaîne, ce réglage ne fait rien.
-                                        </div>
-                                    </div>
-                                    <div class="inputContainer">
-                                        <textarea is="emby-textarea" id="ExcludedLibraryIds" rows="2"
-                                                  label="Bibliothèques exclues"
-                                                  aria-describedby="hintExcludedLib"></textarea>
-                                        <div class="fieldDescription" id="hintExcludedLib">
-                                            Un identifiant par ligne. S'applique à toutes les rangées :
-                                            Top du serveur, « jamais vu », « de retour », studios, genres
-                                            et le rapprochement du Top mondial.
-                                        </div>
-                                    </div>
-                                </details>
-                            </div>
-
-                            <div class="checkboxContainer">
-                                <label class="emby-checkbox-label">
-                                    <input is="emby-checkbox" type="checkbox" id="EnableAllTimeRow"
-                                           aria-describedby="hintAllTime" data-toggles="groupAllTime" />
-                                    <span>Afficher aussi « de tous les temps »</span>
-                                </label>
-                                <div class="fieldDescription" id="hintAllTime">
-                                    Le même calcul, sans fenêtre d'observation : une rangée pour la tendance
-                                    du moment, une autre pour le fond de catalogue.
-                                </div>
-                            </div>
-
-                            <div id="groupAllTime">
-                                <div class="mcCfg-grid">
-                                    <div class="inputContainer">
-                                        <input is="emby-input" type="text" id="AllTimeRowTitle" label="Titre de la rangée" />
-                                    </div>
-                                    <div class="inputContainer">
-                                        <input is="emby-input" type="number" id="AllTimeRowSize" min="1" max="100" step="1"
-                                               label="Nombre de titres" required />
-                                    </div>
-                                </div>
-                            </div>
-                        </fieldset>
-                    </div>
-
-                    <div role="tabpanel" id="panelGlobal" aria-labelledby="tabGlobal" hidden>
-                        <fieldset class="mcCfg-group">
-                            <legend>Top mondial</legend>
-                            <p class="mcCfg-group-hint" id="hintGlobal">
-                                Classement récupéré auprès d'une base externe, puis rapproché de votre
-                                bibliothèque par identifiant TMDB ou IMDb.
-                            </p>
-                            <p class="mcCfg-section-state" data-state-for="GlobalTop"></p>
-
-                            <div class="checkboxContainer">
-                                <label class="emby-checkbox-label">
-                                    <input is="emby-checkbox" type="checkbox" id="EnableGlobalTop"
-                                           aria-describedby="hintGlobal" data-toggles="groupGlobal" />
-                                    <span>Activer le Top mondial</span>
-                                </label>
-                            </div>
-
-                            <div id="groupGlobal">
-                                <div class="mcCfg-grid">
-                                    <div class="selectContainer">
-                                        <select is="emby-select" id="GlobalTopProvider" label="Source">
-                                            <option value="Tmdb">TMDB</option>
-                                            <option value="Trakt">Trakt</option>
-                                        </select>
-                                    </div>
-                                    <div class="selectContainer">
-                                        <select is="emby-select" id="GlobalTopFeed" label="Liste"
-                                                aria-describedby="hintFeed">
-                                            <option value="Trending">Tendances du moment</option>
-                                            <option value="NowPlaying">À l'affiche / en diffusion</option>
-                                            <option value="Upcoming">Prochaines sorties</option>
-                                        </select>
-                                        <div class="fieldDescription" id="hintFeed">
-                                            Propre à TMDB : Trakt ne publie que les tendances et ignore ce
-                                            réglage. « Prochaines sorties » n'existe que pour les films.
-                                        </div>
-                                    </div>
-                                    <div class="selectContainer">
-                                        <select is="emby-select" id="GlobalTopMediaKind" label="Types de médias">
-                                            <option value="Movies">Films</option>
-                                            <option value="Series">Séries</option>
-                                            <option value="Both">Films et séries</option>
-                                        </select>
-                                    </div>
-                                </div>
-
-                                <div class="checkboxContainer">
+                        <div class="inputContainer">
+                            <span class="inputLabel" id="labelRowOrder">Rangées affichées, de haut en bas</span>
+                            <!-- La liste écrit son ordre dans ce champ, que les tableaux de
+                                 chargement et de sauvegarde connaissent. Chaque rangée du plugin
+                                 porte sa case ; les sections de Jellyfin, ajoutées par le script,
+                                 n'en ont pas. -->
+                            <input type="hidden" id="RowOrder" />
+                            <ol class="mcCfg-order" id="mcRowOrder" aria-labelledby="labelRowOrder"
+                                aria-describedby="hintRowOrder">
+                                <li data-row="local">
+                                    <span class="mcCfg-order-rank"></span>
                                     <label class="emby-checkbox-label">
-                                        <input is="emby-checkbox" type="checkbox" id="GlobalTopSplitByType"
-                                               aria-describedby="hintGlobalSplit" data-toggles="groupGlobalSplit" />
-                                        <span>Une rangée pour les films, une pour les séries</span>
+                                        <input is="emby-checkbox" type="checkbox" id="EnableLocalTop" />
+                                        <span class="mcCfg-order-name">Top du serveur</span>
                                     </label>
-                                    <div class="fieldDescription checkboxFieldDescription" id="hintGlobalSplit">
-                                        Avec « Films et séries » : deux classements séparés au lieu d'un seul mélangé.
-                                    </div>
-                                </div>
+                                    <button is="emby-button" type="button" class="raised mcCfg-order-up"
+                                            aria-label="Monter : Top du serveur">&#9650;</button>
+                                    <button is="emby-button" type="button" class="raised mcCfg-order-down"
+                                            aria-label="Descendre : Top du serveur">&#9660;</button>
+                                </li>
+                                <li data-row="alltime">
+                                    <span class="mcCfg-order-rank"></span>
+                                    <label class="emby-checkbox-label">
+                                        <input is="emby-checkbox" type="checkbox" id="EnableAllTimeRow" />
+                                        <span class="mcCfg-order-name">Les plus regardés de tous les temps</span>
+                                    </label>
+                                    <button is="emby-button" type="button" class="raised mcCfg-order-up"
+                                            aria-label="Monter : Les plus regardés de tous les temps">&#9650;</button>
+                                    <button is="emby-button" type="button" class="raised mcCfg-order-down"
+                                            aria-label="Descendre : Les plus regardés de tous les temps">&#9660;</button>
+                                </li>
+                                <li data-row="global">
+                                    <span class="mcCfg-order-rank"></span>
+                                    <label class="emby-checkbox-label">
+                                        <input is="emby-checkbox" type="checkbox" id="EnableGlobalTop" />
+                                        <span class="mcCfg-order-name">Top mondial</span>
+                                    </label>
+                                    <button is="emby-button" type="button" class="raised mcCfg-order-up"
+                                            aria-label="Monter : Top mondial">&#9650;</button>
+                                    <button is="emby-button" type="button" class="raised mcCfg-order-down"
+                                            aria-label="Descendre : Top mondial">&#9660;</button>
+                                </li>
+                                <li data-row="returning">
+                                    <span class="mcCfg-order-rank"></span>
+                                    <label class="emby-checkbox-label">
+                                        <input is="emby-checkbox" type="checkbox" id="EnableReturningRow" />
+                                        <span class="mcCfg-order-name">De retour cette semaine</span>
+                                    </label>
+                                    <button is="emby-button" type="button" class="raised mcCfg-order-up"
+                                            aria-label="Monter : De retour cette semaine">&#9650;</button>
+                                    <button is="emby-button" type="button" class="raised mcCfg-order-down"
+                                            aria-label="Descendre : De retour cette semaine">&#9660;</button>
+                                </li>
+                                <li data-row="neverplayed">
+                                    <span class="mcCfg-order-rank"></span>
+                                    <label class="emby-checkbox-label">
+                                        <input is="emby-checkbox" type="checkbox" id="EnableNeverPlayedRow" />
+                                        <span class="mcCfg-order-name">Jamais vu</span>
+                                    </label>
+                                    <button is="emby-button" type="button" class="raised mcCfg-order-up"
+                                            aria-label="Monter : Jamais vu">&#9650;</button>
+                                    <button is="emby-button" type="button" class="raised mcCfg-order-down"
+                                            aria-label="Descendre : Jamais vu">&#9660;</button>
+                                </li>
+                                <li data-row="because">
+                                    <span class="mcCfg-order-rank"></span>
+                                    <label class="emby-checkbox-label">
+                                        <input is="emby-checkbox" type="checkbox" id="EnableBecauseRow" />
+                                        <span class="mcCfg-order-name">Parce que tu as regardé…</span>
+                                    </label>
+                                    <button is="emby-button" type="button" class="raised mcCfg-order-up"
+                                            aria-label="Monter : Parce que tu as regardé…">&#9650;</button>
+                                    <button is="emby-button" type="button" class="raised mcCfg-order-down"
+                                            aria-label="Descendre : Parce que tu as regardé…">&#9660;</button>
+                                </li>
+                                <li data-row="studios">
+                                    <span class="mcCfg-order-rank"></span>
+                                    <label class="emby-checkbox-label">
+                                        <input is="emby-checkbox" type="checkbox" id="EnableStudioRow" />
+                                        <span class="mcCfg-order-name">Par studio</span>
+                                    </label>
+                                    <button is="emby-button" type="button" class="raised mcCfg-order-up"
+                                            aria-label="Monter : Par studio">&#9650;</button>
+                                    <button is="emby-button" type="button" class="raised mcCfg-order-down"
+                                            aria-label="Descendre : Par studio">&#9660;</button>
+                                </li>
+                                <li data-row="genres">
+                                    <span class="mcCfg-order-rank"></span>
+                                    <label class="emby-checkbox-label">
+                                        <input is="emby-checkbox" type="checkbox" id="EnableGenreRows" />
+                                        <span class="mcCfg-order-name">Par genre</span>
+                                    </label>
+                                    <button is="emby-button" type="button" class="raised mcCfg-order-up"
+                                            aria-label="Monter : Par genre">&#9650;</button>
+                                    <button is="emby-button" type="button" class="raised mcCfg-order-down"
+                                            aria-label="Descendre : Par genre">&#9660;</button>
+                                </li>
+                            </ol>
+                            <div class="fieldDescription" id="hintRowOrder">
+                                Les flèches changent la place d'une rangée sur l'accueil.
+                            </div>
+                        </div>
 
-                                <div id="groupGlobalSplit">
-                                    <div class="mcCfg-grid">
-                                        <div class="inputContainer">
-                                            <input is="emby-input" type="text" id="GlobalMoviesRowTitle"
-                                                   label="Titre — films" />
-                                        </div>
-                                        <div class="inputContainer">
-                                            <input is="emby-input" type="text" id="GlobalSeriesRowTitle"
-                                                   label="Titre — séries" />
-                                        </div>
-                                    </div>
-                                </div>
-
+                        <div class="mcCfg-sub" id="groupReturning" data-show-if="EnableReturningRow">
+                            <h3 class="mcCfg-sub-title">De retour cette semaine</h3>
+                            <div class="mcCfg-grid">
                                 <div class="inputContainer">
-                                    <input is="emby-input" type="password" id="GlobalTopApiKey" autocomplete="off"
-                                           label="Clé d'API" aria-describedby="hintApiKey" />
-                                    <div class="fieldDescription" id="hintApiKey">
-                                        TMDB : clé v3 ou jeton d'accès v4. Trakt : identifiant client.
-                                        Cette clé n'est jamais transmise aux clients.
-                                    </div>
+                                    <input is="emby-input" type="text" id="ReturningRowTitle" label="Titre de la rangée" />
                                 </div>
-
-                                <div class="mcCfg-grid">
-                                    <div class="inputContainer">
-                                        <input is="emby-input" type="number" id="GlobalTopSize" min="1" max="100" step="1"
-                                               label="Nombre d'entrées" required />
-                                    </div>
-                                    <div class="inputContainer">
-                                        <input is="emby-input" type="text" id="MetadataLanguage"
-                                               label="Langue des métadonnées" aria-describedby="hintLang" />
-                                        <div class="fieldDescription" id="hintLang">Code BCP-47, par exemple fr-FR.</div>
-                                    </div>
+                                <div class="inputContainer">
+                                    <input is="emby-input" type="number" id="ReturningRowDays" min="1" max="365" step="1"
+                                           label="Épisodes ajoutés depuis (jours)" required />
                                 </div>
-
-                                <div class="checkboxContainer">
-                                    <label class="emby-checkbox-label">
-                                        <input is="emby-checkbox" type="checkbox" id="GlobalTopLibraryOnly" />
-                                        <span>Ne garder que les titres présents dans la bibliothèque</span>
-                                    </label>
-                                </div>
-
-                                <div class="checkboxContainer">
-                                    <label class="emby-checkbox-label">
-                                        <input is="emby-checkbox" type="checkbox" id="EnableSeerrRequests"
-                                               aria-describedby="hintSeerr" />
-                                        <span>Proposer de demander les titres absents à Seerr</span>
-                                    </label>
-                                    <div class="fieldDescription checkboxFieldDescription" id="hintSeerr">
-                                        Jellyseerr, Overseerr ou leur successeur. Un bouton « Demander » s'affiche
-                                        sur l'affiche de chaque titre absent de la bibliothèque, comme dans
-                                        Jellyfin Enhanced. La demande part au nom du compte Seerr de l'utilisateur :
-                                        ses droits et ses quotas s'appliquent, et il doit avoir été importé depuis
-                                        Jellyfin dans Seerr.
-                                    </div>
-                                </div>
-                                <p class="mcCfg-alert" id="mcSeerrAlert" role="status" aria-live="polite" hidden>
-                                    <span aria-hidden="true">&#9888;</span><span>
-                                        <strong>Aucun bouton ne s'affichera</strong>
-                                        « Ne garder que les titres présents dans la bibliothèque » est cochée :
-                                        le Top mondial ne montre alors aucun titre absent à demander.
-                                    </span>
-                                </p>
-
-                                <div id="groupSeerr">
-                                    <div class="mcCfg-grid">
-                                        <div class="inputContainer">
-                                            <input is="emby-input" type="url" id="SeerrUrl" autocomplete="off"
-                                                   label="Adresse de Seerr" aria-describedby="hintSeerrUrl" />
-                                            <div class="fieldDescription" id="hintSeerrUrl">
-                                                Telle que le serveur Jellyfin l'atteint, par exemple
-                                                http://192.168.1.10:5055.
-                                            </div>
-                                        </div>
-                                        <div class="inputContainer">
-                                            <input is="emby-input" type="password" id="SeerrApiKey" autocomplete="off"
-                                                   label="Clé d'API de Seerr" aria-describedby="hintSeerrKey" />
-                                            <div class="fieldDescription" id="hintSeerrKey">
-                                                Dans Seerr : Paramètres, Général. Elle n'est jamais transmise aux clients.
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div class="checkboxContainer">
-                                        <label class="emby-checkbox-label">
-                                            <input is="emby-checkbox" type="checkbox" id="SeerrAdvancedRequests"
-                                                   aria-describedby="hintSeerrAdvanced" />
-                                            <span>Proposer les options avancées : serveur, profil de qualité, dossier racine</span>
-                                        </label>
-                                        <div class="fieldDescription checkboxFieldDescription" id="hintSeerrAdvanced">
-                                            Comme « Afficher les options avancées » dans Jellyfin Enhanced : chaque demande
-                                            propose les serveurs, profils et dossiers configurés dans Seerr, et seuls ceux-là
-                                            sont acceptés. Un film ouvre alors lui aussi une fenêtre de demande.
-                                        </div>
-                                    </div>
-                                    <button is="emby-button" type="button" id="seerrTestButton" class="raised button-alt">
-                                        <span>Tester la connexion</span>
-                                    </button>
-                                    <p class="fieldDescription" id="seerrTestResult" role="status" aria-live="polite"></p>
+                                <div class="inputContainer">
+                                    <input is="emby-input" type="number" id="ReturningRowSize" min="1" max="100" step="1"
+                                           label="Nombre de séries" required />
                                 </div>
                             </div>
-                        </fieldset>
-                    </div>
+                        </div>
 
-                    <div role="tabpanel" id="panelCatalog" aria-labelledby="tabCatalog" hidden>
-                        <fieldset class="mcCfg-group">
-                            <legend>Studios et genres</legend>
+                        <div class="mcCfg-sub" id="groupNeverPlayed" data-show-if="EnableNeverPlayedRow">
+                            <h3 class="mcCfg-sub-title">Jamais vu</h3>
+                            <div class="mcCfg-grid">
+                                <div class="inputContainer">
+                                    <input is="emby-input" type="text" id="NeverPlayedRowTitle" label="Titre de la rangée" />
+                                </div>
+                                <div class="inputContainer">
+                                    <input is="emby-input" type="number" id="NeverPlayedRowSize" min="1" max="100" step="1"
+                                           label="Nombre de films" required />
+                                </div>
+                                <div class="inputContainer">
+                                    <input is="emby-input" type="number" id="NeverPlayedMinRating" min="0" max="10" step="0.1"
+                                           label="Note minimale (sur 10)" required />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mcCfg-sub" id="groupBecause" data-show-if="EnableBecauseRow">
+                            <h3 class="mcCfg-sub-title">Parce que tu as regardé…</h3>
+                            <div class="mcCfg-grid">
+                                <div class="inputContainer">
+                                    <input is="emby-input" type="text" id="BecauseRowTitle"
+                                           label="Titre de la rangée" aria-describedby="hintBecauseTitle" />
+                                    <div class="fieldDescription" id="hintBecauseTitle">
+                                        {0} devient le titre du dernier film vu.
+                                    </div>
+                                </div>
+                                <div class="inputContainer">
+                                    <input is="emby-input" type="number" id="BecauseRowSize" min="1" max="100" step="1"
+                                           label="Nombre de titres" required />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mcCfg-sub" id="groupStudio" data-show-if="EnableStudioRow">
+                            <h3 class="mcCfg-sub-title">Par studio</h3>
+                            <div class="mcCfg-grid">
+                                <div class="inputContainer">
+                                    <input is="emby-input" type="text" id="StudioRowTitle" label="Titre de la rangée" />
+                                </div>
+                                <div class="inputContainer">
+                                    <input is="emby-input" type="number" id="StudioRowSize" min="1" max="100" step="1"
+                                           label="Nombre de studios" required />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mcCfg-sub" id="groupGenre" data-show-if="EnableGenreRows">
+                            <h3 class="mcCfg-sub-title">Par genre</h3>
+                            <div class="mcCfg-grid">
+                                <div class="inputContainer">
+                                    <input is="emby-input" type="number" id="GenreRowCount" min="1" max="30" step="1"
+                                           label="Nombre de genres" required />
+                                </div>
+                                <div class="inputContainer">
+                                    <input is="emby-input" type="number" id="GenreRowItemCount" min="5" max="60" step="1"
+                                           label="Titres par rangée" required />
+                                </div>
+                            </div>
+                        </div>
+
+                        <p class="mcCfg-section-state" data-state-for="ReturningSeries,NeverPlayed,Studios,Genres"></p>
+                    </fieldset>
+
+                    <fieldset class="mcCfg-group" id="groupLocal" data-show-if="EnableLocalTop|EnableAllTimeRow">
+                        <legend>Top du serveur</legend>
+                        <p class="mcCfg-group-hint" id="hintLocal">
+                            Les titres les plus regardés ici. Un compte vaut au plus un point par titre,
+                            et un épisode compte pour sa série.
+                        </p>
+                        <p class="mcCfg-section-state" data-state-for="LocalTop,AllTime"></p>
+
+                        <div class="mcCfg-grid">
+                            <div class="inputContainer" data-show-if="EnableLocalTop">
+                                <input is="emby-input" type="text" id="LocalRowTitle" label="Titre de la rangée" />
+                            </div>
+                            <div class="inputContainer" data-show-if="EnableLocalTop">
+                                <input is="emby-input" type="number" id="LocalTopSize" min="1" max="100" step="1"
+                                       label="Nombre de titres" required />
+                            </div>
+                            <div class="inputContainer" data-show-if="EnableLocalTop">
+                                <input is="emby-input" type="number" id="LocalTopWindowDays" min="0" max="3650" step="1"
+                                       label="Période (jours)" required aria-describedby="hintWindow" />
+                                <div class="fieldDescription" id="hintWindow">
+                                    7 : la semaine. 30 : le mois. 0 : depuis toujours.
+                                </div>
+                            </div>
+                            <div class="selectContainer">
+                                <select is="emby-select" id="LocalTopMediaKind" label="Types de médias">
+                                    <option value="Movies">Films</option>
+                                    <option value="Series">Séries</option>
+                                    <option value="Both">Films et séries</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="mcCfg-sub" id="groupAllTime" data-show-if="EnableAllTimeRow">
+                            <h3 class="mcCfg-sub-title">Les plus regardés de tous les temps</h3>
+                            <div class="mcCfg-grid">
+                                <div class="inputContainer">
+                                    <input is="emby-input" type="text" id="AllTimeRowTitle" label="Titre de la rangée" />
+                                </div>
+                                <div class="inputContainer">
+                                    <input is="emby-input" type="number" id="AllTimeRowSize" min="1" max="100" step="1"
+                                           label="Nombre de titres" required />
+                                </div>
+                            </div>
+                        </div>
+                    </fieldset>
+
+                    <fieldset class="mcCfg-group" id="groupGlobal" data-show-if="EnableGlobalTop">
+                        <legend>Top mondial</legend>
+                        <p class="mcCfg-group-hint" id="hintGlobal">
+                            Les tendances de TMDB ou de Trakt, rapprochées de votre bibliothèque.
+                        </p>
+                        <p class="mcCfg-section-state" data-state-for="GlobalTop"></p>
+
+                        <div class="mcCfg-grid">
+                            <div class="selectContainer">
+                                <select is="emby-select" id="GlobalTopProvider" label="Source">
+                                    <option value="Tmdb">TMDB</option>
+                                    <option value="Trakt">Trakt</option>
+                                </select>
+                            </div>
+                            <div class="selectContainer">
+                                <select is="emby-select" id="GlobalTopFeed" label="Liste" aria-describedby="hintFeed">
+                                    <option value="Trending">Tendances du moment</option>
+                                    <option value="NowPlaying">À l'affiche / en diffusion</option>
+                                    <option value="Upcoming">Prochaines sorties</option>
+                                </select>
+                                <div class="fieldDescription" id="hintFeed">
+                                    TMDB seulement. « Prochaines sorties » : films seulement.
+                                </div>
+                            </div>
+                            <div class="selectContainer">
+                                <select is="emby-select" id="GlobalTopMediaKind" label="Types de médias">
+                                    <option value="Movies">Films</option>
+                                    <option value="Series">Séries</option>
+                                    <option value="Both">Films et séries</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <input is="emby-input" type="number" id="GlobalTopSize" min="1" max="100" step="1"
+                                       label="Nombre de titres" required />
+                            </div>
+                        </div>
+
+                        <div class="checkboxContainer" data-show-if="GlobalTopMediaKind=Both">
+                            <label class="emby-checkbox-label">
+                                <input is="emby-checkbox" type="checkbox" id="GlobalTopSplitByType" />
+                                <span>Une rangée pour les films, une pour les séries</span>
+                            </label>
+                        </div>
+
+                        <div class="mcCfg-grid">
+                            <div class="inputContainer" data-show-if="!GlobalTopSplitByType|!GlobalTopMediaKind=Both">
+                                <input is="emby-input" type="text" id="GlobalRowTitle" label="Titre de la rangée" />
+                            </div>
+                            <div class="inputContainer" data-show-if="GlobalTopSplitByType&GlobalTopMediaKind=Both">
+                                <input is="emby-input" type="text" id="GlobalMoviesRowTitle" label="Titre — films" />
+                            </div>
+                            <div class="inputContainer" data-show-if="GlobalTopSplitByType&GlobalTopMediaKind=Both">
+                                <input is="emby-input" type="text" id="GlobalSeriesRowTitle" label="Titre — séries" />
+                            </div>
+                        </div>
+
+                        <div class="inputContainer">
+                            <input is="emby-input" type="password" id="GlobalTopApiKey" autocomplete="off"
+                                   label="Clé d'API" aria-describedby="hintApiKey" />
+                            <div class="fieldDescription" id="hintApiKey">
+                                TMDB : clé v3 ou jeton v4. Trakt : identifiant client. Jamais envoyée aux navigateurs.
+                            </div>
+                        </div>
+
+                        <div class="checkboxContainer">
+                            <label class="emby-checkbox-label">
+                                <input is="emby-checkbox" type="checkbox" id="GlobalTopLibraryOnly" />
+                                <span>Ne garder que les titres présents dans la bibliothèque</span>
+                            </label>
+                        </div>
+                    </fieldset>
+
+                    <fieldset class="mcCfg-group" id="blockSeerr" data-show-if="EnableGlobalTop">
+                        <legend>Seerr</legend>
+                        <p class="mcCfg-group-hint" id="hintSeerr">
+                            Un bouton « Demander » sur les titres du Top mondial absents de la
+                            bibliothèque, au nom du compte Seerr de chacun.
+                        </p>
+
+                        <div class="checkboxContainer">
+                            <label class="emby-checkbox-label">
+                                <input is="emby-checkbox" type="checkbox" id="EnableSeerrRequests"
+                                       aria-describedby="hintSeerr" />
+                                <span>Proposer les demandes à Seerr</span>
+                            </label>
+                        </div>
+                        <p class="mcCfg-alert" id="mcSeerrAlert" role="status" aria-live="polite"
+                           data-show-if="EnableSeerrRequests&GlobalTopLibraryOnly" hidden>
+                            <span aria-hidden="true">&#9888;</span><span>
+                                <strong>Aucun bouton ne s'affichera</strong>
+                                Le Top mondial ne garde que les titres présents : il n'y a rien à demander.
+                            </span>
+                        </p>
+
+                        <div id="groupSeerr" data-show-if="EnableSeerrRequests">
+                            <div class="mcCfg-grid">
+                                <div class="inputContainer">
+                                    <input is="emby-input" type="url" id="SeerrUrl" autocomplete="off"
+                                           label="Adresse de Seerr" aria-describedby="hintSeerrUrl" />
+                                    <div class="fieldDescription" id="hintSeerrUrl">
+                                        Vue depuis le serveur, par exemple http://192.168.1.10:5055.
+                                    </div>
+                                </div>
+                                <div class="inputContainer">
+                                    <input is="emby-input" type="password" id="SeerrApiKey" autocomplete="off"
+                                           label="Clé d'API de Seerr" aria-describedby="hintSeerrKey" />
+                                    <div class="fieldDescription" id="hintSeerrKey">
+                                        Dans Seerr : Paramètres, Général.
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="checkboxContainer">
+                                <label class="emby-checkbox-label">
+                                    <input is="emby-checkbox" type="checkbox" id="SeerrAdvancedRequests" />
+                                    <span>Proposer le serveur, le profil de qualité et le dossier</span>
+                                </label>
+                            </div>
+                            <button is="emby-button" type="button" id="seerrTestButton" class="raised button-alt">
+                                <span>Tester la connexion</span>
+                            </button>
+                            <p class="fieldDescription" id="seerrTestResult" role="status" aria-live="polite"></p>
+                        </div>
+                    </fieldset>
+
+                    <fieldset class="mcCfg-group" id="blockLook">
+                        <legend>Apparence</legend>
+                        <div class="mcCfg-grid">
+                            <div class="inputContainer">
+                                <input is="emby-input" type="color" id="HighlightColor"
+                                       label="Couleur d'accentuation" aria-describedby="hintColor" />
+                                <div class="fieldDescription" id="hintColor">
+                                    Contour du chiffre au survol, et focus.
+                                </div>
+                            </div>
+                            <div class="inputContainer">
+                                <input is="emby-input" type="number" id="RankNumberScale" min="40" max="100" step="5"
+                                       label="Taille du chiffre (%)" required aria-describedby="hintRankScale" />
+                                <div class="fieldDescription" id="hintRankScale">
+                                    100 : comme Netflix. Plus bas, la rangée se resserre ; l'affiche ne change pas.
+                                </div>
+                            </div>
+                        </div>
+                        <div class="checkboxContainer">
+                            <label class="emby-checkbox-label">
+                                <input is="emby-checkbox" type="checkbox" id="AllowUserPreferences"
+                                       aria-describedby="hintUserPrefs" />
+                                <span>Laisser chaque compte régler son accueil</span>
+                            </label>
+                            <div class="fieldDescription" id="hintUserPrefs">
+                                Un bouton sur l'accueil : rangées, ordre, couleur. Cette page reste le réglage par défaut.
+                            </div>
+                        </div>
+                    </fieldset>
+
+                    <details class="mcCfg-advanced" id="advancedSettings">
+                        <summary>Réglages avancés</summary>
+
+                        <div class="mcCfg-sub">
+                            <h3 class="mcCfg-sub-title">Exclusions</h3>
+                            <div class="checkboxContainer">
+                                <label class="emby-checkbox-label">
+                                    <input is="emby-checkbox" type="checkbox" id="ExcludeChannelContent"
+                                           aria-describedby="hintChannel" />
+                                    <span>Ignorer le contenu IPTV (XFusion et autres chaînes)</span>
+                                </label>
+                                <div class="fieldDescription" id="hintChannel">
+                                    Garde les rangées sur votre propre bibliothèque.
+                                </div>
+                            </div>
+                            <div class="inputContainer">
+                                <textarea is="emby-textarea" id="ExcludedUserIds" rows="2"
+                                          label="Comptes exclus" aria-describedby="hintExcluded"></textarea>
+                                <div class="fieldDescription" id="hintExcluded">
+                                    Un identifiant par ligne : comptes de service, invités.
+                                </div>
+                            </div>
+                            <div class="inputContainer">
+                                <textarea is="emby-textarea" id="ExcludedLibraryIds" rows="2"
+                                          label="Bibliothèques exclues" aria-describedby="hintExcludedLib"></textarea>
+                                <div class="fieldDescription" id="hintExcludedLib">
+                                    Un identifiant par ligne. Vaut pour toutes les rangées.
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mcCfg-sub" id="groupPlayCount" data-show-if="@playCount">
+                            <h3 class="mcCfg-sub-title">Comptage par nombre de lectures</h3>
                             <p class="mcCfg-group-hint">
-                                Rangées supplémentaires construites à partir de votre bibliothèque :
-                                les studios les mieux représentés, puis une rangée par genre.
+                                Pour « de tous les temps », et pour le Top du serveur sans Playback Reporting.
                             </p>
-                            <p class="mcCfg-section-state" data-state-for="Studios,Genres"></p>
+                            <div class="mcCfg-grid">
+                                <div class="inputContainer">
+                                    <input is="emby-input" type="number" id="MaxPlaysCountedPerUser" min="0" max="100" step="1"
+                                           label="Lectures comptées par compte" required aria-describedby="hintCap" />
+                                    <div class="fieldDescription" id="hintCap">Par titre, sur un classement depuis toujours. 0 : sans limite.</div>
+                                </div>
+                                <div class="inputContainer">
+                                    <input is="emby-input" type="number" id="CandidatesPerUser" min="10" max="1000" step="10"
+                                           label="Titres examinés par compte" required aria-describedby="hintCandidates" />
+                                    <div class="fieldDescription" id="hintCandidates">Plus haut : plus précis, plus lent.</div>
+                                </div>
+                            </div>
+                        </div>
 
+                        <div class="mcCfg-sub">
+                            <h3 class="mcCfg-sub-title">Recalcul et collections</h3>
+                            <div class="inputContainer">
+                                <input is="emby-input" type="number" id="RefreshIntervalHours" min="1" max="168" step="1"
+                                       label="Recalcul toutes les (heures)" required aria-describedby="hintInterval" />
+                                <div class="fieldDescription" id="hintInterval">
+                                    Remplace l'intervalle de la tâche planifiée de Jellyfin.
+                                </div>
+                            </div>
                             <div class="checkboxContainer">
                                 <label class="emby-checkbox-label">
-                                    <input is="emby-checkbox" type="checkbox" id="EnableStudioRow"
-                                           data-toggles="groupStudio" />
-                                    <span>Afficher la rangée des studios</span>
+                                    <input is="emby-checkbox" type="checkbox" id="SyncCollections"
+                                           aria-describedby="hintCollections" />
+                                    <span>Créer aussi une collection par classement</span>
                                 </label>
-                            </div>
-
-                            <div id="groupStudio">
-                                <div class="mcCfg-grid">
-                                    <div class="inputContainer">
-                                        <input is="emby-input" type="text" id="StudioRowTitle" label="Titre de la rangée" />
-                                    </div>
-                                    <div class="inputContainer">
-                                        <input is="emby-input" type="number" id="StudioRowSize" min="1" max="100" step="1"
-                                               label="Nombre de studios" required />
-                                    </div>
+                                <div class="fieldDescription" id="hintCollections">
+                                    Pour les clients sans les rangées : Kodi, certains boîtiers TV.
                                 </div>
                             </div>
-
-                            <div class="checkboxContainer">
-                                <label class="emby-checkbox-label">
-                                    <input is="emby-checkbox" type="checkbox" id="EnableGenreRows"
-                                           data-toggles="groupGenre" />
-                                    <span>Afficher des rangées par genre</span>
-                                </label>
-                            </div>
-
-                            <div id="groupGenre">
-                                <div class="mcCfg-grid">
-                                    <div class="inputContainer">
-                                        <input is="emby-input" type="number" id="GenreRowCount" min="1" max="30" step="1"
-                                               label="Nombre de genres" required aria-describedby="hintGenreCount" />
-                                        <div class="fieldDescription" id="hintGenreCount">
-                                            Les genres les plus fournis, du plus riche au moins riche.
-                                        </div>
-                                    </div>
-                                    <div class="inputContainer">
-                                        <input is="emby-input" type="number" id="GenreRowItemCount" min="5" max="60" step="1"
-                                               label="Titres par rangée" required />
-                                    </div>
+                            <div class="mcCfg-grid" id="groupCollections" data-show-if="SyncCollections">
+                                <div class="inputContainer">
+                                    <input is="emby-input" type="text" id="LocalCollectionName"
+                                           label="Collection — Top du serveur" />
+                                </div>
+                                <div class="inputContainer">
+                                    <input is="emby-input" type="text" id="GlobalCollectionName"
+                                           label="Collection — Top mondial" />
                                 </div>
                             </div>
+                        </div>
 
-                            <details class="mcCfg-advanced">
-                                <summary>Réglages avancés</summary>
-                                <div class="mcCfg-grid">
-                                    <div class="inputContainer">
-                                        <input is="emby-input" type="number" id="MinItemsPerStudio" min="1" max="100" step="1"
-                                               label="Titres minimum par studio" required aria-describedby="hintMinStudio" />
-                                        <div class="fieldDescription" id="hintMinStudio">
-                                            Écarte les studios trop peu représentés.
-                                        </div>
-                                    </div>
-                                    <div class="inputContainer">
-                                        <input is="emby-input" type="number" id="MinItemsPerGenre" min="1" max="100" step="1"
-                                               label="Titres minimum par genre" required />
-                                    </div>
-                                </div>
-                            </details>
-                        </fieldset>
-                    </div>
-
-                    <div role="tabpanel" id="panelNews" aria-labelledby="tabNews" hidden>
-                        <fieldset class="mcCfg-group">
-                            <legend>Actualité de la bibliothèque</legend>
-                            <p class="mcCfg-group-hint">
-                                Deux rangées construites à partir de votre seule bibliothèque, sans source externe.
-                            </p>
-                            <p class="mcCfg-section-state" data-state-for="ReturningSeries,NeverPlayed"></p>
-
-                            <div class="checkboxContainer">
-                                <label class="emby-checkbox-label">
-                                    <input is="emby-checkbox" type="checkbox" id="EnableReturningRow"
-                                           aria-describedby="hintReturning" data-toggles="groupReturning" />
-                                    <span>Afficher « de retour cette semaine »</span>
-                                </label>
-                                <div class="fieldDescription" id="hintReturning">
-                                    Les séries dont des épisodes viennent d'être ajoutés, de l'ajout le plus
-                                    récent au plus ancien.
-                                </div>
-                            </div>
-
-                            <div id="groupReturning">
-                                <div class="mcCfg-grid">
-                                    <div class="inputContainer">
-                                        <input is="emby-input" type="text" id="ReturningRowTitle" label="Titre de la rangée" />
-                                    </div>
-                                    <div class="inputContainer">
-                                        <input is="emby-input" type="number" id="ReturningRowDays" min="1" max="365" step="1"
-                                               label="Fenêtre (jours)" required />
-                                    </div>
-                                    <div class="inputContainer">
-                                        <input is="emby-input" type="number" id="ReturningRowSize" min="1" max="100" step="1"
-                                               label="Nombre de séries" required />
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="checkboxContainer">
-                                <label class="emby-checkbox-label">
-                                    <input is="emby-checkbox" type="checkbox" id="EnableNeverPlayedRow"
-                                           aria-describedby="hintNeverPlayed" data-toggles="groupNeverPlayed" />
-                                    <span>Afficher « jamais vu »</span>
-                                </label>
-                                <div class="fieldDescription" id="hintNeverPlayed">
-                                    Les films bien notés que personne n'a encore lancés sur le serveur.
-                                    Limité aux films : pour une série, « jamais vu » serait ambigu.
-                                </div>
-                            </div>
-
-                            <div id="groupNeverPlayed">
-                                <div class="mcCfg-grid">
-                                    <div class="inputContainer">
-                                        <input is="emby-input" type="text" id="NeverPlayedRowTitle" label="Titre de la rangée" />
-                                    </div>
-                                    <div class="inputContainer">
-                                        <input is="emby-input" type="number" id="NeverPlayedRowSize" min="1" max="100" step="1"
-                                               label="Nombre de films" required />
-                                    </div>
-                                    <div class="inputContainer">
-                                        <input is="emby-input" type="number" id="NeverPlayedMinRating" min="0" max="10" step="0.1"
-                                               label="Note minimale" required aria-describedby="hintMinRating" />
-                                        <div class="fieldDescription" id="hintMinRating">
-                                            Note de la communauté, sur 10.
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </fieldset>
-
-                        <fieldset class="mcCfg-group">
-                            <legend>Recommandation personnelle</legend>
-                            <p class="mcCfg-group-hint">
-                                La seule rangée propre à chaque compte. Elle n'est pas précalculée :
-                                le client repère le dernier film terminé par l'utilisateur, puis demande
-                                à Jellyfin d'autres titres du même genre.
-                            </p>
-
-                            <div class="checkboxContainer">
-                                <label class="emby-checkbox-label">
-                                    <input is="emby-checkbox" type="checkbox" id="EnableBecauseRow"
-                                           aria-describedby="hintBecause" data-toggles="groupBecause" />
-                                    <span>Afficher « parce que tu as regardé… »</span>
-                                </label>
-                                <div class="fieldDescription" id="hintBecause">
-                                    Absente tant que l'utilisateur n'a terminé aucun film. Chacun voit
-                                    la sienne, calculée par son propre client.
-                                </div>
-                            </div>
-
-                            <div id="groupBecause">
-                                <div class="mcCfg-grid">
-                                    <div class="inputContainer">
-                                        <input is="emby-input" type="text" id="BecauseRowTitle"
-                                               label="Titre de la rangée" aria-describedby="hintBecauseTitle" />
-                                        <div class="fieldDescription" id="hintBecauseTitle">
-                                            {0} est remplacé par le titre du film. Sans {0}, le titre
-                                            s'affiche tel quel.
-                                        </div>
-                                    </div>
-                                    <div class="inputContainer">
-                                        <input is="emby-input" type="number" id="BecauseRowSize" min="1" max="100" step="1"
-                                               label="Nombre de titres" required />
-                                    </div>
-                                </div>
-                            </div>
-                        </fieldset>
-                    </div>
-
-                    <div role="tabpanel" id="panelHome" aria-labelledby="tabHome" hidden>
-                        <fieldset class="mcCfg-group">
-                            <legend>Affichage sur la page d'accueil</legend>
-                            <p class="mcCfg-group-hint" id="hintHome">
-                                Les rangées s'insèrent juste sous vos bibliothèques, sans remplacer les
-                                sections natives de Jellyfin.
-                            </p>
-
+                        <div class="mcCfg-sub">
+                            <h3 class="mcCfg-sub-title">Sections de Jellyfin</h3>
                             <div class="checkboxContainer">
                                 <label class="emby-checkbox-label">
                                     <input is="emby-checkbox" type="checkbox" id="ManageNativeSections"
                                            aria-describedby="hintManageNative" />
-                                    <span>Ordonner aussi les sections de Jellyfin</span>
+                                    <span>Les ranger avec les rangées du plugin</span>
                                 </label>
                                 <div class="fieldDescription" id="hintManageNative">
-                                    Ajoute « Continuer de regarder », « À suivre », etc. à la liste
-                                    ci-dessous, pour tout disposer librement. À savoir : l'ordre des
-                                    sections natives est normalement un réglage <strong>de chaque
-                                    utilisateur</strong> ; l'activer ici impose votre ordre à tout le monde.
-                                    Une section qu'un utilisateur n'affiche pas est simplement ignorée.
+                                    « Continuer de regarder », « À suivre »… rejoignent la liste plus haut ;
+                                    cet ordre s'impose à tous les comptes.
                                 </div>
                             </div>
-
-                            <div class="inputContainer">
-                                <label class="inputLabel" for="RowOrder">Ordre des rangées</label>
-                                <!-- La liste ci-dessous écrit dans ce champ ; c'est lui que les
-                                     tableaux de chargement et de sauvegarde connaissent. -->
-                                <input type="hidden" id="RowOrder" />
-                                <ol class="mcCfg-order" id="mcRowOrder" aria-describedby="hintRowOrder"></ol>
-                                <div class="fieldDescription" id="hintRowOrder">
-                                    De haut en bas, telles qu'elles apparaissent sur l'accueil. Une rangée
-                                    désactivée garde sa place ici mais ne s'affiche pas.
-                                </div>
-                            </div>
-
                             <div class="checkboxContainer">
                                 <label class="emby-checkbox-label">
-                                    <input is="emby-checkbox" type="checkbox" id="EnableHomeRows"
-                                           aria-describedby="hintHomeRows" data-toggles="groupHome" />
-                                    <span>Afficher les rangées sur la page d'accueil</span>
+                                    <input is="emby-checkbox" type="checkbox" id="HideNativeHomeSections"
+                                           aria-describedby="hintHideNative" />
+                                    <span>Les masquer</span>
                                 </label>
-                                <div class="fieldDescription" id="hintHomeRows">
-                                    Prend effet au redémarrage du serveur. Au premier chargement, forcez
-                                    le rafraîchissement du navigateur avec Ctrl + Maj + R.
+                                <div class="fieldDescription" id="hintHideNative">
+                                    Ne restent que vos bibliothèques et les rangées du plugin, pour tous les comptes.
                                 </div>
                             </div>
+                        </div>
 
-                            <div id="groupHome">
-                                <div class="checkboxContainer">
-                                    <label class="emby-checkbox-label">
-                                        <input is="emby-checkbox" type="checkbox" id="AllowUserPreferences"
-                                               aria-describedby="hintUserPrefs" />
-                                        <span>Laisser chaque utilisateur régler ses rangées</span>
-                                    </label>
-                                    <div class="fieldDescription" id="hintUserPrefs">
-                                        Les réglages de cette page deviennent un <b>défaut</b>. Chacun peut alors
-                                        choisir ses rangées, leur ordre, sa couleur et la taille du chiffre depuis
-                                        un bouton posé sur sa propre page d'accueil — la page de configuration du
-                                        plugin, elle, reste réservée aux administrateurs. Ce qu'un compte ne touche
-                                        pas continue de suivre cette page : une rangée activée ici apparaît chez
-                                        tous ceux qui n'ont rien décidé à son sujet. Décocher n'efface aucun choix,
-                                        il est seulement ignoré.
-                                    </div>
+                        <div class="mcCfg-sub" data-show-if="EnableStudioRow|EnableGenreRows">
+                            <h3 class="mcCfg-sub-title">Studios et genres</h3>
+                            <div class="mcCfg-grid">
+                                <div class="inputContainer" data-show-if="EnableStudioRow">
+                                    <input is="emby-input" type="number" id="MinItemsPerStudio" min="1" max="100" step="1"
+                                           label="Titres minimum par studio" required />
                                 </div>
-
-                                <div class="checkboxContainer">
-                                    <label class="emby-checkbox-label">
-                                        <input is="emby-checkbox" type="checkbox" id="HideNativeHomeSections"
-                                               aria-describedby="hintHideNative" />
-                                        <span>Masquer les sections natives de Jellyfin</span>
-                                    </label>
-                                    <div class="fieldDescription" id="hintHideNative">
-                                        Ne laisse que vos bibliothèques et les rangées du plugin : les derniers
-                                        ajouts, la reprise de lecture et les autres sections natives disparaissent.
-                                        S'applique à tous les comptes du serveur, et reste sans effet tant que les
-                                        rangées du plugin ne sont pas chargées.
-                                    </div>
-                                </div>
-
-                                <div class="mcCfg-grid">
-                                    <div class="inputContainer">
-                                        <input is="emby-input" type="text" id="LocalRowTitle"
-                                               label="Titre — Top du serveur" />
-                                    </div>
-                                    <div class="inputContainer">
-                                        <input is="emby-input" type="text" id="GlobalRowTitle"
-                                               label="Titre — Top mondial" />
-                                    </div>
-                                    <div class="inputContainer">
-                                        <input is="emby-input" type="color" id="HighlightColor"
-                                               label="Couleur d'accentuation" aria-describedby="hintColor" />
-                                        <div class="fieldDescription" id="hintColor">
-                                            Contour du chiffre au survol et anneau de focus.
-                                        </div>
-                                    </div>
-
-                                    <div class="inputContainer">
-                                        <input is="emby-input" type="number" id="RankNumberScale"
-                                               min="40" max="100" step="5"
-                                               label="Hauteur du chiffre de rang (%)"
-                                               required aria-describedby="hintRankScale" />
-                                        <div class="fieldDescription" id="hintRankScale">
-                                            En pourcentage de la hauteur d'affiche. 100, la valeur
-                                            par défaut, donne la proportion de Netflix ; une rangée
-                                            classée occupe alors près du double d'une rangée
-                                            ordinaire, et sur téléphone une seule carte tient à
-                                            l'écran. Descendre à 75 ou 55 la resserre d'autant.
-                                            <strong>L'affiche ne change jamais de taille</strong> :
-                                            seul le chiffre bouge, et la rangée se resserre avec lui.
-                                        </div>
-                                    </div>
+                                <div class="inputContainer" data-show-if="EnableGenreRows">
+                                    <input is="emby-input" type="number" id="MinItemsPerGenre" min="1" max="100" step="1"
+                                           label="Titres minimum par genre" required />
                                 </div>
                             </div>
-                        </fieldset>
+                        </div>
 
-                        <fieldset class="mcCfg-group">
-                            <legend>Téléviseurs Samsung et LG</legend>
-                            <p class="mcCfg-group-hint">
-                                Les rangées s'affichent partout où le client charge l'interface web
-                                <em>du serveur</em> : navigateur, application de bureau, mobile, Android TV.
-                            </p>
-                            <div class="fieldDescription">
-                                <p>
-                                    Les applications <strong>Tizen</strong> (Samsung) et <strong>webOS</strong> (LG)
-                                    font exception : elles embarquent leur propre copie de l'interface web dans le
-                                    paquet installé sur le téléviseur, et ne chargent donc jamais le
-                                    <code>index.html</code> du serveur — celui que le plugin complète. Aucun réglage
-                                    ne peut changer cela côté serveur.
-                                </p>
-                                <p>
-                                    Pour les y faire apparaître, il faut reconstruire le paquet du téléviseur à
-                                    partir d'une interface web où cette balise a été ajoutée avant
-                                    <code>&lt;/body&gt;</code> :
-                                </p>
-                                <p><code id="mcCfg-scriptTag">&lt;script plugin="MediaCarousel" defer="defer"
-                                    src="/MediaCarousel/media-carousel.js"&gt;&lt;/script&gt;</code></p>
-                                <p>
-                                    Le rendu lui-même est prévu pour ces téléviseurs : espacements, contour de
-                                    focus à la télécommande et tailles d'affiche adaptées à un écran regardé de loin.
-                                </p>
-                            </div>
-                        </fieldset>
-                    </div>
-
-                    <div role="tabpanel" id="panelRefresh" aria-labelledby="tabRefresh" hidden>
-                        <fieldset class="mcCfg-group">
-                            <legend>Rafraîchissement et collections</legend>
-
+                        <div class="mcCfg-sub" data-show-if="EnableGlobalTop">
+                            <h3 class="mcCfg-sub-title">Top mondial</h3>
                             <div class="inputContainer">
-                                <input is="emby-input" type="number" id="RefreshIntervalHours" min="1" max="168" step="1"
-                                       label="Intervalle de recalcul (heures)" required aria-describedby="hintInterval" />
-                                <div class="fieldDescription" id="hintInterval">
-                                    Appliqué dès l'enregistrement. Ce champ fait foi pour la
-                                    périodicité : un intervalle saisi dans Tableau de bord →
-                                    Tâches planifiées serait écrasé. Les autres déclencheurs
-                                    que vous y ajoutez, eux, sont conservés.
-                                </div>
+                                <input is="emby-input" type="text" id="MetadataLanguage"
+                                       label="Langue des titres" aria-describedby="hintLang" />
+                                <div class="fieldDescription" id="hintLang">Par exemple fr-FR.</div>
                             </div>
-
-                            <div class="checkboxContainer">
-                                <label class="emby-checkbox-label">
-                                    <input is="emby-checkbox" type="checkbox" id="SyncCollections"
-                                           aria-describedby="hintCollections" data-toggles="groupCollections" />
-                                    <span>Créer aussi une collection par classement</span>
-                                </label>
-                                <div class="fieldDescription" id="hintCollections">
-                                    Utile pour les clients qui n'exécutent pas le script (Kodi, certains boîtiers TV).
-                                </div>
-                            </div>
-
-                            <div id="groupCollections">
-                                <div class="mcCfg-grid">
-                                    <div class="inputContainer">
-                                        <input is="emby-input" type="text" id="LocalCollectionName"
-                                               label="Collection — Top du serveur" />
-                                    </div>
-                                    <div class="inputContainer">
-                                        <input is="emby-input" type="text" id="GlobalCollectionName"
-                                               label="Collection — Top mondial" />
-                                    </div>
-                                </div>
-                            </div>
-                        </fieldset>
-                    </div>
+                        </div>
+                    </details>
 
                     <div class="mcCfg-actions">
                         <button is="emby-button" type="submit" class="raised button-submit">
@@ -820,7 +668,7 @@
                 var page = document.querySelector('#mediaCarouselConfigPage');
 
                 /* Ces tableaux pilotent le chargement et la sauvegarde : tout champ de la
-                   page doit y figurer, quel que soit l'onglet ou le repli où il se trouve. */
+                   page doit y figurer, qu'il soit visible, masqué ou replié. */
                 var checkboxes = [
                     'EnableLocalTop', 'EnableGlobalTop', 'GlobalTopLibraryOnly',
                     'EnableStudioRow', 'EnableGenreRows', 'EnableReturningRow', 'EnableNeverPlayedRow',
@@ -851,7 +699,7 @@
                 ];
                 var lists = ['ExcludedUserIds', 'ExcludedLibraryIds'];
 
-                /* Les bascules qui décident du nombre de rangées réellement affichées. */
+                /* Les cases qui décident du nombre de rangées réellement affichées. */
                 var rowToggles = [
                     'EnableLocalTop', 'EnableGlobalTop', 'EnableReturningRow',
                     'EnableNeverPlayedRow', 'EnableStudioRow', 'EnableGenreRows',
@@ -932,72 +780,118 @@
                 }
 
                 // ----------------------------------------------------------
-                // Onglets
+                // Affichage conditionnel
                 // ----------------------------------------------------------
 
-                function tabs() {
-                    return Array.prototype.slice.call(page.querySelectorAll('.mcCfg-tab'));
+                /* Ce qu'une case seule ne dit pas. Le comptage par nombre de lectures sert à
+                   « de tous les temps », et au Top du serveur quand Playback Reporting manque
+                   ou que la période est nulle : avec lui, seules comptent les vraies lectures. */
+                var predicates = {
+                    playCount: function () {
+                        var days = parseInt(field('LocalTopWindowDays').value, 10) || 0;
+                        var playback = !!(status && status.PlaybackReporting);
+                        return field('EnableAllTimeRow').checked
+                            || (field('EnableLocalTop').checked && (days === 0 || !playback));
+                    }
+                };
+
+                /* « A|B » : l'un ou l'autre ; « A&B » : les deux ; « !A » : décoché ;
+                   « A=valeur » : liste sur cette valeur ; « @nom » : condition ci-dessus. */
+                function holds(term) {
+                    var negate = term.charAt(0) === '!';
+                    var body = negate ? term.substring(1) : term;
+                    var result;
+
+                    if (body.charAt(0) === '@') {
+                        result = predicates[body.substring(1)]();
+                    } else {
+                        var parts = body.split('=');
+                        var input = field(parts[0]);
+                        result = parts.length > 1 ? input.value === parts[1] : input.checked;
+                    }
+
+                    return negate ? !result : result;
                 }
 
-                function selectTab(tab, focus) {
-                    tabs().forEach(function (other) {
-                        var selected = other === tab;
-                        other.setAttribute('aria-selected', selected ? 'true' : 'false');
-                        other.tabIndex = selected ? 0 : -1;
-                        page.querySelector('#' + other.getAttribute('aria-controls')).hidden = !selected;
+                function shown(condition) {
+                    return condition.split('|').some(function (alternative) {
+                        return alternative.split('&').every(holds);
                     });
+                }
 
-                    if (focus) {
-                        tab.focus();
+                /* Un bloc masqué l'est avec ses champs, retirés du parcours clavier ET de la
+                   validation : un nombre requis laissé vide dans un bloc invisible bloquerait
+                   sinon l'enregistrement sans rien montrer. Les champs sont réglés après tous
+                   les blocs, d'après n'importe quel bloc masqué qui les contient : un bloc
+                   imbriqué (Seerr sous le Top mondial) suit ainsi sa case ET celle de son parent. */
+                function applyVisibility() {
+                    var blocks = page.querySelectorAll('[data-show-if]');
+                    for (var i = 0; i < blocks.length; i++) {
+                        blocks[i].hidden = !shown(blocks[i].getAttribute('data-show-if'));
+                    }
+
+                    var controls = page.querySelectorAll('[data-show-if] input, [data-show-if] select, '
+                        + '[data-show-if] textarea, [data-show-if] button');
+                    for (var j = 0; j < controls.length; j++) {
+                        controls[j].disabled = controls[j].closest('[data-show-if][hidden]') !== null;
                     }
                 }
 
-                function wireTabs() {
-                    var all = tabs();
+                /* Les champs dont dépend l'affichage, relevés dans les conditions elles-mêmes :
+                   une condition ajoutée au HTML est suivie sans toucher au script. La période
+                   s'y ajoute, lue par la condition nommée `playCount`. */
+                function watchedFields() {
+                    var ids = ['EnableHomeRows', 'LocalTopWindowDays'].concat(rowToggles);
+                    var blocks = page.querySelectorAll('[data-show-if]');
 
-                    all.forEach(function (tab, index) {
-                        tab.tabIndex = tab.getAttribute('aria-selected') === 'true' ? 0 : -1;
-                        tab.addEventListener('click', function () { selectTab(tab, false); });
-
-                        // Navigation au clavier conforme au motif ARIA des onglets.
-                        tab.addEventListener('keydown', function (event) {
-                            var step = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
-
-                            if (step) {
-                                selectTab(all[(index + step + all.length) % all.length], true);
-                            } else if (event.key === 'Home') {
-                                selectTab(all[0], true);
-                            } else if (event.key === 'End') {
-                                selectTab(all[all.length - 1], true);
-                            } else {
-                                return;
+                    for (var i = 0; i < blocks.length; i++) {
+                        blocks[i].getAttribute('data-show-if').split(/[|&]/).forEach(function (term) {
+                            var id = term.replace(/^!/, '').split('=')[0];
+                            if (id.charAt(0) !== '@' && ids.indexOf(id) === -1) {
+                                ids.push(id);
                             }
-
-                            event.preventDefault();
                         });
-                    });
+                    }
+
+                    return ids;
                 }
 
-                /* Un onglet est grisé quand toutes ses bascules sont décochées : on voit
-                   sans l'ouvrir qu'il ne produit rien. */
-                function refreshTabStates() {
-                    tabs().forEach(function (tab) {
-                        var panel = page.querySelector('#' + tab.getAttribute('aria-controls'));
-                        var toggles = panel.querySelectorAll('[data-toggles]');
-                        var off = toggles.length > 0;
+                function onSettingChange() {
+                    applyVisibility();
+                    refreshDuplicateAlert();
+                    renderStatus();
+                }
 
-                        for (var i = 0; i < toggles.length; i++) {
-                            if (toggles[i].checked) {
-                                off = false;
-                            }
+                function wireSettings() {
+                    watchedFields().forEach(function (id) {
+                        var input = field(id);
+                        input.addEventListener('change', onSettingChange);
+                        if (input.type === 'number') {
+                            input.addEventListener('input', onSettingChange);
                         }
-
-                        tab.classList.toggle('mcCfg-tab-off', off);
                     });
+
+                    // Les champs qui alimentent le bandeau ou l'avertissement le rafraîchissent.
+                    ['LocalRowTitle', 'GlobalRowTitle', 'LocalCollectionName', 'GlobalCollectionName']
+                        .forEach(function (id) {
+                            field(id).addEventListener('input', refreshDuplicateAlert);
+                        });
+
+                    field('GlobalTopApiKey').addEventListener('input', renderStatus);
+                    field('GlobalTopProvider').addEventListener('change', renderStatus);
+
+                    // Un champ invalide caché dans le pli fermé ne pourrait pas montrer son
+                    // erreur : le navigateur refuserait l'envoi sans rien dire. Le pli s'ouvre.
+                    field('mediaCarouselConfigForm').addEventListener('invalid', function (event) {
+                        var fold = event.target.closest('details');
+                        if (fold) {
+                            fold.open = true;
+                        }
+                    }, true);
                 }
 
                 // ----------------------------------------------------------
-                // Ordre des rangées
+                // Rangées : cases et ordre
                 // ----------------------------------------------------------
 
                 /* Doivent rester synchronisés avec PLUGIN_ROW_ORDER et FULL_ROW_ORDER
@@ -1009,20 +903,11 @@
                     'native:activerecordings', 'native:resume', 'native:resumeaudio',
                     'native:resumebook', 'native:livetv', 'native:nextup', 'native:latestmedia'
                 ];
-                var rowNames = {
-                    local: 'Top du serveur',
-                    alltime: 'Les plus regardés de tous les temps',
-                    global: 'Top mondial',
-                    returning: 'De retour cette semaine',
-                    neverplayed: 'Jamais vu',
-                    because: 'Parce que tu as regardé…',
-                    studios: 'Par studio',
-                    genres: 'Par genre',
-                    /* Ces libellés sont ceux de Jellyfin lui-même — les mêmes que dans
-                       « Écran d'accueil » des préférences du compte (fr.json de
-                       jellyfin-web : NextUp, HeaderLatestMedia…). En inventer d'autres
-                       revenait à faire chercher « À suivre » dans une liste qui affichait
-                       « Prochainement ». */
+                /* Ces libellés sont ceux de Jellyfin lui-même — les mêmes que dans « Écran
+                   d'accueil » des préférences du compte (fr.json de jellyfin-web : NextUp,
+                   HeaderLatestMedia…). En inventer d'autres revenait à faire chercher
+                   « À suivre » dans une liste qui affichait « Prochainement ». */
+                var nativeNames = {
                     'native:smalllibrarytiles': 'Jellyfin — Mes médias',
                     'native:librarybuttons': 'Jellyfin — Mes médias (petit)',
                     'native:activerecordings': 'Jellyfin — Enregistrements actifs',
@@ -1061,32 +946,47 @@
                     return order;
                 }
 
-                function renderRowOrder() {
-                    var order = normalizeOrder(field('RowOrder').value);
-                    field('RowOrder').value = order.join(',');
-
-                    var list = field('mcRowOrder');
-                    list.innerHTML = '';
-
-                    order.forEach(function (id, index) {
-                        var li = document.createElement('li');
-                        li.setAttribute('data-row', id);
-                        li.innerHTML = '<span class="mcCfg-order-rank">' + (index + 1) + '</span>'
-                            + '<span class="mcCfg-order-name">' + escapeHtml(rowNames[id]) + '</span>'
-                            + '<button is="emby-button" type="button" class="raised mcCfg-order-up"'
-                            + ' aria-label="Monter : ' + escapeHtml(rowNames[id]) + '"'
-                            + (index === 0 ? ' disabled' : '') + '>&#9650;</button>'
-                            + '<button is="emby-button" type="button" class="raised mcCfg-order-down"'
-                            + ' aria-label="Descendre : ' + escapeHtml(rowNames[id]) + '"'
-                            + (index === order.length - 1 ? ' disabled' : '') + '>&#9660;</button>';
-                        list.appendChild(li);
-                    });
+                function nativeItem(id) {
+                    var name = escapeHtml(nativeNames[id]);
+                    var li = document.createElement('li');
+                    li.setAttribute('data-row', id);
+                    li.innerHTML = '<span class="mcCfg-order-rank"></span>'
+                        + '<span class="mcCfg-order-name mcCfg-order-native">' + name + '</span>'
+                        + '<button is="emby-button" type="button" class="raised mcCfg-order-up"'
+                        + ' aria-label="Monter : ' + name + '">&#9650;</button>'
+                        + '<button is="emby-button" type="button" class="raised mcCfg-order-down"'
+                        + ' aria-label="Descendre : ' + name + '">&#9660;</button>';
+                    return li;
                 }
 
-                /* Remet à jour rangs, boutons et champ caché SANS reconstruire le balisage.
-                   Reconstruire faisait clignoter la liste à chaque clic — chaque
-                   `is="emby-button"` devant être ré-initialisé par Jellyfin — et détruisait
-                   le nœud qui portait le focus. */
+                /* Les rangées du plugin sont écrites dans la page, chacune avec sa case : on ne
+                   fait que les remettre dans l'ordre, sans jamais les recréer — la case garde
+                   son état et ses écouteurs. Seules les sections de Jellyfin, sans case, sont
+                   ajoutées ou retirées ici. */
+                function renderRowOrder() {
+                    var order = normalizeOrder(field('RowOrder').value);
+                    var list = field('mcRowOrder');
+                    var items = {};
+
+                    Array.prototype.slice.call(list.children).forEach(function (li) {
+                        var id = li.getAttribute('data-row');
+                        if (order.indexOf(id) === -1) {
+                            list.removeChild(li);
+                        } else {
+                            items[id] = li;
+                        }
+                    });
+
+                    order.forEach(function (id) {
+                        list.appendChild(items[id] || nativeItem(id));
+                    });
+
+                    refreshOrderState();
+                }
+
+                /* Remet à jour rangs, boutons et champ caché sans toucher au balisage :
+                   chaque `is="emby-button"` recréé devait être ré-initialisé par Jellyfin, la
+                   liste clignotait, et le nœud qui portait le focus disparaissait. */
                 function refreshOrderState() {
                     var items = field('mcRowOrder').children;
                     var ids = [];
@@ -1202,7 +1102,7 @@
                     } else {
                         var duration = typeof run.DurationSeconds === 'number'
                             ? ' · ' + (run.DurationSeconds < 1
-                                ? 'moins d\u2019une seconde'
+                                ? 'moins d’une seconde'
                                 : Math.round(run.DurationSeconds) + ' s')
                             : '';
                         html = tile(
@@ -1240,7 +1140,8 @@
                     renderSectionStates();
                 }
 
-                /* Le détail par section rejoint l'onglet auquel il appartient. */
+                /* Le détail de chaque section rejoint son bloc. Une rangée décochée n'y
+                   figure pas : la liste des rangées le dit déjà. */
                 function renderSectionStates() {
                     var holders = page.querySelectorAll('[data-state-for]');
 
@@ -1253,8 +1154,10 @@
                             var when = formatDate(data.GeneratedUtc);
 
                             if (!data.Enabled) {
-                                parts.push(sectionLabels[keys[k]] + ' : désactivé');
-                            } else if (when) {
+                                continue;
+                            }
+
+                            if (when) {
                                 parts.push(sectionLabels[keys[k]] + ' : ' + (data.Count || 0)
                                     + ' entrée(s), calculé le ' + when
                                     + (data.Source === 'PlaybackReporting' ? ' d’après les vraies lectures' : ''));
@@ -1271,6 +1174,8 @@
                     return ApiClient.getJSON(ApiClient.getUrl('MediaCarousel/Status')).then(function (result) {
                         status = result;
                         renderStatus();
+                        // La présence de Playback Reporting décide de ce que montre le pli.
+                        applyVisibility();
                     }, function () {
                         field('mcStatus').textContent = 'État indisponible.';
                     });
@@ -1311,46 +1216,14 @@
                                 : 'Ce classement apparaîtra deux fois') + '</strong>'
                             + escapeHtml(clashes.join(', ')) + ' : la rangée et la collection portent le même nom, '
                             + 'et les deux s\'affichent sur la page d\'accueil. Renommez l\'une des deux, '
-                            + 'ou décochez « Créer aussi une collection » dans l\'onglet Rafraîchissement.'
+                            + 'ou décochez « Créer aussi une collection » dans les réglages avancés.'
                             + '</span>';
                     }
                 }
 
                 // ----------------------------------------------------------
-                // Bascules d'activation
+                // Seerr
                 // ----------------------------------------------------------
-
-                /* Un groupe désactivé est masqué ET ses champs sont retirés du parcours
-                   clavier : les laisser focalisables tromperait la navigation au clavier. */
-                function applyToggle(input) {
-                    var group = page.querySelector('#' + input.getAttribute('data-toggles'));
-                    if (!group) {
-                        return;
-                    }
-
-                    group.hidden = !input.checked;
-                    var controls = group.querySelectorAll('input, select, textarea, button');
-                    for (var i = 0; i < controls.length; i++) {
-                        controls[i].disabled = !input.checked;
-                    }
-                }
-
-                /* Le groupe Seerr vit DANS celui du Top mondial. Il n'utilise pas `data-toggles` :
-                   cocher le Top mondial réactive tous les champs de son groupe, y compris ceux
-                   d'un Seerr resté décoché, et l'onglet se croirait actif pour un Seerr coché
-                   sous un Top mondial éteint. */
-                function applySeerrToggle() {
-                    var on = field('EnableGlobalTop').checked && field('EnableSeerrRequests').checked;
-                    var group = field('groupSeerr');
-                    var controls = group.querySelectorAll('input, button');
-
-                    group.hidden = !on;
-                    for (var i = 0; i < controls.length; i++) {
-                        controls[i].disabled = !on;
-                    }
-
-                    field('mcSeerrAlert').hidden = !(on && field('GlobalTopLibraryOnly').checked);
-                }
 
                 var seerrTestMessages = {
                     invalid: 'Renseignez une adresse commençant par http:// ou https://, et la clé d\'API.',
@@ -1380,45 +1253,6 @@
                     });
                 }
 
-                function wireSeerr() {
-                    ['EnableGlobalTop', 'EnableSeerrRequests', 'GlobalTopLibraryOnly'].forEach(function (id) {
-                        field(id).addEventListener('change', applySeerrToggle);
-                    });
-                    field('seerrTestButton').addEventListener('click', testSeerr);
-                }
-
-                function applyToggles() {
-                    var toggles = page.querySelectorAll('[data-toggles]');
-
-                    for (var i = 0; i < toggles.length; i++) {
-                        applyToggle(toggles[i]);
-                    }
-                }
-
-                function wireToggles() {
-                    var toggles = page.querySelectorAll('[data-toggles]');
-
-                    for (var i = 0; i < toggles.length; i++) {
-                        (function (input) {
-                            input.addEventListener('change', function () {
-                                applyToggle(input);
-                                refreshTabStates();
-                                refreshDuplicateAlert();
-                                renderStatus();
-                            });
-                        })(toggles[i]);
-                    }
-
-                    // Les champs qui alimentent le bandeau ou l'avertissement le rafraîchissent.
-                    ['LocalRowTitle', 'GlobalRowTitle', 'LocalCollectionName', 'GlobalCollectionName']
-                        .forEach(function (id) {
-                            field(id).addEventListener('input', refreshDuplicateAlert);
-                        });
-
-                    field('GlobalTopApiKey').addEventListener('input', renderStatus);
-                    field('GlobalTopProvider').addEventListener('change', renderStatus);
-                }
-
                 // ----------------------------------------------------------
                 // Cycle de vie
                 // ----------------------------------------------------------
@@ -1442,17 +1276,14 @@
                         // places. Seul l'état, relu de la configuration, se réapplique.
                         if (!wired) {
                             wired = true;
-                            wireTabs();
-                            wireToggles();
-                            wireSeerr();
+                            wireSettings();
                             wireRowOrder();
+                            field('seerrTestButton').addEventListener('click', testSeerr);
                             field('ManageNativeSections').addEventListener('change', renderRowOrder);
                         }
 
-                        applyToggles();
-                        applySeerrToggle();
+                        applyVisibility();
                         renderRowOrder();
-                        refreshTabStates();
                         refreshDuplicateAlert();
 
                         Dashboard.hideLoadingMsg();

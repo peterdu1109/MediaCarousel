@@ -50,7 +50,8 @@ await page.addInitScript(() => {
           NeverPlayed: { Enabled: true, Count: 20, Source: 'Jellyfin', GeneratedUtc: '2026-08-27T03:00:00Z' },
           Studios: { Enabled: true, Count: 18, Source: 'Jellyfin', GeneratedUtc: '2026-08-27T03:00:00Z' },
           Genres: { Enabled: false, Count: 0, Source: 'Jellyfin', GeneratedUtc: null },
-          LastRun: window.__lastRun || { StartedUtc: '2026-08-27T03:00:00Z', DurationSeconds: 12.4, Running: false, Failures: [] }
+          LastRun: window.__lastRun || { StartedUtc: '2026-08-27T03:00:00Z', DurationSeconds: 12.4, Running: false, Failures: [] },
+          PlaybackReporting: window.__playback === true
         });
       }
       return Promise.reject(new Error('route inattendue ' + url));
@@ -89,6 +90,9 @@ const orphelins = await page.evaluate(() => {
 
 const loaded = await page.evaluate(() => {
   const q = (s) => document.querySelector(s);
+  const mots = Array.from(document.querySelectorAll('#mediaCarouselConfigPage .fieldDescription, #mediaCarouselConfigPage .mcCfg-group-hint, #mediaCarouselConfigPage .mcCfg-intro'))
+    .filter(e => e.id !== 'seerrTestResult')
+    .reduce((n, e) => n + e.textContent.trim().split(/\s+/).filter(Boolean).length, 0);
   return {
     version: q('#mcVersion').textContent,
     tiles: Array.from(document.querySelectorAll('.mcCfg-tile')).map(t => ({
@@ -99,34 +103,35 @@ const loaded = await page.evaluate(() => {
     localSize: q('#LocalTopSize').value,
     excluded: q('#ExcludedUserIds').value,
     apiKeyType: q('#GlobalTopApiKey').type,
-    // Groupes desactives : masques ET hors du parcours clavier.
+    // Blocs desactives : masques ET hors du parcours clavier.
     globalHidden: q('#groupGlobal').hidden,
     globalDisabled: q('#GlobalTopApiKey').disabled,
+    seerrHidden: q('#blockSeerr').hidden,
     genreHidden: q('#groupGenre').hidden,
     genreDisabled: q('#GenreRowCount').disabled,
     localVisible: q('#groupLocal').hidden === false && q('#LocalTopSize').disabled === false,
-    // Accessibilite
+    // Structure : une page, cinq blocs, un seul pli.
     legends: Array.from(document.querySelectorAll('.mcCfg-group > legend')).map(l => l.textContent),
-    tabCount: document.querySelectorAll('.mcCfg-tab').length,
-    visiblePanels: Array.from(document.querySelectorAll('[role=tabpanel]')).filter(x => !x.hidden).length,
-    firstTabSelected: document.querySelector('#tabLocal').getAttribute('aria-selected') === 'true',
-    // Les champs avances sont replies mais presents.
-    advancedCount: document.querySelectorAll('.mcCfg-advanced').length,
-    windowInAdvanced: !!q('#LocalTopWindowDays').closest('.mcCfg-advanced'),
-    exclusionsInAdvanced: !!q('#ExcludedUserIds').closest('.mcCfg-advanced'),
-    minStudioInAdvanced: !!q('#MinItemsPerStudio').closest('.mcCfg-advanced'),
-    // Onglet grise quand toutes ses bascules sont decochees (Top mondial est off).
-    globalTabOff: q('#tabGlobal').classList.contains('mcCfg-tab-off'),
-    localTabOn: !q('#tabLocal').classList.contains('mcCfg-tab-off'),
-    // Roving tabindex : un seul onglet dans le parcours clavier.
-    tabbable: Array.from(document.querySelectorAll('.mcCfg-tab')).filter(t => t.tabIndex === 0).length,
-    // Tuile d'alerte sur la cle manquante.
-    globalTileState: document.querySelectorAll('.mcCfg-tile')[2].dataset.state,
-    globalTileValue: document.querySelectorAll('.mcCfg-tile')[2].querySelector('.mcCfg-tile-value').textContent,
-    activeRows: document.querySelectorAll('.mcCfg-tile')[3].querySelector('.mcCfg-tile-value').textContent,
-    // Detail par section, rapatrie dans son onglet.
+    onglets: document.querySelectorAll('[role=tab], [role=tablist], [role=tabpanel]').length,
+    plis: document.querySelectorAll('details').length,
+    pliFerme: q('#advancedSettings').open === false,
+    periodeVisible: !q('#LocalTopWindowDays').closest('details') && !q('#LocalTopWindowDays').disabled,
+    exclusionsRepliees: !!q('#ExcludedUserIds').closest('.mcCfg-advanced'),
+    minimumsReplies: !!q('#MinItemsPerStudio').closest('.mcCfg-advanced'),
+    langueRepliee: !!q('#MetadataLanguage').closest('.mcCfg-advanced'),
+    blocTeleviseurs: document.body.textContent.indexOf('Tizen') !== -1,
+    mots: mots,
+    // Chaque rangee du plugin porte sa case dans la liste.
+    casesDesRangees: Array.from(document.querySelectorAll('#mcRowOrder li')).map(li => {
+      const cb = li.querySelector('input[type=checkbox]');
+      return li.dataset.row + '=' + (cb ? cb.id + (cb.checked ? '+' : '-') : 'aucune');
+    }),
+    // Sans Playback Reporting, le comptage par nombre de lectures sert au Top du serveur.
+    comptageVisible: q('#groupPlayCount').hidden === false && q('#CandidatesPerUser').disabled === false,
+    // Detail par section, rapatrie dans son bloc ; une rangee decochee n'y figure pas.
     sectionStates: document.querySelectorAll('[data-state-for]').length,
     localSectionState: q('[data-state-for="LocalTop,AllTime"]').textContent,
+    rowsSectionState: q('[data-state-for="ReturningSeries,NeverPlayed,Studios,Genres"]').textContent,
     alertHiddenInitially: q('#mcDuplicateAlert').hidden,
     // Un champ absent des tableaux ne serait ni charge ni enregistre.
     orphanFields: (() => {
@@ -149,32 +154,19 @@ const loaded = await page.evaluate(() => {
   };
 });
 
-// Navigation par onglets.
-await page.evaluate(() => document.querySelector('#tabRefresh').click());
-const afterTabClick = await page.evaluate(() => ({
-  refreshVisible: !document.querySelector('#panelRefresh').hidden,
-  localHidden: document.querySelector('#panelLocal').hidden,
-  selected: document.querySelector('#tabRefresh').getAttribute('aria-selected')
-}));
-
-// Fleche droite depuis le dernier onglet : retour au premier (parcours circulaire).
-await page.evaluate(() => {
-  document.querySelector('#tabRefresh').dispatchEvent(
-    new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
-});
-const afterKeyboard = await page.evaluate(() => ({
-  selected: document.querySelector('#tabLocal').getAttribute('aria-selected'),
-  visible: !document.querySelector('#panelLocal').hidden
-}));
+const cocherSur = (p) => (id, valeur) => p.evaluate(([i, v]) => {
+  const cb = document.querySelector('#' + i);
+  cb.checked = v;
+  cb.dispatchEvent(new Event('change'));
+}, [id, valeur]);
+const cocher = cocherSur(page);
+// Visible : ni l'element ni un de ses parents ne porte `hidden`.
+const visible = (id) => page.$eval('#' + id, el => el.closest('[hidden]') === null);
+const actif = (id) => page.$eval('#' + id, el => el.disabled === false);
 
 // Avertissement de doublon : les valeurs par defaut portent le meme nom.
-await page.evaluate(() => {
-  ['EnableGlobalTop', 'SyncCollections'].forEach(id => {
-    const cb = document.querySelector('#' + id);
-    cb.checked = true;
-    cb.dispatchEvent(new Event('change'));
-  });
-});
+await cocher('EnableGlobalTop', true);
+await cocher('SyncCollections', true);
 const alertShown = await page.evaluate(() => ({
   visible: !document.querySelector('#mcDuplicateAlert').hidden,
   text: document.querySelector('#mcDuplicateAlert').textContent
@@ -188,25 +180,61 @@ await page.evaluate(() => {
 });
 const alertCleared = await page.evaluate(() => document.querySelector('#mcDuplicateAlert').hidden);
 
-// Bascule : activer le Top mondial doit reveler et reactiver son groupe.
-await page.evaluate(() => {
-  const cb = document.querySelector('#EnableGlobalTop');
-  cb.checked = true;
-  cb.dispatchEvent(new Event('change'));
-});
-const afterToggle = await page.evaluate(() => ({
-  hidden: document.querySelector('#groupGlobal').hidden,
-  disabled: document.querySelector('#GlobalTopApiKey').disabled
-}));
+// La case du Top mondial, cochee dans la liste, revele son bloc et celui de Seerr.
+const afterToggle = {
+  bloc: await visible('groupGlobal'),
+  cle: await actif('GlobalTopApiKey'),
+  seerr: await visible('blockSeerr'),
+  langue: await actif('MetadataLanguage')
+};
 
-// Descendre la premiere rangee. L'onglet doit etre ouvert : un panneau masque ne
-// peut pas recevoir le focus, et c'est de toute facon ce que fait l'utilisateur.
-await page.evaluate(() => document.querySelector('#tabHome').click());
+// Films et series : la case « separees » n'a de sens qu'avec les deux, et le titre suit.
+const separation = { filmsSeuls: {}, lesDeux: {}, separees: {} };
+separation.filmsSeuls = { caseVisible: await visible('GlobalTopSplitByType'), titreUnique: await visible('GlobalRowTitle') };
+await page.evaluate(() => {
+  const s = document.querySelector('#GlobalTopMediaKind');
+  s.value = 'Both';
+  s.dispatchEvent(new Event('change'));
+});
+separation.lesDeux = { caseVisible: await visible('GlobalTopSplitByType'), titreUnique: await visible('GlobalRowTitle') };
+await cocher('GlobalTopSplitByType', true);
+separation.separees = {
+  titreUnique: await visible('GlobalRowTitle'),
+  films: await visible('GlobalMoviesRowTitle') && await actif('GlobalMoviesRowTitle'),
+  series: await visible('GlobalSeriesRowTitle') && await actif('GlobalSeriesRowTitle')
+};
+await cocher('GlobalTopSplitByType', false);
+
+// Cocher une rangee dans la liste revele ses reglages, et ses minimums dans le pli.
+await cocher('EnableGenreRows', true);
+const genresCoches = {
+  bloc: await visible('groupGenre'),
+  champ: await actif('GenreRowCount'),
+  minimum: await actif('MinItemsPerGenre')
+};
+await cocher('EnableGenreRows', false);
+const genresDecoches = { bloc: await visible('groupGenre'), minimum: await actif('MinItemsPerGenre') };
+
+// Le bloc du Top du serveur sert aussi a « de tous les temps ».
+await cocher('EnableLocalTop', false);
+const sansTop = { bloc: await visible('groupLocal') };
+await cocher('EnableAllTimeRow', true);
+const toujoursSeul = {
+  bloc: await visible('groupLocal'),
+  taille: await visible('LocalTopSize') || await actif('LocalTopSize'),
+  types: await actif('LocalTopMediaKind'),
+  toujours: await visible('AllTimeRowSize') && await actif('AllTimeRowSize')
+};
+await cocher('EnableLocalTop', true);
+await cocher('EnableAllTimeRow', false);
+
+// Descendre la premiere rangee : la liste n'est pas reconstruite, la case suit sa rangee.
 await page.evaluate(() => {
   // On marque les noeuds : un reordonnancement ne doit pas reconstruire la liste.
   // La reconstruction faisait clignoter l'affichage a chaque clic et detruisait le
   // noeud portant le focus, d'ou le saut de la page.
   document.querySelectorAll('#mcRowOrder li').forEach((li, i) => { li.__marque = i; });
+  window.__caseLocal = document.querySelector('#EnableLocalTop');
   document.querySelector('#mcRowOrder li:first-child .mcCfg-order-down').click();
 });
 const reordered = await page.evaluate(() => ({
@@ -219,31 +247,29 @@ const reordered = await page.evaluate(() => ({
 }));
 
 // Cocher la gestion des natives : la liste doit s'etendre sans bousculer nos rangees.
-await page.evaluate(() => {
-  const cb = document.querySelector('#ManageNativeSections');
-  cb.checked = true;
-  cb.dispatchEvent(new Event('change'));
-});
+await cocher('ManageNativeSections', true);
 const withNatives = await page.evaluate(() => {
   const names = Array.from(document.querySelectorAll('#mcRowOrder .mcCfg-order-name')).map(e => e.textContent);
   return {
     count: names.length,
     names: names,
     natives: names.filter(n => n.indexOf('Jellyfin — ') === 0).sort(),
-    plugins: names.filter(n => n.indexOf('Jellyfin — ') !== 0)
+    plugins: names.filter(n => n.indexOf('Jellyfin — ') !== 0),
+    sansCase: Array.from(document.querySelectorAll('#mcRowOrder li'))
+      .filter(li => li.dataset.row.indexOf('native:') === 0)
+      .every(li => !li.querySelector('input'))
   };
 });
 
-await page.evaluate(() => {
-  const cb = document.querySelector('#ManageNativeSections');
-  cb.checked = false;
-  cb.dispatchEvent(new Event('change'));
-});
+await cocher('ManageNativeSections', false);
 const withoutNatives = await page.evaluate(() => ({
-  count: document.querySelectorAll('#mcRowOrder .mcCfg-order-name').length
+  count: document.querySelectorAll('#mcRowOrder .mcCfg-order-name').length,
+  // Les cases des rangees ont survecu aux deux rendus : meme noeud, meme etat.
+  memeCase: document.querySelector('#EnableLocalTop') === window.__caseLocal
+    && document.querySelector('#EnableLocalTop').checked === true
 }));
 
-// Enregistrement : les champs d'un groupe masque doivent tout de meme etre sauvegardes.
+// Enregistrement : les champs d'un bloc masque doivent tout de meme etre sauvegardes.
 await page.evaluate(() => {
   document.querySelector('#LocalTopSize').value = '15';
   document.querySelector('#NeverPlayedMinRating').value = '8.2';
@@ -268,16 +294,32 @@ const refresh = await page.evaluate(() => ({
   enregistreAvant: !!window.__saved && window.__saved.GlobalTopSplitByType === true
 }));
 
-// Second passage : le Top mondial a echoue au dernier recalcul. La tolerance aux
-// pannes conserve l'instantane precedent, donc seule cette tuile peut le dire.
-// addInitScript et non evaluate : le rechargement remet le contexte JS a zero,
-// seul un script d'initialisation survit a la navigation.
+// INVALIDE — un nombre vide dans le pli ferme : le navigateur refusait l'envoi sans pouvoir
+// montrer l'erreur. Le pli s'ouvre, et rien n'est enregistre ni recalcule.
+await page.evaluate(() => {
+  window.__saved = null;
+  document.querySelector('#advancedSettings').open = false;
+  document.querySelector('#RefreshIntervalHours').value = '';
+  document.querySelector('#refreshNowButton').click();
+});
+await page.waitForTimeout(300);
+const invalide = await page.evaluate(() => ({
+  pliOuvert: document.querySelector('#advancedSettings').open,
+  enregistre: window.__saved !== null,
+  recalculs: window.__refreshCalls
+}));
+await page.evaluate(() => { document.querySelector('#RefreshIntervalHours').value = '6'; });
+
+// Second passage : le Top mondial a echoue au dernier recalcul, et Playback Reporting
+// est installe. addInitScript et non evaluate : le rechargement remet le contexte JS a
+// zero, seul un script d'initialisation survit a la navigation.
 await page.addInitScript(() => {
+  window.__playback = true;
   window.__lastRun = {
     StartedUtc: '2026-08-27T03:00:00Z',
     DurationSeconds: 8.1,
     Running: false,
-    Failures: [{ Section: 'Top mondial', Message: 'TMDB a répondu 401 : clé d\u2019API invalide.' }]
+    Failures: [{ Section: 'Top mondial', Message: 'TMDB a répondu 401 : clé d’API invalide.' }]
   };
 });
 await page.reload();
@@ -293,6 +335,25 @@ const failedRun = await page.evaluate(() => {
     detail: t.querySelector('.mcCfg-tile-detail').textContent
   };
 });
+
+// PLAYBACK — avec Playback Reporting, le Top du serveur sur une periode ne compte que les
+// vraies lectures : les reglages du comptage par nombre de lectures n'y font rien.
+const comptage = { avecPlayback: await visible('groupPlayCount') };
+await page.evaluate(() => {
+  const input = document.querySelector('#LocalTopWindowDays');
+  input.value = '0';
+  input.dispatchEvent(new Event('input'));
+});
+comptage.depuisToujours = await visible('groupPlayCount') && await actif('MaxPlaysCountedPerUser');
+await page.evaluate(() => {
+  const input = document.querySelector('#LocalTopWindowDays');
+  input.value = '30';
+  input.dispatchEvent(new Event('input'));
+});
+comptage.retourPeriode = await visible('groupPlayCount');
+await cocher('EnableAllTimeRow', true);
+comptage.deTousLesTemps = await visible('groupPlayCount');
+await cocher('EnableAllTimeRow', false);
 
 // RETOUR — jellyfin-web reaffiche la meme page, gardee en cache, quand on y revient :
 // `pageshow` repart. Chaque ecouteur pose a l'affichage l'etait une fois de plus, et
@@ -361,33 +422,29 @@ await afficherPage();
 await seerrPage.waitForFunction(() => document.querySelectorAll('.mcCfg-tile').length === 4, { timeout: 5000 });
 
 const etatSeerrCfg = () => seerrPage.evaluate(() => ({
-  groupe: !document.querySelector('#groupSeerr').hidden,
+  groupe: document.querySelector('#groupSeerr').closest('[hidden]') === null,
   champs: !document.querySelector('#SeerrUrl').disabled && !document.querySelector('#SeerrApiKey').disabled
     && !document.querySelector('#seerrTestButton').disabled && !document.querySelector('#SeerrAdvancedRequests').disabled,
-  alerte: !document.querySelector('#mcSeerrAlert').hidden,
-  ongletEteint: document.querySelector('#tabGlobal').classList.contains('mcCfg-tab-off')
+  alerte: document.querySelector('#mcSeerrAlert').closest('[hidden]') === null,
+  blocEteint: document.querySelector('#blockSeerr').hidden
 }));
-const cocher = (id, valeur) => seerrPage.evaluate(([i, v]) => {
-  const cb = document.querySelector('#' + i);
-  cb.checked = v;
-  cb.dispatchEvent(new Event('change'));
-}, [id, valeur]);
+const cocherSeerr = cocherSur(seerrPage);
 
 const seerrAuChargement = await etatSeerrCfg();
-await cocher('EnableSeerrRequests', true);
+await cocherSeerr('EnableSeerrRequests', true);
 const seerrCoche = await etatSeerrCfg();
-await cocher('GlobalTopLibraryOnly', false);
+await cocherSeerr('GlobalTopLibraryOnly', false);
 const seerrSansFiltre = await etatSeerrCfg();
-await cocher('EnableGlobalTop', false);
+await cocherSeerr('EnableGlobalTop', false);
 const seerrSousTopEteint = await etatSeerrCfg();
-await cocher('EnableGlobalTop', true);
+await cocherSeerr('EnableGlobalTop', true);
 const seerrTopRallume = await etatSeerrCfg();
 // Le piege du groupe imbrique : rallumer le Top mondial ne doit pas rallumer un Seerr decoche.
-await cocher('EnableSeerrRequests', false);
-await cocher('EnableGlobalTop', false);
-await cocher('EnableGlobalTop', true);
+await cocherSeerr('EnableSeerrRequests', false);
+await cocherSeerr('EnableGlobalTop', false);
+await cocherSeerr('EnableGlobalTop', true);
 const seerrResteEteint = await etatSeerrCfg();
-await cocher('EnableSeerrRequests', true);
+await cocherSeerr('EnableSeerrRequests', true);
 
 // Essai de connexion : il part avec les valeurs SAISIES, avant tout enregistrement.
 await seerrPage.evaluate(() => {
@@ -438,30 +495,33 @@ await seerrPage.close();
 // TELEPHONE 12.1 — releve en prod le 2026-09-28 : jellyfin-web 12.1 met `.checkboxContainer`
 // en ligne et fixe la hauteur du libelle. Sur un telephone, le libelle serre sur six lignes
 // debordait sur le texte du dessus. Le banc charge les regles de jellyfin-web concernees.
+// Les cases de la liste des rangees sont mesurees elles aussi.
 await page.setViewportSize({ width: 375, height: 812 });
 await page.addStyleTag({ path: path.join(repo, 'tests', 'browser', 'jellyfin-checkbox.css') });
 const telephone = await page.evaluate(async () => {
   document.querySelectorAll('#mediaCarouselConfigPage details').forEach((d) => { d.open = true; });
+  await new Promise((r) => setTimeout(r, 50));
   const aCote = [];
   const debordes = [];
   let cases = 0;
-  for (const onglet of document.querySelectorAll('#mediaCarouselConfigPage [role="tab"]')) {
-    onglet.click();
-    await new Promise((r) => setTimeout(r, 50));
-    const panneau = document.getElementById(onglet.getAttribute('aria-controls'));
-    for (const boite of panneau.querySelectorAll('div.checkboxContainer')) {
-      const label = boite.querySelector('label');
-      if (!label || !label.getBoundingClientRect().height) continue;
-      cases++;
-      const texte = label.querySelector('span');
-      const l = label.getBoundingClientRect();
-      const t = texte.getBoundingClientRect();
-      if (t.top < l.top - 1 || t.bottom > l.bottom + 1) debordes.push(texte.textContent.trim().slice(0, 40));
-      const aide = boite.querySelector('.fieldDescription');
-      if (aide && aide.getBoundingClientRect().top < l.bottom - 1) aCote.push(texte.textContent.trim().slice(0, 40));
+  for (const label of document.querySelectorAll('#mediaCarouselConfigPage .emby-checkbox-label')) {
+    if (!label.getBoundingClientRect().height) continue;
+    cases++;
+    const texte = label.querySelector('span');
+    const l = label.getBoundingClientRect();
+    const t = texte.getBoundingClientRect();
+    if (t.top < l.top - 1 || t.bottom > l.bottom + 1) debordes.push(texte.textContent.trim().slice(0, 40));
+    const boite = label.closest('div.checkboxContainer');
+    const aide = boite && boite.querySelector('.fieldDescription');
+    if (aide && aide.getBoundingClientRect().height && aide.getBoundingClientRect().top < l.bottom - 1) {
+      aCote.push(texte.textContent.trim().slice(0, 40));
     }
   }
-  return { cases, aCote, debordes };
+  // Aucune ligne de la liste ne deborde de la largeur de l'ecran.
+  const largeur = document.documentElement.clientWidth;
+  const lignesTropLarges = Array.from(document.querySelectorAll('#mcRowOrder li'))
+    .filter(li => li.getBoundingClientRect().right > largeur + 1).length;
+  return { cases, aCote, debordes, lignesTropLarges };
 });
 
 await browser.close();
@@ -482,38 +542,61 @@ check('tuile dernier calcul : la duree mesuree est affichee',
   /12 s/.test(loaded.tiles[0].detail), loaded.tiles[0]);
 check('tuile Top serveur chiffree', loaded.tiles[1].value === '10', loaded.tiles[1]);
 check('tuile Top mondial : desactive lisible sans couleur',
-  loaded.globalTileState === 'off' && loaded.globalTileValue === '—', loaded);
-check('tuile rangees actives', loaded.activeRows === '4 / 8', loaded.activeRows);
+  loaded.tiles[2].state === 'off' && loaded.tiles[2].value === '—', loaded.tiles[2]);
+check('tuile rangees actives', loaded.tiles[3].value === '4 / 8', loaded.tiles[3]);
 check('valeurs chargees', loaded.localSize === '10', loaded.localSize);
 check('listes rendues ligne par ligne', loaded.excluded === 'aaa\nbbb', loaded.excluded);
 check('cle d API masquee a l ecran', loaded.apiKeyType === 'password', loaded.apiKeyType);
-check('groupe inactif masque', loaded.globalHidden === true && loaded.genreHidden === true, loaded);
-check('groupe inactif hors parcours clavier', loaded.globalDisabled === true && loaded.genreDisabled === true, loaded);
-check('groupe actif utilisable', loaded.localVisible === true, loaded.localVisible);
-check('bascule revele le groupe', afterToggle.hidden === false && afterToggle.disabled === false, afterToggle);
-check('8 groupes avec legende conserves', loaded.legends.length === 8, loaded.legends);
-check('6 onglets', loaded.tabCount === 6, loaded.tabCount);
-check('un seul panneau visible', loaded.visiblePanels === 1 && loaded.firstTabSelected, loaded);
-check('roving tabindex : un seul onglet focalisable', loaded.tabbable === 1, loaded.tabbable);
-check('onglet grise quand ses bascules sont decochees',
-  loaded.globalTabOff === true && loaded.localTabOn === true, loaded);
-check('2 blocs de reglages avances', loaded.advancedCount === 2, loaded.advancedCount);
-check('fenetre, exclusions et minimums replies',
-  loaded.windowInAdvanced && loaded.exclusionsInAdvanced && loaded.minStudioInAdvanced, loaded);
-check('detail par section dans son onglet', loaded.sectionStates === 4
+
+// Structure de la page : celle qu'Elie a choisie le 2026-10-01.
+check('PAGE: une seule page, sans onglet', loaded.onglets === 0, loaded.onglets);
+check('PAGE: cinq blocs, dans l ordre',
+  loaded.legends.join('|') === 'Rangées de l\'accueil|Top du serveur|Top mondial|Seerr|Apparence', loaded.legends);
+check('PAGE: un seul pli « Reglages avances », ferme a l ouverture',
+  loaded.plis === 1 && loaded.pliFerme === true, [loaded.plis, loaded.pliFerme]);
+check('PAGE: la periode du Top du serveur est en vue, plus repliee', loaded.periodeVisible === true, loaded.periodeVisible);
+check('PAGE: exclusions, minimums et langue sont dans le pli',
+  loaded.exclusionsRepliees && loaded.minimumsReplies && loaded.langueRepliee, loaded);
+check('PAGE: le bloc des televiseurs est retire (il vit dans le README)', loaded.blocTeleviseurs === false, loaded.blocTeleviseurs);
+check('PAGE: au plus 320 mots d explication (il y en avait pres de 1 000)', loaded.mots <= 320, loaded.mots);
+
+check('RANGEES: chaque rangee du plugin porte sa case dans la liste',
+  loaded.casesDesRangees.join(',') === 'genres=EnableGenreRows-,alltime=EnableAllTimeRow-,global=EnableGlobalTop-,'
+    + 'returning=EnableReturningRow+,neverplayed=EnableNeverPlayedRow+,local=EnableLocalTop+,'
+    + 'studios=EnableStudioRow+,because=EnableBecauseRow-', loaded.casesDesRangees);
+check('bloc inactif masque', loaded.globalHidden === true && loaded.genreHidden === true
+  && loaded.seerrHidden === true, loaded);
+check('bloc inactif hors parcours clavier', loaded.globalDisabled === true && loaded.genreDisabled === true, loaded);
+check('bloc actif utilisable', loaded.localVisible === true, loaded.localVisible);
+check('cocher le Top mondial revele son bloc, Seerr et sa langue',
+  afterToggle.bloc && afterToggle.cle && afterToggle.seerr && afterToggle.langue, afterToggle);
+check('SEPAREES: avec les films seuls, ni case ni second titre',
+  separation.filmsSeuls.caseVisible === false && separation.filmsSeuls.titreUnique === true, separation.filmsSeuls);
+check('SEPAREES: avec films et series, la case apparait',
+  separation.lesDeux.caseVisible === true && separation.lesDeux.titreUnique === true, separation.lesDeux);
+check('SEPAREES: cochee, un titre pour les films et un pour les series remplacent le titre unique',
+  separation.separees.titreUnique === false && separation.separees.films && separation.separees.series,
+  separation.separees);
+check('RANGEES: cocher « par genre » revele ses reglages et son minimum',
+  genresCoches.bloc && genresCoches.champ && genresCoches.minimum, genresCoches);
+check('RANGEES: la decocher les masque a nouveau',
+  genresDecoches.bloc === false && genresDecoches.minimum === false, genresDecoches);
+check('TOP SERVEUR: sans le Top ni « de tous les temps », le bloc disparait', sansTop.bloc === false, sansTop);
+check('TOP SERVEUR: « de tous les temps » seule garde le bloc, sans les champs du Top',
+  toujoursSeul.bloc && !toujoursSeul.taille && toujoursSeul.types && toujoursSeul.toujours, toujoursSeul);
+check('detail par section dans son bloc', loaded.sectionStates === 3
   && loaded.localSectionState.indexOf('Top du serveur') === 0, loaded.localSectionState);
+check('detail des rangees : seules les rangees cochees sont citees',
+  /De retour/.test(loaded.rowsSectionState) && !/Genres/.test(loaded.rowsSectionState), loaded.rowsSectionState);
 check('aucun avertissement quand les collections sont desactivees',
   loaded.alertHiddenInitially === true, loaded.alertHiddenInitially);
-
-check('clic sur un onglet : le panneau suit', afterTabClick.refreshVisible
-  && afterTabClick.localHidden && afterTabClick.selected === 'true', afterTabClick);
-check('fleche droite : parcours circulaire des onglets',
-  afterKeyboard.selected === 'true' && afterKeyboard.visible, afterKeyboard);
 
 check('DOUBLON: avertissement leve sur les valeurs par defaut',
   alertShown.visible && alertShown.text.indexOf('Top 10 mondial') >= 0, alertShown);
 check('DOUBLON: le message nomme le classement concerne',
   alertShown.text.indexOf('Top mondial') >= 0, alertShown.text);
+check('DOUBLON: il renvoie aux reglages avances, pas a un onglet',
+  alertShown.text.indexOf('réglages avancés') >= 0 && alertShown.text.indexOf('onglet') === -1, alertShown.text);
 check('DOUBLON: renommer la collection leve l avertissement', alertCleared === true, alertCleared);
 // Les entrees absentes sont reinserees a leur place par defaut, pas ajoutees a la
 // fin : sans cela, activer la gestion des natives les ferait toutes basculer sous
@@ -556,12 +639,14 @@ check('NATIF: les sections portent les noms de Jellyfin (fr.json)',
     'Jellyfin — TV en direct',
     'Jellyfin — À suivre'
   ].sort().join('|'), withNatives.natives);
+check('NATIF: les sections de Jellyfin n ont pas de case', withNatives.sansCase === true, withNatives.sansCase);
 check('NATIF: les bibliotheques arrivent en tete par defaut',
   withNatives.names[0] === 'Jellyfin — Mes médias', withNatives.names[0]);
 check('NATIF: nos rangees gardent leur ordre relatif',
   withNatives.plugins.join(',') === reordered.names.join(','), withNatives.plugins);
 check('NATIF: decocher revient aux seules rangees du plugin',
   withoutNatives.count === 8, withoutNatives.count);
+check('NATIF: les cases des rangees survivent aux deux rendus', withoutNatives.memeCase === true, withoutNatives);
 
 check('a11y: chaque aria-describedby pointe une cible', loaded.describedBy === true, loaded.describedBy);
 check('aucun champ orphelin hors des tableaux de chargement',
@@ -573,7 +658,9 @@ check('enregistrement : valeur modifiee', saved.LocalTopSize === 15, saved.Local
 check('note chargee sans troncature', loaded.minRating === '7.5', loaded.minRating);
 check('note enregistree en decimal', saved.NeverPlayedMinRating === 8.2, saved.NeverPlayedMinRating);
 check('enregistrement : liste normalisee', JSON.stringify(saved.ExcludedUserIds) === JSON.stringify(['aaa','ccc','ddd']), saved.ExcludedUserIds);
-check('enregistrement : champ d un onglet masque conserve', saved.GlobalTopApiKey === 'secret', saved.GlobalTopApiKey);
+check('enregistrement : champ d un bloc masque conserve', saved.MinItemsPerGenre === 5 && saved.GenreRowCount === 6,
+  [saved.MinItemsPerGenre, saved.GenreRowCount]);
+check('enregistrement : la cle d API est conservee', saved.GlobalTopApiKey === 'secret', saved.GlobalTopApiKey);
 check('aucun champ du formulaire n est orphelin des tableaux',
   orphelins.length === 0, orphelins);
 // Le contenu des plugins de chaine (XFusion, IPTV) est ecarte par defaut : la case doit
@@ -588,6 +675,16 @@ check('recalcul declenche une seule requete', refresh.calls === 1, refresh.calls
 check('retour utilisateur apres recalcul', refresh.feedback.startsWith('Recalcul lancé en arrière-plan'), refresh.feedback);
 check('RECALCUL: le bouton enregistre d abord la case cochee, sans « Enregistrer »',
   refresh.enregistreAvant === true, refresh);
+check('INVALIDE: un champ vide du pli ferme ouvre le pli pour montrer l erreur', invalide.pliOuvert === true, invalide);
+check('INVALIDE: rien n est enregistre ni recalcule', invalide.enregistre === false && invalide.recalculs === 1, invalide);
+
+check('PLAYBACK: avec Playback Reporting, le comptage par nombre de lectures est masque',
+  comptage.avecPlayback === false, comptage);
+check('PLAYBACK: sauf avec une periode a 0, depuis toujours',
+  comptage.depuisToujours === true && comptage.retourPeriode === false, comptage);
+check('PLAYBACK: et pour « de tous les temps », qui le suit toujours', comptage.deTousLesTemps === true, comptage);
+check('PLAYBACK: sans Playback Reporting, il est en vue', loaded.comptageVisible === true, loaded.comptageVisible);
+
 check('SEERR: decoche, le groupe est masque et hors du parcours clavier',
   seerrAuChargement.groupe === false && seerrAuChargement.champs === false && seerrAuChargement.alerte === false,
   seerrAuChargement);
@@ -596,9 +693,9 @@ check('SEERR: coche, adresse, cle et essai deviennent utilisables',
 check('SEERR: avec « titres presents » coche, l avertissement previent qu aucun bouton ne s affichera',
   seerrCoche.alerte === true, seerrCoche);
 check('SEERR: decocher ce filtre leve l avertissement', seerrSansFiltre.alerte === false, seerrSansFiltre);
-check('SEERR: sous un Top mondial eteint, le groupe disparait et l onglet est grise',
+check('SEERR: sous un Top mondial eteint, le bloc Seerr disparait avec ses champs',
   seerrSousTopEteint.groupe === false && seerrSousTopEteint.champs === false
-    && seerrSousTopEteint.ongletEteint === true, seerrSousTopEteint);
+    && seerrSousTopEteint.blocEteint === true, seerrSousTopEteint);
 check('SEERR: rallumer le Top mondial rend le groupe Seerr coche',
   seerrTopRallume.groupe === true && seerrTopRallume.champs === true, seerrTopRallume);
 check('SEERR: mais ne rallume pas un Seerr decoche',
@@ -623,6 +720,7 @@ check('TELEPHONE 12.1: chaque explication passe sous sa case, jamais a cote',
   telephone.aCote.length === 0 && telephone.cases > 10, telephone);
 check('TELEPHONE 12.1: aucun libelle de case ne deborde sur le texte voisin',
   telephone.debordes.length === 0, telephone);
+check('TELEPHONE 12.1: aucune ligne de la liste ne depasse l ecran', telephone.lignesTropLarges === 0, telephone);
 check('aucune erreur js', errors.length === 0, errors);
 
 console.log(failed === 0 ? '\nTous les tests passent.' : '\n' + failed + ' echec(s).');
