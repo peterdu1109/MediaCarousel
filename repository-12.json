@@ -4,7 +4,7 @@
     "guid": "191bd290-1054-4b55-a137-46c72181266b",
     "name": "Media Carousel",
     "description": "Des rangées façon Netflix sur la page d'accueil : Top 10 du serveur d'après les vraies lectures, Top 10 mondial (TMDB ou Trakt), demandes à Seerr, et rangées tirées de la bibliothèque.\n\nNetflix-style home rows: a server Top 10 from real playback, a worldwide Top 10 (TMDB or Trakt), Seerr requests, and rows built from your library.",
-    "owner": "peterdu1109",
+    "owner": "ElieM & Peterdu1109",
     "overview": "Des rangées façon Netflix sur la page d'accueil.\nNetflix-style home rows for Jellyfin.",
     "supportUrl": "https://github.com/peterdu1109/MediaCarousel",
     "imageUrl": "https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/icon.png",
