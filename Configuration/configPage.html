@@ -22,8 +22,10 @@
                     .mcCfg-version { font-size: .8em; opacity: .6; }
                     .mcCfg-intro { margin: .2em 0 1.4em; opacity: .8; max-width: 60ch; }
 
+                    /* Deux tuiles par ligne sur un téléphone : empilées, elles repoussaient
+                       les réglages d'un écran entier. */
                     .mcCfg-status { display: grid; gap: .7em; margin-bottom: 1em;
-                        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+                        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
                     .mcCfg-tile { border: 1px solid rgba(128, 128, 128, .35); border-radius: 8px;
                         padding: .8em 1em; background: rgba(128, 128, 128, .08); }
                     .mcCfg-tile-name { font-size: .78em; opacity: .75; display: flex; align-items: center; gap: .45em; }
