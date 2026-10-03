@@ -20,6 +20,7 @@ public class StatusController : ControllerBase
     private readonly ITopListStore _topListStore;
     private readonly ICatalogStore _catalogStore;
     private readonly RefreshHealth _health;
+    private readonly PlaybackReportingReader _playback;
 
     /// <summary>
     /// Initialise une nouvelle instance de la classe <see cref="StatusController"/>.
@@ -27,11 +28,17 @@ public class StatusController : ControllerBase
     /// <param name="topListStore">Stockage des classements.</param>
     /// <param name="catalogStore">Stockage des catalogues.</param>
     /// <param name="health">Bilan du dernier recalcul.</param>
-    public StatusController(ITopListStore topListStore, ICatalogStore catalogStore, RefreshHealth health)
+    /// <param name="playback">Lecteur de l'historique de Playback Reporting.</param>
+    public StatusController(
+        ITopListStore topListStore,
+        ICatalogStore catalogStore,
+        RefreshHealth health,
+        PlaybackReportingReader playback)
     {
         _topListStore = topListStore;
         _catalogStore = catalogStore;
         _health = health;
+        _playback = playback;
     }
 
     /// <summary>
@@ -118,7 +125,8 @@ public class StatusController : ControllerBase
                 Failures = report.Failures
                     .Select(f => new RefreshFailureDto { Section = f.Section, Message = f.Message })
                     .ToArray()
-            }
+            },
+            PlaybackReporting = _playback.IsAvailable
         });
     }
 }

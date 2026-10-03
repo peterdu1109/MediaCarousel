@@ -805,7 +805,7 @@ Newtonsoft.Json qui pourrait diverger à l'exécution.
 web est empaquetée. Le `index.html` du serveur, celui que `ScriptInjectionTask` complète, n'y est
 donc pas lu. **Aucun réglage serveur ne peut y changer quoi que ce soit :** les rangées
 n'apparaissent sur ces téléviseurs que si leur paquet est reconstruit à partir d'une interface web
-portant déjà la balise. La page de configuration l'explique et affiche la balise à copier. Le seul
+portant déjà la balise. Le README l'explique et donne la balise à copier. Le seul
 canal que ces applications récupèrent bien du serveur est le CSS personnalisé (`/Branding/Css`),
 qui ne peut pas créer de rangée. Le rendu, lui, reste écrit pour ces téléviseurs — c'est ce qui
 sert le jour où le paquet est reconstruit, et cela ne coûte rien ailleurs.
@@ -882,7 +882,7 @@ dotnet run --project tests/ScriptTag.Tests -c Release
 cd tests/browser && npm install && node home-rows.test.mjs && node config-page.test.mjs
 ```
 
-Trois suites sans framework — 524 assertions — exécutées en CI avant la publication ; voir
+Trois suites sans framework — 542 assertions — exécutées en CI avant la publication ; voir
 `tests/README.md`. L'une charge un extrait des règles d'ElegantFin **après** les nôtres pour
 vérifier que la cohabitation tient.
 Les deux suites navigateur chargent le vrai `media-carousel.js` et le vrai `configPage.html`
@@ -903,40 +903,50 @@ ZIP → mise à jour de `manifest.json` (`sourceUrl`, checksum, `targetAbi` `10.
 ## Ajouter un réglage
 
 1. **`Configuration/PluginConfiguration.cs`** — propriété + valeur par défaut + commentaire XML français.
-2. **`Configuration/configPage.html`** — contrôle de formulaire dans le `<div role="tabpanel">` de
-   l'onglet concerné, puis ajout de l'identifiant dans le tableau JS correspondant (`checkboxes`,
-   `numbers`, `decimals`, `texts` ou `lists`). Le chargement et la sauvegarde sont pilotés par ces
-   tableaux : **un champ absent de ces tableaux n'est ni chargé ni enregistré**, quel que soit son
-   emplacement dans la page. Penser à mettre à jour le compteur de l'onglet.
-3. Un réglage de calcul que personne ne touche après l'installation va sous le
-   `<details class="mcCfg-advanced">` de son onglet, jamais en vue directe.
+2. **`Configuration/configPage.html`** — contrôle de formulaire dans le bloc concerné, avec
+   **une ligne** d'explication au plus, puis ajout de l'identifiant dans le tableau JS
+   correspondant (`checkboxes`, `numbers`, `decimals`, `texts` ou `lists`). Le chargement et la
+   sauvegarde sont pilotés par ces tableaux : **un champ absent de ces tableaux n'est ni chargé ni
+   enregistré**, quel que soit son emplacement dans la page.
+3. Un réglage que personne ne touche après l'installation va dans l'unique pli « Réglages
+   avancés », jamais dans un nouveau pli. Un réglage qui ne vaut que sous une condition porte
+   un `data-show-if` (voir ci-dessous).
 4. Consommer le réglage dans le service concerné.
 
 ### Structure de la page de configuration
 
-Six onglets, un par groupe de réglages, construits avec le motif ARIA standard
-(`role="tablist"/"tab"/"tabpanel"`, `aria-selected`, roving `tabindex`, flèches et Début/Fin).
-Les `emby-tabs` de `jellyfin-web` ne sont volontairement pas utilisés : ils attendent une
-structure interne précise et instancient leur propre scroller, ce qui reviendrait à dépendre de
-détails d'implémentation du client. Seuls les `emby-button` sont réutilisés, pour l'apparence.
+Une seule page, cinq blocs et un pli, choisie par Elie le 2026-10-01 (la page avait six onglets,
+58 réglages et près de 1 000 mots d'aide ; il en reste moins de 320) :
+- **Rangées de l'accueil** : l'interrupteur général, la liste des rangées — case et flèches sur
+  la même ligne —, puis les réglages propres à chaque rangée cochée ;
+- **Top du serveur** (aussi pour « de tous les temps »), **Top mondial**, **Seerr**, **Apparence** ;
+- un seul `<details>` « Réglages avancés » : exclusions, comptage par nombre de lectures,
+  recalcul et collections, sections de Jellyfin, minimums des studios et genres, langue.
 
-Les panneaux d'onglet n'utilisent que `hidden`, jamais `disabled` : `disabled` est réservé à
-`applyToggle`, qui désactive les champs d'un groupe dont la case d'activation est décochée. Les
-deux mécanismes restent ainsi indépendants.
+**L'affichage conditionnel passe par `data-show-if`**, lu par `applyVisibility` : `A|B` (l'un ou
+l'autre), `A&B` (les deux), `!A` (décoché), `A=valeur` (liste déroulante), `@nom` (fonction de
+`predicates`). Un bloc masqué l'est avec ses champs, `disabled` : retirés du parcours clavier ET de
+la validation — un nombre requis laissé vide dans un bloc invisible bloquerait sinon
+l'enregistrement sans rien montrer. Les champs sont réglés après tous les blocs, d'après
+n'importe quel bloc masqué qui les contient : Seerr, imbriqué sous le Top mondial, suit ainsi sa
+case ET celle de son parent, sans code dédié. Les écouteurs se posent sur les champs relevés dans
+les conditions elles-mêmes (`watchedFields`).
 
-L'avertissement de doublon vit **hors des onglets** : il compare `GlobalRowTitle` (onglet
-Affichage) à `GlobalCollectionName` (onglet Rafraîchissement), deux onglets différents. Le placer
-dans l'un des deux le rendrait invisible depuis l'autre.
+**`@playCount`** décide du sous-bloc « Comptage par nombre de lectures » : il ne sert qu'à « de
+tous les temps », et au Top du serveur sans Playback Reporting ou avec une période nulle. `Status`
+expose donc `PlaybackReporting` (la base existe-t-elle ?).
 
-Le groupe Seerr vit **dans** celui du Top mondial, sans `data-toggles`. `applyToggle` réactive
-tous les champs d'un groupe : rallumer le Top mondial réactiverait les champs d'un Seerr resté
-décoché. Et `refreshTabStates` compte les `data-toggles` d'un onglet : un Seerr coché sous un Top
-mondial éteint ferait croire l'onglet actif. `applySeerrToggle` gère donc les deux cases.
+**Un champ invalide dans le pli fermé** ne peut pas montrer son erreur : Chromium refusait l'envoi
+avec un simple « An invalid form control is not focusable » en console. Un écouteur `invalid`,
+en phase de capture sur le formulaire, ouvre le pli.
+
+L'avertissement de doublon vit **hors des blocs** : il compare `GlobalRowTitle` (bloc Top mondial)
+à `GlobalCollectionName` (pli avancé).
 
 **`pageshow` revient à chaque retour sur la page** : jellyfin-web réaffiche alors la même page,
 gardée en cache, sans relancer son script. Les écouteurs se posent une seule fois, sous la garde
-`wired`. Seul l'état relu de la configuration se réapplique à chaque affichage (`applyToggles`,
-`applySeerrToggle`, `renderRowOrder`). Un écouteur anonyme posé à chaque affichage s'ajoute aux
+`wired`. Seul l'état relu de la configuration se réapplique à chaque affichage
+(`applyVisibility`, `renderRowOrder`). Un écouteur anonyme posé à chaque affichage s'ajoute aux
 précédents : c'est ainsi que « Descendre » faisait reculer une rangée de deux places.
 
 **Cases à cocher sous jellyfin-web 12.1** : `.checkboxContainer` y est en ligne et le libellé a une
@@ -1016,13 +1026,14 @@ alors qu'elle était déjà bien placée lui faisait afficher une **deuxième ba
 test navigateur installe le même observateur et compte les ré-ajouts de `section0` : il
 retombe en échec dès qu'on revient à une réinsertion en bloc.
 
-**L'ordre des rangées est écrit dans un champ caché :** la liste de réorganisation de la page
-de configuration ne fait qu'écrire dans `#RowOrder`, seul champ que les tableaux de chargement
-et de sauvegarde connaissent. Un seul écouteur porte sur la liste entière, jamais sur les
-boutons : elle est reconstruite à chaque déplacement, des écouteurs par bouton disparaîtraient
-avec eux. Le focus est reposé sur la rangée déplacée, sinon la navigation au clavier repart du
-début de la page à chaque appui — et ce focus n'est possible que si l'onglet est ouvert, un
-panneau `hidden` ne pouvant rien focaliser.
+**L'ordre des rangées est écrit dans un champ caché :** la liste de la page de configuration
+ne fait qu'écrire dans `#RowOrder`, seul champ que les tableaux de chargement et de sauvegarde
+connaissent. Les huit rangées du plugin y sont écrites en dur, chacune avec sa case
+d'activation (`EnableLocalTop`…) : un déplacement échange deux nœuds, un nouvel affichage les
+remet dans l'ordre sans les recréer, et seules les sections de Jellyfin, sans case, sont créées
+ou retirées. Recréer une ligne détruirait sa case, avec son état et ses écouteurs. Un seul
+écouteur porte sur la liste entière, jamais sur les boutons. Le focus est reposé sur la rangée
+déplacée, sinon la navigation au clavier repart du début de la page à chaque appui.
 
 **Un champ absent des tableaux de la page de configuration est silencieusement perdu :**
 `checkboxes`, `numbers`, `decimals`, `texts` et `lists` pilotent à la fois le chargement et la

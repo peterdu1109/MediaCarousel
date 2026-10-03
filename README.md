@@ -82,10 +82,11 @@ décompresse-le dans `plugins/MediaCarousel/`, puis redémarre Jellyfin.
 ## Premiers pas
 
 1. **Tableau de bord → Extensions → Media Carousel**
-2. Règle le **Top du serveur** : nombre de titres, fenêtre d'observation.
-3. Pour le **Top mondial**, choisis TMDB ou Trakt et colle ta clé d'API.
-4. Clique sur **Enregistrer** : les rangées se recalculent aussitôt.
-5. Ouvre ta page d'accueil. Si les rangées n'apparaissent pas tout de suite, vide le cache du
+2. Coche les **rangées** à afficher et range-les avec les flèches.
+3. Règle le **Top du serveur** : nombre de titres, période.
+4. Pour le **Top mondial**, choisis TMDB ou Trakt et colle ta clé d'API.
+5. Clique sur **Enregistrer** : les rangées se recalculent aussitôt.
+6. Ouvre ta page d'accueil. Si les rangées n'apparaissent pas tout de suite, vide le cache du
    navigateur (**Ctrl + Maj + R**) — l'interface web garde l'ancienne page en mémoire.
 
 Ensuite, plus rien à faire : le recalcul se relance au démarrage du serveur et à intervalle régulier.
@@ -101,20 +102,53 @@ Ensuite, plus rien à faire : le recalcul se relance au démarrage du serveur et
 
 ## Réglages
 
+La page tient en cinq blocs et un pli « Réglages avancés ». Les réglages d'une rangée
+décochée n'apparaissent pas.
+
+<details>
+<summary><strong>Rangées de l'accueil</strong></summary>
+
+| Réglage | Défaut | À quoi ça sert |
+|---|---|---|
+| Afficher les rangées sur la page d'accueil | ✅ | Interrupteur général ; les collections restent à jour |
+| Liste des rangées | Top du serveur, De tous les temps, Top mondial, De retour, Jamais vu, Parce que…, Studios, Genres | Une case par rangée, des flèches ▲▼ pour la ranger |
+
+Chaque rangée cochée montre ses réglages juste en dessous :
+
+| Rangée | Réglages | Défauts |
+|---|---|---|
+| De retour cette semaine | Titre, épisodes ajoutés depuis, nombre de séries | `7` jours, `20` |
+| Jamais vu | Titre, nombre de films, note minimale (sur 10) | `20`, `7.0` |
+| Parce que tu as regardé… | Titre (`{0}` = le dernier film vu), nombre de titres | `20` |
+| Par studio | Titre, nombre de studios | `20` |
+| Par genre | Nombre de genres, titres par rangée | `6`, `20` |
+
+« Jamais vu » est limité aux films : pour une série, Jellyfin ne la considère lue que si
+**tous** ses épisodes le sont, donc une série abandonnée en cours de route remonterait
+comme jamais vue. « Parce que tu as regardé… » l'est pour la même raison, et reste absente
+tant qu'un utilisateur n'a terminé aucun film. C'est la seule rangée que **chaque compte
+voit différemment** : elle est calculée par le navigateur, pas par la tâche planifiée.
+
+« Warner Bros. », « Warner Bros. Pictures » et « Warner Bros. Animation » sont trois entrées
+distinctes dans Jellyfin. Le plugin les regroupe en un seul studio et affiche la variante qui
+possède un logo. Les rangées de genre se chargent au fur et à mesure du défilement, pour ne pas
+ralentir l'ouverture de la page d'accueil.
+
+Le plugin **n'écrase pas** ta page d'accueil : il ajoute ses rangées sous les bibliothèques et
+laisse le reste intact (Continuer de regarder, À suivre, etc.).
+
+</details>
+
 <details>
 <summary><strong>Top du serveur</strong></summary>
 
 | Réglage | Défaut | À quoi ça sert |
 |---|---|---|
-| Activer le Top du serveur | ✅ | Interrupteur principal |
-| Nombre d'entrées | `10` | Taille du classement |
+| Titre de la rangée | `Top 10 sur ce serveur` | |
+| Nombre de titres | `10` | Taille du classement |
+| Période | `30` jours | `7` = la semaine, `30` = le mois, `0` = depuis toujours |
 | Types de médias | Films et séries | Ce qui est classé |
-| Fenêtre d'observation | `30` jours | `30` = tendance du mois, `0` = palmarès de toujours |
-| Lectures comptées par utilisateur | `3` | Empêche qu'un seul spectateur qui revoit un film en boucle fausse le classement |
-| Titres candidats par utilisateur | `100` | Plus haut = plus précis, mais plus long à calculer |
-| Utilisateurs exclus | — | Comptes de service, invités |
-| Bibliothèques exclues | — | Vidéos perso, etc. S'applique à toutes les rangées, Top mondial compris |
-| Ignorer le contenu des plugins de chaîne | activé | Écarte les catalogues IPTV (XFusion et consorts), qui arrivent en base comme des films et des épisodes ordinaires |
+| De tous les temps : titre, nombre | `10` | Le même calcul, sans période |
 
 Les **épisodes comptent pour leur série** : c'est la série qui apparaît au classement, pas
 l'épisode isolé.
@@ -131,20 +165,14 @@ Sans Playback Reporting, le Top compte les titres marqués « vu ».
 
 | Réglage | Défaut | À quoi ça sert |
 |---|---|---|
-| Activer le Top mondial | ❌ | Interrupteur principal |
 | Source | TMDB | TMDB ou Trakt |
-| Clé d'API | — | Voir le tableau ci-dessus |
 | Liste | Tendances du moment | Ou « à l'affiche », ou « prochaines sorties ». Propre à TMDB ; Trakt ne publie que les tendances |
 | Types de médias | Films | Ce qui est classé |
-| Une rangée pour les films, une pour les séries | ❌ | Avec « Films et séries » : deux classements séparés au lieu d'un seul mélangé |
-| Titre — films / Titre — séries | `Top 10 des films` / `Top 10 des séries` | Titres des deux rangées séparées |
-| Nombre d'entrées | `10` | Taille du classement (de chaque rangée, si séparées) |
-| Ne garder que ce que j'ai | ✅ | Masque les titres absents de ta bibliothèque |
-| Langue des métadonnées | `fr-FR` | Langue demandée à la source |
-| Demander les titres absents à Seerr | ❌ | Un bouton « Demander » sur l'affiche de chaque titre absent |
-| Adresse de Seerr | — | Telle que le serveur Jellyfin l'atteint, par exemple `http://192.168.1.10:5055` |
-| Clé d'API de Seerr | — | Dans Seerr : Paramètres → Général. Jamais transmise aux navigateurs |
-| Options avancées | ❌ | Serveur, profil de qualité et dossier racine proposés à chaque demande |
+| Nombre de titres | `10` | Taille du classement (de chaque rangée, si séparées) |
+| Une rangée pour les films, une pour les séries | ❌ | Proposé avec « Films et séries » : deux classements au lieu d'un seul mélangé |
+| Titre de la rangée | `Top 10 mondial` | Remplacé par `Top 10 des films` / `Top 10 des séries` quand les rangées sont séparées |
+| Clé d'API | — | Voir le tableau ci-dessus. Jamais transmise aux navigateurs |
+| Ne garder que les titres présents | ✅ | Masque les titres absents de ta bibliothèque |
 
 Si la source est injoignable, le classement précédent est conservé — une coupure réseau ne vide
 jamais la liste.
@@ -152,11 +180,24 @@ jamais la liste.
 Un titre qui arrive dans ta bibliothèque — une demande Seerr servie, par exemple — y passe
 « présent » dans la minute, sans attendre le recalcul suivant.
 
+</details>
+
+<details>
+<summary><strong>Seerr</strong></summary>
+
+| Réglage | Défaut | À quoi ça sert |
+|---|---|---|
+| Proposer les demandes à Seerr | ❌ | Un bouton « Demander » sur l'affiche de chaque titre absent du Top mondial |
+| Adresse de Seerr | — | Vue depuis le serveur Jellyfin, par exemple `http://192.168.1.10:5055` |
+| Clé d'API de Seerr | — | Dans Seerr : Paramètres → Général. Jamais transmise aux navigateurs |
+| Proposer le serveur, le profil et le dossier | ❌ | Les options avancées de chaque demande |
+
 **Demander à Seerr** (Jellyseerr, Overseerr ou leur successeur) fonctionne comme dans
 Jellyfin Enhanced, avec les mêmes libellés. La demande part au nom du compte Seerr de chaque
 utilisateur, donc ses droits et ses quotas s'appliquent. Pour que le bouton apparaisse :
 
-- décoche « Ne garder que ce que j'ai », sinon aucun titre absent ne s'affiche ;
+- décoche « Ne garder que les titres présents » dans le Top mondial, sinon aucun titre absent ne
+  s'affiche ;
 - importe tes utilisateurs Jellyfin dans Seerr (Seerr → Utilisateurs → Importer depuis Jellyfin) ;
 - enregistre : les rangées se recalculent aussitôt.
 
@@ -171,75 +212,37 @@ Le bouton « Tester la connexion » vérifie l'adresse et la clé avant l'enregi
 </details>
 
 <details>
-<summary><strong>Actualité de la bibliothèque</strong></summary>
+<summary><strong>Apparence</strong></summary>
 
 | Réglage | Défaut | À quoi ça sert |
 |---|---|---|
-| Afficher « de retour cette semaine » | ✅ | Séries dont des épisodes viennent d'arriver |
-| Fenêtre | `7` jours | |
-| Nombre de séries | `20` | |
-| Afficher « jamais vu » | ✅ | Films bien notés jamais lancés sur le serveur |
-| Note minimale | `7.0` | Note de la communauté, sur 10 |
-| Nombre de films | `20` | |
-| Afficher « parce que tu as regardé… » | ✅ | Rangée personnelle, propre à chaque compte |
-| Titre de la rangée | `Parce que tu as regardé {0}` | `{0}` est remplacé par le titre du film |
-| Nombre de titres | `20` | |
-
-« Jamais vu » est limité aux films : pour une série, Jellyfin ne la considère lue que si
-**tous** ses épisodes le sont, donc une série abandonnée en cours de route remonterait
-comme jamais vue. « Parce que tu as regardé… » l'est pour la même raison, et reste absente
-tant qu'un utilisateur n'a terminé aucun film. C'est la seule rangée que **chaque compte
-voit différemment** : elle est calculée par le navigateur, pas par la tâche planifiée.
+| Couleur d'accentuation | `#775BF4` | Contour du chiffre au survol et focus. Seule une valeur `#rrggbb` est retenue |
+| Taille du chiffre | `100` % | `100` = comme Netflix ; plus bas, la rangée se resserre, l'affiche ne change pas |
+| Laisser chaque compte régler son accueil | ✅ | Un bouton sur l'accueil : rangées, ordre, couleur, taille du chiffre. Ce qu'un compte ne touche pas suit cette page |
 
 </details>
 
 <details>
-<summary><strong>Studios et genres</strong></summary>
+<summary><strong>Réglages avancés</strong></summary>
 
 | Réglage | Défaut | À quoi ça sert |
 |---|---|---|
-| Afficher la rangée des studios | ✅ | Vignettes des studios, logo compris |
-| Titre de la rangée | `Par studio` | |
-| Nombre de studios | `20` | |
-| Titres minimum par studio | `3` | Écarte les studios trop peu représentés |
-
-« Warner Bros. », « Warner Bros. Pictures » et « Warner Bros. Animation » sont trois entrées
-distinctes dans Jellyfin. Le plugin les regroupe en un seul studio et affiche la variante qui
-possède un logo.
-| Afficher des rangées par genre | ✅ | Une rangée par genre |
-| Nombre de genres | `6` | Les plus fournis en premier |
-| Titres par rangée | `20` | |
-| Titres minimum par genre | `5` | |
-
-Les rangées de genre se chargent au fur et à mesure du défilement, pour ne pas ralentir
-l'ouverture de la page d'accueil.
+| Ignorer le contenu IPTV | activé | Écarte les catalogues IPTV (XFusion et consorts), qui arrivent en base comme des films et des épisodes ordinaires |
+| Comptes exclus | — | Comptes de service, invités |
+| Bibliothèques exclues | — | Vidéos perso, etc. S'applique à toutes les rangées, Top mondial compris |
+| Lectures comptées par compte | `3` | Sur un classement depuis toujours. Affiché seulement quand il sert |
+| Titres examinés par compte | `100` | Plus haut = plus précis, mais plus long. Sans Playback Reporting, ou pour « de tous les temps » |
+| Recalcul toutes les | `6` h | Remplace l'intervalle de la tâche planifiée de Jellyfin |
+| Créer aussi une collection par classement | ❌ | Pour les clients sans les rangées (Kodi, certains boîtiers TV). Le rang est préservé |
+| Noms des collections | `Top 10 du serveur` / `Top 10 mondial` | |
+| Ranger les sections de Jellyfin | ❌ | Ajoute « Continuer de regarder », « À suivre »… à la liste des rangées. Cet ordre s'impose alors à tous les comptes |
+| Masquer les sections de Jellyfin | ❌ | Ne laisse que tes bibliothèques et les rangées du plugin |
+| Titres minimum par studio / par genre | `3` / `5` | Écarte les studios et genres trop peu représentés |
+| Langue des titres | `fr-FR` | Langue demandée à la source du Top mondial |
 
 </details>
 
-<details>
-<summary><strong>Affichage sur la page d'accueil</strong></summary>
-
-| Réglage | Défaut | À quoi ça sert |
-|---|---|---|
-| Afficher les rangées | ✅ | Interrupteur principal du rendu sur l'accueil |
-| Ordre des rangées | Top serveur, De tous les temps, Top mondial, De retour, Jamais vu, Parce que…, Studios, Genres | Réorganisable avec les flèches ▲▼ |
-| Laisser chaque utilisateur régler ses rangées | ✅ | Les réglages de la page deviennent un défaut : chacun choisit ses rangées, leur ordre, sa couleur et la taille du chiffre depuis un bouton posé sur sa propre page d'accueil. Ce qu'il ne touche pas continue de suivre la page |
-| Ordonner aussi les sections de Jellyfin | ❌ | Ajoute « Continuer de regarder », « À suivre »… à la liste, sous leurs noms Jellyfin. Attention : cet ordre est global et remplace alors l'arrangement propre à chaque utilisateur |
-| Titre — Top du serveur | `Top 10 sur ce serveur` | Titre de la rangée |
-| Titre — Top mondial | `Top 10 mondial` | Titre de la rangée |
-| Couleur d'accentuation | `#775BF4` | Contour du chiffre au survol et anneau de focus. Seule une valeur `#rrggbb` est retenue, sinon le violet par défaut s'applique |
-| Masquer les sections natives | ❌ | Ne laisse que tes bibliothèques et les rangées du plugin |
-
-Le plugin **n'écrase pas** ta page d'accueil : il ajoute ses rangées sous les bibliothèques et
-laisse le reste intact (Continuer de regarder, À suivre, etc.).
-
-</details>
-
-<details>
-<summary><strong>Rafraîchissement et collections</strong></summary>
-
-| Réglage | Défaut | À quoi ça sert |
-|---|---|---|
+---|---|---|
 | Intervalle de recalcul | `6` h | Fréquence du recalcul automatique |
 | Créer aussi une collection | ❌ | Pour les clients qui n'exécutent pas le script (Kodi, certains boîtiers TV) |
 | Nom de la collection — Top du serveur | `Top 10 du serveur` | |

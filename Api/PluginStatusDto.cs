@@ -89,4 +89,10 @@ public sealed class PluginStatusDto
 
     /// <summary>Obtient ou définit le bilan du dernier recalcul.</summary>
     public RefreshReportDto LastRun { get; set; } = new();
+
+    /// <summary>
+    /// Obtient ou définit une valeur indiquant si Playback Reporting est installé : la page de
+    /// configuration masque alors les réglages du comptage par nombre de lectures, sans effet.
+    /// </summary>
+    public bool PlaybackReporting { get; set; }
 }
