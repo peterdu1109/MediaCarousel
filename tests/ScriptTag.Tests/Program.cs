@@ -866,6 +866,24 @@ Check("REGLAGES SURS: un fichier ecrit par Jellyfin se relit",
 
 Directory.Delete(dossierReglages, recursive: true);
 
+// ---------------------------------------------------------------------------
+// Texte de la fiche de l'extension : francais sur un serveur en francais, anglais sinon
+// (demande d'Elie le 2026-10-03).
+// ---------------------------------------------------------------------------
+Check("DESCRIPTION: un serveur en fr-FR lit le francais", PluginDescription.For("fr-FR") == PluginDescription.French);
+Check("DESCRIPTION: toute variante du francais aussi (fr, FR-ca, fr_BE)",
+    PluginDescription.For("fr") == PluginDescription.French
+    && PluginDescription.For("FR-ca") == PluginDescription.French
+    && PluginDescription.For("fr_BE") == PluginDescription.French);
+Check("DESCRIPTION: l'anglais pour toute autre langue (en-US, de-DE, es)",
+    PluginDescription.For("en-US") == PluginDescription.English
+    && PluginDescription.For("de-DE") == PluginDescription.English
+    && PluginDescription.For("es") == PluginDescription.English);
+Check("DESCRIPTION: l'anglais sans langue connue, ni pour un code qui commence seulement par fr",
+    PluginDescription.For(null) == PluginDescription.English
+    && PluginDescription.For("") == PluginDescription.English
+    && PluginDescription.For("fri") == PluginDescription.English);
+
 Console.WriteLine(failed == 0 ? "\nTous les tests passent." : $"\n{failed} echec(s).");
 return failed;
 

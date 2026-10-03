@@ -3,8 +3,10 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.Loader;
 using JellyfinCarouselPlugin.Configuration;
+using JellyfinCarouselPlugin.Services;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Common.Plugins;
+using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Model.Plugins;
 using MediaBrowser.Model.Serialization;
 using Microsoft.Extensions.Logging;
@@ -19,6 +21,7 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
 {
     private readonly object _saveLock = new();
     private readonly ILogger<Plugin> _logger;
+    private readonly IServerConfigurationManager _serverConfiguration;
     private volatile bool _configurationRead;
 
     /// <summary>
@@ -27,10 +30,16 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
     /// <param name="applicationPaths">Les chemins de l'application.</param>
     /// <param name="xmlSerializer">Le sérialiseur XML.</param>
     /// <param name="logger">Journal.</param>
-    public Plugin(IApplicationPaths applicationPaths, IXmlSerializer xmlSerializer, ILogger<Plugin> logger)
+    /// <param name="serverConfiguration">Configuration du serveur, pour sa langue d'affichage.</param>
+    public Plugin(
+        IApplicationPaths applicationPaths,
+        IXmlSerializer xmlSerializer,
+        ILogger<Plugin> logger,
+        IServerConfigurationManager serverConfiguration)
         : base(applicationPaths, xmlSerializer)
     {
         _logger = logger;
+        _serverConfiguration = serverConfiguration;
 
         // Lus ici, par notre propre sérialiseur : BasePlugin ne charge donc jamais les
         // réglages lui-même, et son chargement — qui remplace par les valeurs par défaut tout
@@ -62,8 +71,12 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
     public override Guid Id => Guid.Parse("191bd290-1054-4b55-a137-46c72181266b");
 
     /// <inheritdoc />
-    public override string Description =>
-        "Génère automatiquement un Top du serveur à partir des statistiques de lecture et un Top mondial à partir de TMDB ou Trakt.";
+    /// <remarks>
+    /// Le texte de la fiche de l'extension, en français sur un serveur en français, en anglais
+    /// sinon : voir <see cref="PluginDescription"/>. Relu à chaque affichage, il suit un
+    /// changement de langue sans redémarrage.
+    /// </remarks>
+    public override string Description => PluginDescription.For(_serverConfiguration?.Configuration?.UICulture);
 
     /// <inheritdoc />
     public IEnumerable<PluginPageInfo> GetPages()
