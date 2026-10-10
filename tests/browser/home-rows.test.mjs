@@ -1999,6 +1999,122 @@ const etatAuRetour = await memoire.evaluate(() =>
   document.querySelector('.mc-seerr[data-tmdb="27205"]').getAttribute('data-state'));
 await memoire.close();
 
+// ---------------------------------------------------------------------------------------
+// Appli TV (mesure sur une TV Samsung, Tizen 9, appli Jellyfin empaquetee).
+// La classe `layout-tv` est posee avant le script, comme le fait jellyfin-web en mode TV.
+// La police de la TV dessine ses chiffres a 84 unites de haut (79 sur le PC) : on la simule
+// par la mesure du canevas. Retour de la telecommande : code 10009 (Tizen).
+const touche = (vue, code, cle) => vue.evaluate(([c, k]) => {
+  const e = new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true });
+  Object.defineProperty(e, 'keyCode', { get: () => c });
+  (document.activeElement || document.body).dispatchEvent(e);
+  return e.defaultPrevented;
+}, [code, cle]);
+const enTv = async (vue) => {
+  await vue.addInitScript(() => {
+    const mesure = CanvasRenderingContext2D.prototype.measureText;
+    CanvasRenderingContext2D.prototype.measureText = function (t) {
+      const m = mesure.call(this, t);
+      return /108px/.test(this.font) ? { width: m.width, actualBoundingBoxAscent: 84 } : m;
+    };
+    window.__routes = [];
+    window.Emby = { Page: { show: (chemin) => { window.__routes.push(chemin); return Promise.resolve(); } } };
+  });
+};
+
+const tvPrefs = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+tvPrefs.on('pageerror', e => errors.push('pageerror(tv): ' + e.message));
+await enTv(tvPrefs);
+await tvPrefs.addInitScript(() => { window.__allowPrefs = true; });
+await tvPrefs.goto('file://' + path.join(here, 'home.html'));
+await tvPrefs.evaluate(() => document.documentElement.classList.add('layout-tv'));
+await tvPrefs.evaluate(stub);
+await tvPrefs.evaluate(script);
+await tvPrefs.waitForSelector('.mc-ranked');
+const tvCartes = await tvPrefs.evaluate(() => {
+  const carte = document.querySelector('.mc-ranked');
+  const lien = carte.querySelector('a.itemAction');
+  carte.focus();
+  return {
+    carteFocalisee: document.activeElement === carte,
+    focusable: carte.classList.contains('focusable') && carte.getAttribute('tabindex') === '0',
+    lienHorsParcours: lien.getAttribute('tabindex') === '-1',
+    nom: carte.getAttribute('aria-label') === lien.getAttribute('aria-label'),
+    corps: parseFloat(getComputedStyle(document.querySelector('.mc-rank text')).fontSize)
+  };
+});
+const okSurCarte = await touche(tvPrefs, 13, 'Enter');
+const routeOk = await tvPrefs.evaluate(() => ({ routes: window.__routes.slice(), hash: location.hash }));
+// Ouverture du panneau a la telecommande : focus sur le premier reglage, dans un conteneur.
+await tvPrefs.focus('.mc-prefs-open');
+await tvPrefs.keyboard.press('Enter');
+await tvPrefs.waitForSelector('.mc-prefs');
+const tvPanneau = await tvPrefs.evaluate(() => ({
+  conteneur: document.querySelector('.mc-prefs').classList.contains('focuscontainer'),
+  premier: document.activeElement === document.querySelector('.mc-prefs input[type=checkbox]'),
+  coche: document.activeElement.checked
+}));
+const okCase = await touche(tvPrefs, 13, 'Enter');
+const caseApres = await tvPrefs.evaluate(() => document.activeElement.checked);
+const retourPanneau = await touche(tvPrefs, 10009, '');
+const apresRetour = await tvPrefs.evaluate(() => ({
+  panneau: document.querySelectorAll('.mc-prefs-backdrop').length,
+  focus: document.activeElement === document.querySelector('.mc-prefs-open')
+}));
+
+// Sur ordinateur : un clic passe par le routeur, un clic modifie garde le lien.
+const routeur = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+routeur.on('pageerror', e => errors.push('pageerror(routeur): ' + e.message));
+await routeur.addInitScript(() => {
+  window.__routes = [];
+  window.Emby = { Page: { show: (chemin) => { window.__routes.push(chemin); return Promise.resolve(); } } };
+});
+await routeur.goto('file://' + path.join(here, 'home.html'));
+await routeur.evaluate(stub);
+await routeur.evaluate(script);
+await routeur.waitForSelector('.mc-ranked a.itemAction');
+const bureau = await routeur.evaluate(() => {
+  const lien = document.querySelector('.mc-ranked a.itemAction');
+  const clic = (o) => {
+    const e = new MouseEvent('click', Object.assign({ bubbles: true, cancelable: true }, o));
+    lien.dispatchEvent(e);
+    return e.defaultPrevented;
+  };
+  const simple = clic({});
+  const modifie = clic({ ctrlKey: true });
+  const carte = lien.closest('.card');
+  return {
+    simple, modifie, routes: window.__routes.slice(), href: lien.getAttribute('href'),
+    pasDeTabindex: !carte.hasAttribute('tabindex') && !lien.hasAttribute('tabindex'),
+    corps: parseFloat(getComputedStyle(document.querySelector('.mc-rank text')).fontSize)
+  };
+});
+
+// Fenetre Seerr a la telecommande : conteneur de focus, OK coche, Retour ferme.
+const tvSeerr = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+tvSeerr.on('pageerror', e => errors.push('pageerror(tv seerr): ' + e.message));
+await enTv(tvSeerr);
+await tvSeerr.goto('file://' + path.join(here, 'home.html'));
+await tvSeerr.evaluate(() => document.documentElement.classList.add('layout-tv'));
+await tvSeerr.evaluate(serveurSeerr);
+await tvSeerr.evaluate(script);
+await tvSeerr.waitForFunction(etatSeerr('66732', 'request'));
+await tvSeerr.click('.mc-seerr[data-tmdb="66732"]');
+await tvSeerr.waitForSelector('.mc-seerr-dialog .mc-seerr-pick');
+await tvSeerr.focus('.mc-seerr-pick');
+const tvFenetre = await tvSeerr.evaluate(() => ({
+  conteneur: document.querySelector('.mc-seerr-dialog').classList.contains('focuscontainer'),
+  coche: document.activeElement.checked
+}));
+await touche(tvSeerr, 13, 'Enter');
+const saisonCochee = await tvSeerr.evaluate(() => document.activeElement.checked);
+const retourSeerr = await touche(tvSeerr, 10009, '');
+const apresRetourSeerr = await tvSeerr.evaluate(() => ({
+  fenetre: document.querySelectorAll('.mc-seerr-backdrop').length,
+  focus: document.activeElement === document.querySelector('.mc-seerr[data-tmdb="66732"]'),
+  demandes: window.__appels.filter(a => a.route === 'MediaCarousel/Seerr/Request').length
+}));
+
 await browser.close();
 
 let failed = 0;
@@ -2471,6 +2587,29 @@ check('AVANCEES: options illisibles, la section reste cachee et la demande part 
 check('SEERR: plus de 20 titres partent en plusieurs lots',
   JSON.stringify(lotsDecoupes) === '[20,5]', lotsDecoupes);
 check('SEERR: un retour sur l accueil montre aussitot l etat connu', etatAuRetour === 'request', etatAuRetour);
+
+check('TV: la carte prend le focus, son lien sort du parcours', tvCartes.carteFocalisee && tvCartes.focusable
+  && tvCartes.lienHorsParcours && tvCartes.nom, tvCartes);
+check('TV: OK sur une carte ouvre la fiche par le routeur, sans quitter la page',
+  okSurCarte === true && routeOk.routes.length === 1 && routeOk.routes[0].indexOf('#/details?id=') === 0
+    && routeOk.hash === '', routeOk);
+check('TV: police aux chiffres plus hauts, chiffre ramene a la hauteur de l affiche',
+  Math.abs(tvCartes.corps - 101.6) < 0.2, tvCartes.corps);
+check('BUREAU: chiffre au corps d origine', bureau.corps === 108, bureau.corps);
+check('BUREAU: un clic ouvre la fiche par le routeur, un clic modifie garde le lien',
+  bureau.simple === true && bureau.modifie === false && bureau.routes.length === 1
+    && bureau.routes[0] === bureau.href, bureau);
+check('BUREAU: les cartes gardent leur balisage (pas de tabindex)', bureau.pasDeTabindex, bureau);
+check('TV: le panneau garde le focus et le pose sur le premier reglage',
+  tvPanneau.conteneur && tvPanneau.premier, tvPanneau);
+check('TV: OK coche une case du panneau', okCase === true && caseApres === !tvPanneau.coche, { okCase, caseApres });
+check('TV: Retour ferme le panneau, le focus revient au bouton',
+  retourPanneau === true && apresRetour.panneau === 0 && apresRetour.focus, apresRetour);
+check('TV: la fenetre Seerr garde le focus, OK coche une saison',
+  tvFenetre.conteneur && saisonCochee === !tvFenetre.coche, { tvFenetre, saisonCochee });
+check('TV: Retour ferme la fenetre Seerr sans rien demander, focus rendu au bouton',
+  retourSeerr === true && apresRetourSeerr.fenetre === 0 && apresRetourSeerr.focus
+    && apresRetourSeerr.demandes === 0, apresRetourSeerr);
 
 check('aucune erreur js', errors.length === 0, errors);
 

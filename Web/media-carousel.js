@@ -447,7 +447,7 @@
                garantit sous tous les thèmes, et le défaut ne se voit qu'à ce moment-là. */
             '.mc-row .mc-rank text{font-family:"Noto Sans",-apple-system,BlinkMacSystemFont,',
             '"Segoe UI",Roboto,Helvetica,Arial,sans-serif;',
-            'font-size:108px;font-weight:900;',
+            'font-size:' + rankFontSize() + 'px;font-weight:900;',
             'font-variant-numeric:tabular-nums;font-feature-settings:"tnum";}',
 
             /* Chiffre evide : contour seul, sans remplissage. Il n'est plus pose SUR
@@ -696,8 +696,8 @@
             /* Repli clavier : jellyfin-web ne stylise le focus que sur les cartes
                marquées `show-focus`, posées uniquement en mode téléviseur. */
             '.mc-row .card:focus{outline:none;}',
-            '.mc-row .card:focus .cardScalable{outline:3px solid var(--mc-accent);outline-offset:3px;}',
-            '.mc-row .card:focus:not(:focus-visible) .cardScalable{outline:none;}',
+            '.mc-row .card:not(.show-focus):focus .cardScalable{outline:3px solid var(--mc-accent);outline-offset:3px;}',
+            '.mc-row .card:not(.show-focus):focus:not(:focus-visible) .cardScalable{outline:none;}',
 
             /* Fond clair, détecté en JS sur la couleur réelle de la page : les blancs
                translucides du chiffre y sont invisibles, tout passe en sombre. */
@@ -785,9 +785,16 @@
         // manque, ni s'ajouter au logo d'un studio comme un second libellé.
         inner += opts.decoration || '';
 
+        // À la télécommande, c'est la CARTE qui prend le focus, comme les cartes natives :
+        // Jellyfin et les thèmes ne dessinent le cadre de sélection que sur `.card:focus`.
+        // Mesuré sur une TV Samsung, le focus posé sur le lien intérieur ne montrait rien.
+        // Le lien sort alors du parcours ; OK sur la carte l'ouvre (voir wireTvCards()).
+        var tvStop = !!opts.href && layoutCardClass() === ' show-focus';
+
         var body = opts.href
             ? '<a href="' + escapeHtml(opts.href) + '" data-action="link" class="' + imageClasses
-                + ' itemAction"' + style + ' aria-label="' + escapeHtml(label) + '">' + inner + '</a>'
+                + ' itemAction"' + style + ' aria-label="' + escapeHtml(label) + '"'
+                + (tvStop ? ' tabindex="-1"' : '') + '>' + inner + '</a>'
             : '<div class="' + imageClasses + '"' + style + '>' + inner + '</div>';
 
         // Une seconde ligne vide plutôt qu'absente : deux cartes voisines dont l'une
@@ -851,7 +858,8 @@
         }
 
         return '<div class="card ' + shape + 'Card' + layoutCardClass() + ' card-withuserdata'
-            + (opts.cardClass ? ' ' + opts.cardClass : '') + '"'
+            + (opts.cardClass ? ' ' + opts.cardClass : '') + (tvStop ? ' focusable' : '') + '"'
+            + (tvStop ? ' tabindex="0" aria-label="' + escapeHtml(label) + '"' : '')
             + (opts.ariaHidden ? ' aria-hidden="true"' : ' role="listitem"')
             + (opts.itemId ? ' data-id="' + escapeHtml(opts.itemId) + '"' : '')
             + (opts.serverId ? ' data-serverid="' + escapeHtml(opts.serverId) + '"' : '')
@@ -889,6 +897,44 @@
      */
     function rankViewBoxWidth(rank) {
         return 8 + String(rank).length * 62;
+    }
+
+    // Hauteur des chiffres, au-dessus de la ligne de base, dans la police du PC où le rendu
+    // a été validé (Noto Sans graissé à 900, corps 108) : 79 unités du repère.
+    var RANK_DIGIT_ASCENT = 79;
+    var rankFontCache = null;
+
+    /**
+     * Corps du chiffre, ramené à la hauteur validée quand la police de l'appareil dessine
+     * ses chiffres plus haut.
+     *
+     * Le repère du chiffre est resserré sur la hauteur des chiffres du PC. Une télévision
+     * Samsung (Tizen 9) n'a pas Noto Sans et retombe sur sa propre police, dont les chiffres
+     * montent à 84 unités : mesuré sur la TV, le haut du chiffre dépassait alors l'affiche
+     * d'une vingtaine de pixels et venait mordre sur le titre de la rangée. On mesure donc
+     * la police réellement utilisée, et on ne fait jamais que réduire.
+     */
+    function rankFontSize() {
+        if (rankFontCache !== null) {
+            return rankFontCache;
+        }
+
+        rankFontCache = 108;
+
+        try {
+            var context = document.createElement('canvas').getContext('2d');
+            context.font = '900 108px "Noto Sans",-apple-system,BlinkMacSystemFont,'
+                + '"Segoe UI",Roboto,Helvetica,Arial,sans-serif';
+            var ascent = context.measureText('0123456789').actualBoundingBoxAscent;
+
+            if (ascent > RANK_DIGIT_ASCENT + 1) {
+                rankFontCache = Math.round(108 * RANK_DIGIT_ASCENT / ascent * 10) / 10;
+            }
+        } catch (error) {
+            // Sans mesure possible, le corps d'origine.
+        }
+
+        return rankFontCache;
     }
 
     /**
@@ -1373,7 +1419,7 @@
 
         backdrop.className = 'mc-seerr-backdrop';
         backdrop.mcOrigin = button;
-        backdrop.innerHTML = '<div class="mc-seerr-dialog" role="dialog" aria-modal="true"'
+        backdrop.innerHTML = '<div class="mc-seerr-dialog focuscontainer" role="dialog" aria-modal="true"'
             + ' aria-labelledby="' + id + '-title" tabindex="-1">'
             + '<div class="mc-seerr-head">'
             + '<h2 id="' + id + '-title" class="mc-seerr-title">'
@@ -1621,9 +1667,13 @@
         });
 
         backdrop.addEventListener('keydown', function (event) {
-            if (event.key === 'Escape') {
+            if (isCloseKey(event)) {
+                event.preventDefault();
                 closeSeasonDialog();
+                return;
             }
+
+            toggleOnEnter(event);
         });
     }
 
@@ -1682,6 +1732,31 @@
         }).catch(function (error) {
             log('demande impossible', error);
         });
+    }
+
+    // Touche Retour des télécommandes : Tizen (Samsung), webOS (LG).
+    var TV_BACK_KEYS = [10009, 461];
+
+    /**
+     * Échap, ou Retour d'une télécommande. Sans cela, Retour sur une fenêtre ouverte passait
+     * à Jellyfin, qui quittait la page derrière elle ; `preventDefault` le lui retire, son
+     * écouteur ignorant les touches déjà traitées.
+     */
+    function isCloseKey(event) {
+        return event.key === 'Escape' || TV_BACK_KEYS.indexOf(event.keyCode) !== -1;
+    }
+
+    /**
+     * OK de la télécommande sur une case à cocher : la coche, comme les cases de Jellyfin.
+     * Un navigateur ne coche qu'à la barre d'espace ; la télécommande n'envoie qu'Entrée.
+     */
+    function toggleOnEnter(event) {
+        var target = event.target;
+
+        if (event.keyCode === 13 && target.tagName === 'INPUT' && target.type === 'checkbox') {
+            event.preventDefault();
+            target.click();
+        }
     }
 
     function wireSeerr(section) {
@@ -1754,6 +1829,7 @@
         }
 
         wireArrows(section);
+        wireCardLinks(section);
         watchImages(section.querySelector('.mc-strip'));
         return section;
     }
@@ -1764,6 +1840,48 @@
 
     function resumeNothing() {
         return Promise.resolve();
+    }
+
+    /**
+     * Ouvre les cartes par le routeur de Jellyfin, comme ses propres cartes.
+     *
+     * Nos liens sont relatifs (`#/details?…`). Dans un navigateur, la page vient de
+     * `/web/` et le lien reste sur elle. Dans l'appli d'une TV, la page est
+     * `file:///www/index.html` et le lien se résout en `file:///www/#/details…`, une autre
+     * adresse : mesuré sur une TV Samsung, l'appli quittait sa page et restait sur un écran
+     * vide, sans retour possible. Jellyfin passe toujours par `appRouter.show`, que le client
+     * expose sous `Emby.Page` ; un clic modifié (nouvel onglet) garde le lien.
+     */
+    function wireCardLinks(section) {
+        section.addEventListener('click', function (event) {
+            var link = event.target.closest ? event.target.closest('a.itemAction') : null;
+            var router = window.Emby && window.Emby.Page;
+
+            if (!link || !router || typeof router.show !== 'function' || event.defaultPrevented
+                || event.button || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) {
+                return;
+            }
+
+            event.preventDefault();
+            router.show(link.getAttribute('href'));
+        });
+
+        // OK de la télécommande sur une carte focalisée : ouvre son lien, comme un clic.
+        section.addEventListener('keydown', function (event) {
+            var card = event.target;
+
+            if (event.keyCode !== 13 || !card.classList || !card.classList.contains('focusable')
+                || !card.classList.contains('card')) {
+                return;
+            }
+
+            var link = card.querySelector('a.itemAction');
+
+            if (link) {
+                event.preventDefault();
+                link.click();
+            }
+        });
     }
 
     function wireArrows(section) {
@@ -2825,7 +2943,15 @@
     function closePreferences() {
         var open = document.querySelector('.mc-prefs-backdrop');
         if (open) {
+            // Le focus était dans le panneau : il revient sur le bouton qui l'a ouvert. Sans
+            // cela, il tombait dans le vide, et la télécommande ne déplaçait plus rien.
+            var hadFocus = open.contains(document.activeElement);
             open.parentNode.removeChild(open);
+            var opener = hadFocus ? document.querySelector('.mc-prefs-open') : null;
+
+            if (opener) {
+                opener.focus();
+            }
         }
     }
 
@@ -2837,7 +2963,7 @@
 
         var order = rowOrder(opts.RowOrder, opts.ManageNativeSections === true);
         var backdrop = document.createElement('div');
-        var html = '<div class="mc-prefs" role="dialog" aria-modal="true"'
+        var html = '<div class="mc-prefs focuscontainer" role="dialog" aria-modal="true"'
             + ' aria-labelledby="mc-prefs-title" tabindex="-1">'
             + '<h2 id="mc-prefs-title">Mes rangées</h2>'
             + '<p class="mc-prefs-hint">Ces choix ne valent que pour ce compte.'
@@ -2903,6 +3029,17 @@
         var dialog = backdrop.querySelector('.mc-prefs');
         if (dialog) {
             dialog.focus();
+
+            // À la télécommande, la navigation de Jellyfin part de l'élément focalisé : posée
+            // sur le panneau entier, elle ne trouvait rien à atteindre et les flèches ne
+            // faisaient plus rien (mesuré sur une TV Samsung). Le focus va au premier réglage.
+            var first = layoutCardClass() === ' show-focus'
+                ? dialog.querySelector('input:not([type="range"]):not([disabled]), button:not([disabled])')
+                : null;
+
+            if (first) {
+                first.focus();
+            }
         }
     }
 
@@ -2951,9 +3088,13 @@
         });
 
         backdrop.addEventListener('keydown', function (event) {
-            if (event.key === 'Escape') {
+            if (isCloseKey(event)) {
+                event.preventDefault();
                 closePreferences();
+                return;
             }
+
+            toggleOnEnter(event);
         });
 
         // `order` n'est utile qu'à la construction ; le DOM porte l'ordre courant ensuite.

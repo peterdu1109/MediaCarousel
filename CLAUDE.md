@@ -855,6 +855,29 @@ canal que ces applications récupèrent bien du serveur est le CSS personnalisé
 qui ne peut pas créer de rangée. Le rendu, lui, reste écrit pour ces téléviseurs — c'est ce qui
 sert le jour où le paquet est reconstruit, et cela ne coûte rien ailleurs.
 
+**Appli Samsung reconstruite par Apps2Samsung (vérifié le 2026-10-10 sur une TV Tizen 9).**
+L'installateur Apps2Samsung (Jellyfin2Samsung) reconstruit le `.wgt` et y injecte les scripts des
+plugins qu'il connaît. Sa copie locale (`Samsung-Jellyfin-Installer`, branche `notifysync-plugin`)
+connaît NotifySync et Media Carousel : il télécharge `/MediaCarousel/media-carousel.js` du serveur
+(sans connexion, donc toujours la version installée), le transpile en ES2015 et l'ajoute à
+`www/index.html`. La page tourne alors en `file:///www/index.html`, en mode TV (`layout-tv`).
+Ce que la TV a montré, et que les tests « TV: » gardent :
+- **Tout lien relatif quitte l'appli.** `#/details?…` s'y résout en `file:///www/#/details…`,
+  une autre adresse : écran vide, sans retour. Les cartes s'ouvrent donc par `Emby.Page.show`
+  (le routeur, comme les cartes natives) ; un clic modifié garde le lien sur ordinateur.
+- **Le cadre de sélection n'existe que sur `.card:focus`** (Jellyfin comme ElegantFin). En mode
+  TV, c'est la carte (`focusable`, `tabindex="0"`) qui prend le focus et le lien sort du parcours ;
+  OK l'ouvre. Hors mode TV, le balisage ne change pas.
+- **La police de la TV n'est pas Noto Sans** : ses chiffres montent à 84 unités au lieu de 79, et le
+  chiffre classé dépassait l'affiche jusque sur le titre. `rankFontSize()` mesure la police réelle
+  et ne fait que réduire le corps (108 sur le PC, 101,6 sur la TV).
+- **Fenêtres (panneau, Seerr)** : `focuscontainer` garde la navigation de Jellyfin dedans, le focus
+  part sur le premier réglage, Retour (10009 Tizen, 461 webOS) les ferme au lieu de quitter la
+  page, OK coche les cases (un navigateur ne coche qu'à l'espace). Jellyfin exclut les curseurs
+  de sa navigation : « Taille du chiffre » n'est pas atteignable à la télécommande.
+- **Banc** : `sdb connect <ip TV>`, `sdb shell 0 debug <appid>` lance l'appli en débogage et donne
+  un port DevTools à relayer (`sdb forward`) ; le script s'éprouve injecté en mémoire.
+
 **L'écriture sur disque passe par un fichier temporaire puis un `File.Move`.** `index.html` est le
 point d'entrée de toute l'interface web : une coupure de courant au milieu d'un
 `File.WriteAllText` le laisserait tronqué et Jellyfin ne servirait plus aucune page. Le fichier
@@ -927,7 +950,7 @@ dotnet run --project tests/ScriptTag.Tests -c Release
 cd tests/browser && npm install && node home-rows.test.mjs && node config-page.test.mjs
 ```
 
-Trois suites sans framework — 546 assertions — exécutées en CI avant la publication ; voir
+Trois suites sans framework — 557 assertions — exécutées en CI avant la publication ; voir
 `tests/README.md`. L'une charge un extrait des règles d'ElegantFin **après** les nôtres pour
 vérifier que la cohabitation tient.
 Les deux suites navigateur chargent le vrai `media-carousel.js` et le vrai `configPage.html`
