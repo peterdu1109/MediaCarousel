@@ -497,6 +497,10 @@
             'box-shadow:0 4px 12px rgba(90,63,184,.4);filter:brightness(1.12);}',
             /* Un anneau blanc cerné de noir : lisible sur n'importe quelle affiche. */
             '.mc-row .mc-seerr:focus{outline:none;box-shadow:0 0 0 2px #fff,0 0 0 4px rgba(0,0,0,.7);}',
+            /* Carte d'un titre absent choisie à la télécommande : son bouton est ce que OK
+               actionne, il se montre et se marque comme un bouton choisi. */
+            '.layout-tv .mc-row .card:focus .mc-seerr-zone{opacity:1;}',
+            '.layout-tv .mc-row .card:focus .mc-seerr{box-shadow:0 0 0 3px #fff;}',
             '.mc-row .mc-seerr:focus:not(:focus-visible){box-shadow:none;}',
             /* Les couleurs de Jellyfin Enhanced, état par état. */
             '.mc-row .mc-seerr[data-tone="request"]{background:#5a3fb8;}',
@@ -647,6 +651,13 @@
             '.mc-prefs-open:hover,.mc-prefs-open:focus{opacity:1;}',
             '.mc-row.mc-prefs-only .sectionTitle{opacity:.6;font-size:1em;}',
             '.mc-prefs-open:focus{outline:2px solid var(--mc-accent);outline-offset:2px;}',
+            /* Pas de `gap` (Tizen) : des marges. */
+            '.mc-row .mc-prefs-tile{flex:0 0 auto;align-self:center;width:var(--mc-poster-width,10em);',
+            'margin:0 0 0 1em;padding:1em .6em;border:0;border-radius:8px;cursor:pointer;',
+            'background:rgba(255,255,255,.08);color:#fff;font:inherit;text-align:center;line-height:1.3;}',
+            '.mc-row .mc-prefs-tile-icon{display:block;font-size:2.4em;margin-bottom:.3em;opacity:.8;}',
+            '.mc-row .mc-prefs-tile:focus{outline:3px solid #fff;outline-offset:2px;',
+            'background:rgba(255,255,255,.18);}',
 
             '.mc-prefs-backdrop{position:fixed;left:0;right:0;top:0;bottom:0;z-index:10000;',
             'background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;',
@@ -798,7 +809,12 @@
         // Jellyfin et les thèmes ne dessinent le cadre de sélection que sur `.card:focus`.
         // Mesuré sur une TV Samsung, le focus posé sur le lien intérieur ne montrait rien.
         // Le lien sort alors du parcours ; OK sur la carte l'ouvre (voir wireTvCards()).
-        var tvStop = !!opts.href && layoutCardClass() === ' show-focus';
+        // Un titre absent n'a pas de lien mais peut porter le bouton de demande à Seerr : la
+        // carte prend alors le focus de la même façon, et OK actionne le bouton (voir
+        // wireCardLinks()). Mesuré sur une box Android TV et une TV Samsung : posé seul sur
+        // l'affiche, ce petit bouton attrapait le focus en descendant depuis la rangée du
+        // dessus, à la place de la carte.
+        var tvStop = (!!opts.href || !!opts.tvAction) && layoutCardClass() === ' show-focus';
 
         var body = opts.href
             ? '<a href="' + escapeHtml(opts.href) + '" data-action="link" class="' + imageClasses
@@ -994,6 +1010,7 @@
                 + (inLibrary ? '' : ' — absent de la bibliothèque'),
             cardClass: 'mc-ranked' + (inLibrary ? '' : ' mc-unavailable'),
             overlay: inLibrary ? '' : seerrButton(entry),
+            tvAction: !inLibrary && !!seerrButton(entry),
             beside: rankBadge(entry.Rank),
             besideFactor: rankCardFactor(entry.Rank, rankScale)
         });
@@ -1135,8 +1152,11 @@
             return '';
         }
 
+        // À la télécommande, le bouton n'est pas un arrêt à part : c'est sa carte qui l'est.
+        var tvOnly = layoutCardClass() === ' show-focus' ? ' tabindex="-1"' : '';
+
         return '<div class="mc-seerr-zone" data-state="loading">'
-            + '<button type="button" class="mc-seerr" data-state="loading" data-tone="request"'
+            + '<button type="button" class="mc-seerr" data-state="loading" data-tone="request"' + tvOnly
             + ' aria-disabled="true" data-media="' + entry.MediaType + '" data-tmdb="' + tmdbId + '"'
             + ' data-name="' + escapeHtml(entry.Name || '') + '"></button></div>';
     }
@@ -1355,7 +1375,7 @@
         }, TOAST_DELAY);
     }
 
-    function closeSeasonDialog() {
+    function closeSeasonDialog(reopen) {
         var open = document.querySelector('.mc-seerr-backdrop');
 
         if (!open) {
@@ -1365,10 +1385,16 @@
         var origin = open.mcOrigin;
         open.parentNode.removeChild(open);
 
+        if (reopen !== true) {
+            unmarkDialogInHistory();
+        }
+
         // Le focus revient au bouton qui a ouvert la fenêtre : la télécommande reprend là où
         // elle en était, au lieu de repartir du haut de la page.
+        // À la télécommande, c'est la carte qui porte le focus, pas son bouton.
         if (origin && document.body.contains(origin)) {
-            origin.focus();
+            var card = origin.closest('.card.focusable');
+            (card || origin).focus();
         }
     }
 
@@ -1414,8 +1440,8 @@
      * sans pouvoir être changés ; les épisodes spéciaux n'apparaissent que si Seerr les accepte.
      */
     function openRequestDialog(button) {
-        closeSeasonDialog();
-        closePreferences();
+        closeSeasonDialog(true);
+        closePreferences(true);
 
         var mediaType = button.getAttribute('data-media');
         var isTv = mediaType === 'tv';
@@ -1458,6 +1484,7 @@
         }
 
         document.body.appendChild(backdrop);
+        markDialogInHistory(backdrop);
         wireRequestDialog(backdrop, button, mediaType, tmdbId, name);
         backdrop.querySelector('.mc-seerr-dialog').focus();
 
@@ -1756,6 +1783,61 @@
     }
 
     /**
+     * Une fenêtre ouverte prend une étape dans l'historique, comme les fenêtres de Jellyfin
+     * (`dialogHelper`). Dans une appli Android TV, la touche Retour n'arrive jamais à la page
+     * comme une touche : l'appli revient en arrière dans l'historique, ou se ferme quand il
+     * n'y a plus rien. Mesuré sur une box Freebox Pop : Retour laissait la fenêtre ouverte,
+     * puis quittait l'appli. Avec cette étape, il la ferme (écouteur `popstate` de watch()).
+     * L'état du routeur de Jellyfin est recopié tel quel : il ne voit aucun changement.
+     *
+     * L'appli Android ne revient en arrière que si `appRouter.canGoBack()` l'y autorise ; sur
+     * l'accueil, il ne le fait que si un `.dialogContainer` existe (lu dans jellyfin-web 12.1),
+     * sinon l'appli se ferme. La fenêtre en porte donc un, vide et caché : les autres usages de
+     * cette classe chez Jellyfin cherchent un `.dialog.opened` dedans et ne le voient pas.
+     */
+    function markDialogInHistory(backdrop) {
+        var marker = document.createElement('div');
+        marker.className = 'dialogContainer';
+        marker.setAttribute('aria-hidden', 'true');
+        marker.style.setProperty('display', 'none', 'important');
+        backdrop.appendChild(marker);
+
+        try {
+            var state = window.history.state;
+
+            if (state && state.mcDialog) {
+                return;
+            }
+
+            var copy = {};
+            for (var key in state || {}) {
+                if (has(state, key)) {
+                    copy[key] = state[key];
+                }
+            }
+
+            copy.mcDialog = true;
+            window.history.pushState(copy, '');
+        } catch (error) {
+            // Sans historique, Échap et le Retour d'une télécommande ferment toujours.
+        }
+    }
+
+    /**
+     * Fermée autrement que par Retour (Échap, Retour d'une TV Samsung, un bouton), la fenêtre
+     * rend son étape : sinon le Retour suivant tomberait dans le vide.
+     */
+    function unmarkDialogInHistory() {
+        try {
+            if (window.history.state && window.history.state.mcDialog) {
+                window.history.back();
+            }
+        } catch (error) {
+            // Rien à rendre.
+        }
+    }
+
+    /**
      * OK de la télécommande sur une case à cocher : la coche, comme les cases de Jellyfin.
      * Un navigateur ne coche qu'à la barre d'espace ; la télécommande n'envoie qu'Entrée.
      */
@@ -1884,11 +1966,12 @@
                 return;
             }
 
-            var link = card.querySelector('a.itemAction');
+            // Le lien de la carte, ou à défaut son bouton de demande à Seerr.
+            var target = card.querySelector('a.itemAction') || card.querySelector('.mc-seerr');
 
-            if (link) {
+            if (target) {
                 event.preventDefault();
-                link.click();
+                target.click();
             }
         });
     }
@@ -2949,14 +3032,20 @@
         render();
     }
 
-    function closePreferences() {
+    function closePreferences(reopen) {
         var open = document.querySelector('.mc-prefs-backdrop');
         if (open) {
             // Le focus était dans le panneau : il revient sur le bouton qui l'a ouvert. Sans
             // cela, il tombait dans le vide, et la télécommande ne déplaçait plus rien.
             var hadFocus = open.contains(document.activeElement);
             open.parentNode.removeChild(open);
-            var opener = hadFocus ? document.querySelector('.mc-prefs-open') : null;
+
+            if (reopen !== true) {
+                unmarkDialogInHistory();
+            }
+            var opener = hadFocus
+                ? (document.querySelector('.mc-prefs-tile') || document.querySelector('.mc-prefs-open'))
+                : null;
 
             if (opener) {
                 opener.focus();
@@ -2968,7 +3057,7 @@
      * Construit le panneau à partir des valeurs effectives du compte.
      */
     function openPreferences(opts) {
-        closePreferences();
+        closePreferences(true);
 
         var order = rowOrder(opts.RowOrder, opts.ManageNativeSections === true);
         var backdrop = document.createElement('div');
@@ -3034,6 +3123,7 @@
         backdrop.className = 'mc-prefs-backdrop';
         backdrop.innerHTML = html;
         document.body.appendChild(backdrop);
+        markDialogInHistory(backdrop);
 
         wirePreferences(backdrop, order);
 
@@ -3187,7 +3277,18 @@
     function attachPreferencesButton(row, opts) {
         var header = row && row.querySelector('.mc-row-header');
 
-        if (!header || header.querySelector('.mc-prefs-open')) {
+        if (!header) {
+            return;
+        }
+
+        if (header.querySelector('.mc-prefs-open')) {
+            // La bande a pu être remplie à nouveau : la tuile de fin de rangée revient.
+            var filled = row.querySelector('.mc-strip');
+
+            if (filled && layoutCardClass() === ' show-focus') {
+                attachPreferencesTile(filled, opts);
+            }
+
             return;
         }
 
@@ -3202,6 +3303,36 @@
         });
 
         header.appendChild(button);
+
+        // À la télécommande, le petit bouton de l'en-tête attrapait le focus en descendant
+        // depuis les bibliothèques (mesuré sur une box Android TV et une TV Samsung). Il sort
+        // du parcours, et le panneau s'ouvre depuis une tuile au bout de la rangée, atteinte
+        // en allant vers la droite comme n'importe quelle carte. Une rangée sans bande (toutes
+        // masquées) garde le bouton : c'est alors le seul accès au panneau.
+        var strip = row.querySelector('.mc-strip');
+
+        if (strip && layoutCardClass() === ' show-focus') {
+            button.setAttribute('tabindex', '-1');
+            attachPreferencesTile(strip, opts);
+        }
+    }
+
+    /** Tuile « Personnaliser mes rangées » au bout d'une bande, pour la télécommande. */
+    function attachPreferencesTile(strip, opts) {
+        if (strip.querySelector('.mc-prefs-tile')) {
+            return;
+        }
+
+        var tile = document.createElement('button');
+        tile.type = 'button';
+        tile.className = 'mc-prefs-tile';
+        tile.innerHTML = '<span class="mc-prefs-tile-icon" aria-hidden="true">&#9881;</span>'
+            + '<span>Personnaliser mes rangées</span>';
+        tile.addEventListener('click', function () {
+            openPreferences(opts);
+        });
+
+        strip.appendChild(tile);
     }
 
     /**

@@ -2045,8 +2045,19 @@ const tvCartes = await tvPrefs.evaluate(() => {
 });
 const okSurCarte = await touche(tvPrefs, 13, 'Enter');
 const routeOk = await tvPrefs.evaluate(() => ({ routes: window.__routes.slice(), hash: location.hash }));
+// Le bouton de l'en-tete sort du parcours ; le panneau s'ouvre depuis une tuile au bout de
+// la rangee (mesure sur une box Android TV et une TV Samsung : le petit bouton attrapait le
+// focus en descendant depuis les bibliotheques).
+const tvRoue = await tvPrefs.evaluate(() => {
+  const tuiles = document.querySelectorAll('.mc-strip .mc-prefs-tile');
+  const bande = tuiles[0] && tuiles[0].parentNode;
+  return {
+    enTete: document.querySelector('.mc-row-header .mc-prefs-open').getAttribute('tabindex'),
+    tuiles: tuiles.length, auBout: !!bande && bande.lastElementChild === tuiles[0]
+  };
+});
 // Ouverture du panneau a la telecommande : focus sur le premier reglage, dans un conteneur.
-await tvPrefs.focus('.mc-prefs-open');
+await tvPrefs.focus('.mc-prefs-tile');
 await tvPrefs.keyboard.press('Enter');
 await tvPrefs.waitForSelector('.mc-prefs');
 const tvPanneau = await tvPrefs.evaluate(() => ({
@@ -2073,7 +2084,23 @@ const caseApres = await tvPrefs.evaluate(() => document.activeElement.checked);
 const retourPanneau = await touche(tvPrefs, 10009, '');
 const apresRetour = await tvPrefs.evaluate(() => ({
   panneau: document.querySelectorAll('.mc-prefs-backdrop').length,
-  focus: document.activeElement === document.querySelector('.mc-prefs-open')
+  focus: document.activeElement === document.querySelector('.mc-prefs-tile')
+}));
+// Fermee par la touche Retour d'une TV Samsung, la fenetre a rendu son etape d'historique.
+await tvPrefs.waitForTimeout(300);
+const etapeRendue = await tvPrefs.evaluate(() => !(history.state && history.state.mcDialog));
+// Appli Android TV : Retour n'arrive pas comme une touche, l'appli revient en arriere dans
+// l'historique (mesure sur une box Freebox Pop). L'ouverture a pris une etape : le retour ferme.
+await tvPrefs.focus('.mc-prefs-tile');
+await tvPrefs.keyboard.press('Enter');
+await tvPrefs.waitForSelector('.mc-prefs');
+const etapePrise = await tvPrefs.evaluate(() => !!(history.state && history.state.mcDialog));
+await tvPrefs.evaluate(() => history.back());
+await tvPrefs.waitForTimeout(400);
+const retourAndroid = await tvPrefs.evaluate(() => ({
+  panneau: document.querySelectorAll('.mc-prefs-backdrop').length,
+  focus: document.activeElement === document.querySelector('.mc-prefs-tile'),
+  hash: location.hash
 }));
 
 // Sur ordinateur : un clic passe par le routeur, un clic modifie garde le lien.
@@ -2113,7 +2140,18 @@ await tvSeerr.evaluate(() => document.documentElement.classList.add('layout-tv')
 await tvSeerr.evaluate(serveurSeerr);
 await tvSeerr.evaluate(script);
 await tvSeerr.waitForFunction(etatSeerr('66732', 'request'));
-await tvSeerr.click('.mc-seerr[data-tmdb="66732"]');
+// Le titre absent : sa carte prend le focus, son bouton non ; OK sur la carte ouvre la demande.
+const tvAbsent = await tvSeerr.evaluate(() => {
+  const bouton = document.querySelector('.mc-seerr[data-tmdb="66732"]');
+  const carte = bouton.closest('.card');
+  carte.focus();
+  return {
+    carte: document.activeElement === carte && carte.classList.contains('focusable')
+      && carte.getAttribute('tabindex') === '0',
+    bouton: bouton.getAttribute('tabindex')
+  };
+});
+const okAbsent = await touche(tvSeerr, 13, 'Enter');
 await tvSeerr.waitForSelector('.mc-seerr-dialog .mc-seerr-pick');
 await tvSeerr.focus('.mc-seerr-pick');
 const tvFenetre = await tvSeerr.evaluate(() => ({
@@ -2125,7 +2163,7 @@ const saisonCochee = await tvSeerr.evaluate(() => document.activeElement.checked
 const retourSeerr = await touche(tvSeerr, 10009, '');
 const apresRetourSeerr = await tvSeerr.evaluate(() => ({
   fenetre: document.querySelectorAll('.mc-seerr-backdrop').length,
-  focus: document.activeElement === document.querySelector('.mc-seerr[data-tmdb="66732"]'),
+  focus: document.activeElement === document.querySelector('.mc-seerr[data-tmdb="66732"]').closest('.card'),
   demandes: window.__appels.filter(a => a.route === 'MediaCarousel/Seerr/Request').length
 }));
 
@@ -2621,11 +2659,19 @@ check('TV: cadre blanc epais sur le reglage choisi, ligne eclairee',
   ['curseur', 'fleche', 'enregistrer'].every(k => tvCadres[k] === 'solid 3px rgb(255, 255, 255)')
     && tvCadres.ligne !== 'rgba(0, 0, 0, 0)', tvCadres);
 check('TV: OK coche une case du panneau', okCase === true && caseApres === !tvPanneau.coche, { okCase, caseApres });
-check('TV: Retour ferme le panneau, le focus revient au bouton',
+check('TV: la roue sort du parcours, une tuile au bout de la rangee ouvre le panneau',
+  tvRoue.enTete === '-1' && tvRoue.tuiles === 1 && tvRoue.auBout, tvRoue);
+check('TV: Retour ferme le panneau, le focus revient a la tuile',
   retourPanneau === true && apresRetour.panneau === 0 && apresRetour.focus, apresRetour);
+check('TV: Retour Samsung rend l etape d historique prise a l ouverture', etapeRendue === true, etapeRendue);
+check('ANDROID TV: Retour (retour d historique) ferme le panneau, focus sur la tuile, page gardee',
+  etapePrise === true && retourAndroid.panneau === 0 && retourAndroid.focus && retourAndroid.hash === '',
+  { etapePrise, retourAndroid });
 check('TV: la fenetre Seerr garde le focus, OK coche une saison',
   tvFenetre.conteneur && saisonCochee === !tvFenetre.coche, { tvFenetre, saisonCochee });
-check('TV: Retour ferme la fenetre Seerr sans rien demander, focus rendu au bouton',
+check('TV: titre absent, la carte prend le focus et OK ouvre la demande',
+  tvAbsent.carte && tvAbsent.bouton === '-1' && okAbsent === true, { tvAbsent, okAbsent });
+check('TV: Retour ferme la fenetre Seerr sans rien demander, focus rendu a la carte',
   retourSeerr === true && apresRetourSeerr.fenetre === 0 && apresRetourSeerr.focus
     && apresRetourSeerr.demandes === 0, apresRetourSeerr);
 

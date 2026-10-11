@@ -877,6 +877,14 @@ Ce que la TV a montré, et que les tests « TV: » gardent :
   de sa navigation : le curseur « Taille du chiffre » porte `focusable` pour qu'il s'y arrête
   (gauche/droite en changent la valeur). En mode TV, tout réglage choisi a un cadre blanc de 3 px
   (le trait bleu d'un pixel du navigateur ne se voyait pas à distance).
+- **Une carte = un arrêt** : un titre absent (sans lien) prend aussi le focus quand il porte le
+  bouton Seerr ; le bouton est en `tabindex="-1"` et OK sur la carte l'actionne. La roue ⚙ de
+  l'en-tête sort du parcours ; une tuile `.mc-prefs-tile` au bout de la première rangée ouvre le
+  panneau (une rangée sans bande garde la roue). Mesuré sur une box Android TV et la Samsung.
+- **Retour sur une fenêtre (Android TV)** : la touche n'arrive pas à la page ; l'appli appelle
+  `appRouter.canGoBack()`, faux sur l'accueil sans `.dialogContainer` → elle se fermait. Chaque
+  fenêtre pose une étape d'historique (état du routeur recopié + `mcDialog`) et un
+  `.dialogContainer` vide et caché ; fermée autrement, elle rend l'étape (`history.back()`).
 - **Banc** : `sdb connect <ip TV>`, `sdb shell 0 debug <appid>` lance l'appli en débogage et donne
   un port DevTools à relayer (`sdb forward`) ; le script s'éprouve injecté en mémoire.
 
@@ -952,7 +960,7 @@ dotnet run --project tests/ScriptTag.Tests -c Release
 cd tests/browser && npm install && node home-rows.test.mjs && node config-page.test.mjs
 ```
 
-Trois suites sans framework — 559 assertions — exécutées en CI avant la publication ; voir
+Trois suites sans framework — 563 assertions — exécutées en CI avant la publication ; voir
 `tests/README.md`. L'une charge un extrait des règles d'ElegantFin **après** les nôtres pour
 vérifier que la cohabitation tient.
 Les deux suites navigateur chargent le vrai `media-carousel.js` et le vrai `configPage.html`
