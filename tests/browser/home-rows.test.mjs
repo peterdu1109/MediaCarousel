@@ -2054,6 +2054,20 @@ const tvPanneau = await tvPrefs.evaluate(() => ({
   premier: document.activeElement === document.querySelector('.mc-prefs input[type=checkbox]'),
   coche: document.activeElement.checked
 }));
+// Chaque reglage du panneau se voit de loin a la telecommande, curseur compris.
+const tvCadres = await tvPrefs.evaluate(() => {
+  const cadre = (el) => { el.focus(); const s = getComputedStyle(el); return s.outlineStyle + ' ' + s.outlineWidth + ' ' + s.outlineColor; };
+  const curseur = document.getElementById('mc-prefs-scale');
+  const fleche = document.querySelector('.mc-prefs .mc-prefs-down');
+  const res = {
+    curseurAtteignable: curseur.classList.contains('focusable'),
+    curseur: cadre(curseur), fleche: cadre(fleche),
+    ligne: getComputedStyle(fleche.closest('li')).backgroundColor,
+    enregistrer: cadre(document.querySelector('.mc-prefs-save'))
+  };
+  document.querySelector('.mc-prefs input[type=checkbox]').focus();
+  return res;
+});
 const okCase = await touche(tvPrefs, 13, 'Enter');
 const caseApres = await tvPrefs.evaluate(() => document.activeElement.checked);
 const retourPanneau = await touche(tvPrefs, 10009, '');
@@ -2602,6 +2616,10 @@ check('BUREAU: un clic ouvre la fiche par le routeur, un clic modifie garde le l
 check('BUREAU: les cartes gardent leur balisage (pas de tabindex)', bureau.pasDeTabindex, bureau);
 check('TV: le panneau garde le focus et le pose sur le premier reglage',
   tvPanneau.conteneur && tvPanneau.premier, tvPanneau);
+check('TV: le curseur de taille est atteignable a la telecommande', tvCadres.curseurAtteignable, tvCadres);
+check('TV: cadre blanc epais sur le reglage choisi, ligne eclairee',
+  ['curseur', 'fleche', 'enregistrer'].every(k => tvCadres[k] === 'solid 3px rgb(255, 255, 255)')
+    && tvCadres.ligne !== 'rgba(0, 0, 0, 0)', tvCadres);
 check('TV: OK coche une case du panneau', okCase === true && caseApres === !tvPanneau.coche, { okCase, caseApres });
 check('TV: Retour ferme le panneau, le focus revient au bouton',
   retourPanneau === true && apresRetour.panneau === 0 && apresRetour.focus, apresRetour);

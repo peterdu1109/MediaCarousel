@@ -874,7 +874,9 @@ Ce que la TV a montré, et que les tests « TV: » gardent :
 - **Fenêtres (panneau, Seerr)** : `focuscontainer` garde la navigation de Jellyfin dedans, le focus
   part sur le premier réglage, Retour (10009 Tizen, 461 webOS) les ferme au lieu de quitter la
   page, OK coche les cases (un navigateur ne coche qu'à l'espace). Jellyfin exclut les curseurs
-  de sa navigation : « Taille du chiffre » n'est pas atteignable à la télécommande.
+  de sa navigation : le curseur « Taille du chiffre » porte `focusable` pour qu'il s'y arrête
+  (gauche/droite en changent la valeur). En mode TV, tout réglage choisi a un cadre blanc de 3 px
+  (le trait bleu d'un pixel du navigateur ne se voyait pas à distance).
 - **Banc** : `sdb connect <ip TV>`, `sdb shell 0 debug <appid>` lance l'appli en débogage et donne
   un port DevTools à relayer (`sdb forward`) ; le script s'éprouve injecté en mémoire.
 
@@ -950,7 +952,7 @@ dotnet run --project tests/ScriptTag.Tests -c Release
 cd tests/browser && npm install && node home-rows.test.mjs && node config-page.test.mjs
 ```
 
-Trois suites sans framework — 557 assertions — exécutées en CI avant la publication ; voir
+Trois suites sans framework — 559 assertions — exécutées en CI avant la publication ; voir
 `tests/README.md`. L'une charge un extrait des règles d'ElegantFin **après** les nôtres pour
 vérifier que la cohabitation tient.
 Les deux suites navigateur chargent le vrai `media-carousel.js` et le vrai `configPage.html`

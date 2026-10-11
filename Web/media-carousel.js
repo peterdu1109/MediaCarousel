@@ -678,6 +678,15 @@
             'background:rgba(255,255,255,.12);color:#fff;}',
             '.mc-prefs .mc-prefs-actions button:focus{outline:2px solid var(--mc-accent);',
             'outline-offset:2px;}',
+            /* À la télécommande, le réglage sélectionné doit se voir de loin. Mesuré sur une TV
+               Samsung : les cases, les flèches, la couleur et le curseur n'avaient que le trait
+               bleu d'un pixel du navigateur, et le cadre violet d'« Enregistrer » se fondait
+               dans son fond violet. Un cadre blanc épais partout, et la ligne de la rangée
+               choisie éclairée. Même chose dans la fenêtre de demande à Seerr. */
+            '.layout-tv .mc-prefs li:focus-within{background:rgba(255,255,255,.12);border-radius:4px;}',
+            '.layout-tv .mc-prefs input:focus,.layout-tv .mc-prefs button:focus,',
+            '.layout-tv .mc-seerr-dialog input:focus,.layout-tv .mc-seerr-dialog select:focus,',
+            '.layout-tv .mc-seerr-dialog button:focus{outline:3px solid #fff!important;outline-offset:2px;}',
 
             /* Flèches de défilement : confort souris, masquées au clavier et au tactile. */
             '.mc-row .mc-arrow{position:absolute;top:0;bottom:0;width:3.2vw;min-width:34px;max-width:72px;',
@@ -3005,7 +3014,9 @@
             // un curseur borné à partir de 25, elle était ramenée à 25, et enregistrer le
             // panneau sans y toucher réduisait le chiffre au plancher. Les bornes sont
             // celles du rendu : au-delà, le curseur bougeait sans rien changer.
-            + '<input type="range" id="mc-prefs-scale" min="40" max="100" step="5" value="'
+            // `focusable` : Jellyfin écarte les curseurs de sa navigation à la télécommande ;
+            // avec cette classe, il s'y arrête, et gauche/droite en changent la valeur.
+            + '<input type="range" id="mc-prefs-scale" class="focusable" min="40" max="100" step="5" value="'
             + Math.round(normalizeRankScale(opts.RankNumberScale) * 100) + '">'
             + '</div>'
             + '<div class="mc-prefs-field">'
