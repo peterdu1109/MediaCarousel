@@ -20,23 +20,23 @@ Same plugin, same features as the Jellyfin 10.11 build — a separate branch onl
 
 ## Repository / Dépôt
 
-Add this in **Dashboard → Plugins → Repositories**, then install **Media Carousel** from the catalog.
+One repository for every Jellyfin version: Jellyfin picks the build made for it (4.x on Jellyfin 12). Add it in **Dashboard → Plugins → Repositories**, then install **Media Carousel** from the catalog.
 
-*À ajouter dans **Tableau de bord → Extensions → Dépôts**, puis installez **Media Carousel** depuis le catalogue.*
+*Un seul dépôt pour toutes les versions de Jellyfin : Jellyfin choisit lui-même la version faite pour lui (4.x sur Jellyfin 12). À ajouter dans **Tableau de bord → Extensions → Dépôts**, puis installez **Media Carousel** depuis le catalogue.*
 
 ```
-https://raw.githubusercontent.com/peterdu1109/MediaCarousel/refs/heads/jellyfin-12/repository-12.json
+https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/manifest.json
 ```
 
-> [!WARNING]
-> **Do not use the main repository on Jellyfin 12.** Its 3.x builds install, show as *Active*, then fail on every row: Jellyfin 12 changed a method they call.
+> [!NOTE]
+> The former Jellyfin 12 address (`repository-12.json` on this branch) keeps working.
 >
-> ***N'utilisez pas le dépôt principal sur Jellyfin 12.** Ses versions 3.x s'installent, apparaissent « Actives », puis échouent sur chaque rangée : Jellyfin 12 a modifié une méthode qu'elles appellent.*
+> *L'ancienne adresse Jellyfin 12 (`repository-12.json` sur cette branche) reste valable.*
 
 ## 📖 Documentation
 
-Everything else — features, rows, configuration, troubleshooting — is in the main README. It is kept in one place on purpose: this page once carried a copy of it, and that copy pointed Jellyfin 12 servers at the wrong repository.
+Everything else — features, rows, configuration, troubleshooting — is in the main README, kept in one place on purpose.
 
-*Tout le reste — fonctionnalités, rangées, configuration, dépannage — se trouve dans le README principal. Il est maintenu à un seul endroit délibérément : cette page en portait une copie, et cette copie envoyait les serveurs Jellyfin 12 vers le mauvais dépôt.*
+*Tout le reste — fonctionnalités, rangées, configuration, dépannage — se trouve dans le README principal, maintenu à un seul endroit délibérément.*
 
 **→ [github.com/peterdu1109/MediaCarousel](https://github.com/peterdu1109/MediaCarousel#readme)**
