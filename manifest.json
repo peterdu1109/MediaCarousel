@@ -2,12 +2,132 @@
   {
     "guid": "191bd290-1054-4b55-a137-46c72181266b",
     "name": "Media Carousel",
-    "description": "Génère automatiquement, côté serveur, un Top du serveur à partir des statistiques de lecture Jellyfin et un Top mondial à partir de TMDB ou Trakt. Publié en collections et via l'API REST, sans aucune modification de l'interface web.",
-    "overview": "Classements dynamiques côté serveur : Top du serveur et Top mondial",
+    "description": "Des rangées façon Netflix sur la page d'accueil : Top 10 du serveur d'après les vraies lectures, Top 10 mondial (TMDB ou Trakt), demandes à Seerr, et rangées tirées de la bibliothèque.\n\nNetflix-style home rows: a server Top 10 from real playback, a worldwide Top 10 (TMDB or Trakt), Seerr requests, and rows built from your library.",
+    "overview": "Des rangées façon Netflix sur la page d'accueil.\nNetflix-style home rows for Jellyfin.",
     "owner": "ElieM & Peterdu1109",
     "category": "General",
     "imageUrl": "https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/icon.png",
     "versions": [
+      {
+        "version": "4.4.4.0",
+        "changelog": "<a style='color:white;text-decoration:none' href=\"https://github.com/peterdu1109/MediaCarousel/releases/tag/4.4.4-jf12\">📋 <span style='text-decoration:underline'>Release Notes v4.4.4</span></a>",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/4.4.4-jf12/JellyfinCarouselPlugin.zip",
+        "checksum": "a7eb5262a408a854d8420a08faf959a0",
+        "timestamp": "2026-10-11T21:19:09Z"
+      },
+      {
+        "version": "4.4.3.0",
+        "changelog": "<a style='color:white;text-decoration:none' href=\"https://github.com/peterdu1109/MediaCarousel/releases/tag/4.4.3-jf12\">📋 <span style='text-decoration:underline'>Release Notes v4.4.3</span></a>",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/4.4.3-jf12/JellyfinCarouselPlugin.zip",
+        "checksum": "eb8b7859487bbc5281c3a2eaab77b722",
+        "timestamp": "2026-10-11T08:21:02Z"
+      },
+      {
+        "version": "4.4.2.0",
+        "changelog": "<a style='color:white;text-decoration:none' href=\"https://github.com/peterdu1109/MediaCarousel/releases/tag/4.4.2-jf12\">📋 <span style='text-decoration:underline'>Release Notes v4.4.2</span></a>",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/4.4.2-jf12/JellyfinCarouselPlugin.zip",
+        "checksum": "4c63048f7be62b8ae565fa68d08de0c8",
+        "timestamp": "2026-10-10T21:34:20Z"
+      },
+      {
+        "version": "4.4.1.0",
+        "changelog": "<a style='color:white;text-decoration:none' href=\"https://github.com/peterdu1109/MediaCarousel/releases/tag/4.4.1-jf12\">📋 <span style='text-decoration:underline'>Release Notes v4.4.1</span></a>",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/4.4.1-jf12/JellyfinCarouselPlugin.zip",
+        "checksum": "c5f648d96760f6dc0a5dc0234c53d48c",
+        "timestamp": "2026-10-03T12:31:30Z"
+      },
+      {
+        "version": "4.4.0.0",
+        "changelog": "<a style='color:white;text-decoration:none' href=\"https://github.com/peterdu1109/MediaCarousel/releases/tag/4.4.0-jf12\">📋 <span style='text-decoration:underline'>Release Notes v4.4.0</span></a>",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/4.4.0-jf12/JellyfinCarouselPlugin.zip",
+        "checksum": "4f5603f508aee987ee324afcefc3101e",
+        "timestamp": "2026-10-03T12:19:40Z"
+      },
+      {
+        "version": "4.3.2.0",
+        "changelog": "<a style='color:white;text-decoration:none' href=\"https://github.com/peterdu1109/MediaCarousel/releases/tag/4.3.2-jf12\">📋 <span style='text-decoration:underline'>Release Notes v4.3.2</span></a>",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/4.3.2-jf12/JellyfinCarouselPlugin.zip",
+        "checksum": "e74a12a82b8d71ec0ce34afcd8730716",
+        "timestamp": "2026-09-29T06:18:37Z"
+      },
+      {
+        "version": "4.3.1.0",
+        "changelog": "<a style='color:white;text-decoration:none' href=\"https://github.com/peterdu1109/MediaCarousel/releases/tag/4.3.1-jf12\">📋 <span style='text-decoration:underline'>Release Notes v4.3.1</span></a>",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/4.3.1-jf12/JellyfinCarouselPlugin.zip",
+        "checksum": "dd9c140f9dbd44460896a446679caa7c",
+        "timestamp": "2026-09-28T20:19:04Z"
+      },
+      {
+        "version": "4.3.0.0",
+        "changelog": "<a style='color:white;text-decoration:none' href=\"https://github.com/peterdu1109/MediaCarousel/releases/tag/4.3.0-jf12\">📋 <span style='text-decoration:underline'>Release Notes v4.3.0</span></a>",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/4.3.0-jf12/JellyfinCarouselPlugin.zip",
+        "checksum": "0f313abe7a4792e2229e82439b6efa79",
+        "timestamp": "2026-09-28T20:07:33Z"
+      },
+      {
+        "version": "4.2.1.0",
+        "changelog": "<a style='color:white;text-decoration:none' href=\"https://github.com/peterdu1109/MediaCarousel/releases/tag/4.2.1-jf12\">📋 <span style='text-decoration:underline'>Release Notes v4.2.1</span></a>",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/4.2.1-jf12/JellyfinCarouselPlugin.zip",
+        "checksum": "c81030d2b65d0dde0a5c2421398ad490",
+        "timestamp": "2026-09-28T19:39:38Z"
+      },
+      {
+        "version": "4.2.0.0",
+        "changelog": "<a style='color:white;text-decoration:none' href=\"https://github.com/peterdu1109/MediaCarousel/releases/tag/4.2.0-jf12\">📋 <span style='text-decoration:underline'>Release Notes v4.2.0</span></a>",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/4.2.0-jf12/JellyfinCarouselPlugin.zip",
+        "checksum": "fcfa6c10be7d0e2d921c5ce54bddbd43",
+        "timestamp": "2026-09-28T17:10:06Z"
+      },
+      {
+        "version": "4.1.1.0",
+        "changelog": "<a style='color:white;text-decoration:none' href=\"https://github.com/peterdu1109/MediaCarousel/releases/tag/4.1.1-jf12\">📋 <span style='text-decoration:underline'>Release Notes v4.1.1</span></a>",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/4.1.1-jf12/JellyfinCarouselPlugin.zip",
+        "checksum": "bd9c5e6f874a6390e0353c083aab806d",
+        "timestamp": "2026-09-28T05:39:19Z"
+      },
+      {
+        "version": "4.1.0.0",
+        "changelog": "<a style='color:white;text-decoration:none' href=\"https://github.com/peterdu1109/MediaCarousel/releases/tag/4.1.0-jf12\">📋 <span style='text-decoration:underline'>Release Notes v4.1.0</span></a>",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/4.1.0-jf12/JellyfinCarouselPlugin.zip",
+        "checksum": "596870b5a65b499dc4d8b7e73c642433",
+        "timestamp": "2026-09-27T19:06:33Z"
+      },
+      {
+        "version": "4.0.2.0",
+        "changelog": "<a style='color:white;text-decoration:none' href=\"https://github.com/peterdu1109/MediaCarousel/releases/tag/4.0.2-jf12\">📋 <span style='text-decoration:underline'>Release Notes v4.0.2</span></a>",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/4.0.2-jf12/JellyfinCarouselPlugin.zip",
+        "checksum": "ce296aab3d0c831365c81105fec1dcad",
+        "timestamp": "2026-09-19T20:31:10Z"
+      },
+      {
+        "version": "4.0.1.0",
+        "changelog": "<a style='color:white;text-decoration:none' href=\"https://github.com/peterdu1109/MediaCarousel/releases/tag/4.0.1\">📋 <span style='text-decoration:underline'>Release Notes v4.0.1</span></a>",
+        "targetAbi": "12.1.0.0",
+        "sourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/4.0.1/JellyfinCarouselPlugin.zip",
+        "checksum": "b797f3c3aa205eb1ded148c8fe0bce7a",
+        "timestamp": "2026-09-19T15:29:52Z"
+      },
+      {
+        "version": "4.0.0.0",
+        "changelog": "<a style='color:white;text-decoration:none' href=\"https://github.com/peterdu1109/MediaCarousel/releases/tag/4.0.0\">📋 <span style='text-decoration:underline'>Release Notes v4.0.0</span></a>",
+        "targetAbi": "12.1.0.0",
+        "sourceUrl": "https://github.com/peterdu1109/MediaCarousel/releases/download/4.0.0/JellyfinCarouselPlugin.zip",
+        "checksum": "d271ba8cdd255d7c7c516faf83a25b34",
+        "timestamp": "2026-09-19T13:28:28Z"
+      },
       {
         "version": "3.15.1.0",
         "changelog": "Corrections :\n- Quitter l'accueil ne provoque plus d'erreur dans jellyfin-web (« t.value.pause is not a function »)",
