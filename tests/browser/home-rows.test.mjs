@@ -2503,10 +2503,13 @@ check('BARRE: la bande n est pas etiree sous la barre de defilement',
 check('DOC: chaque variable du README existe dans le script', variablesFantomes.length === 0, variablesFantomes);
 // Sur cette branche, le README renvoie au README principal : lui seul porte la documentation
 // et l'exemple de Custom CSS, verifies sur main contre le meme script. Une copie ici a deja
-// envoye des serveurs Jellyfin 12 vers le mauvais depot.
-check('DOC: le README renvoie au README principal et donne le depot de la ligne 12',
+// envoye des serveurs Jellyfin 12 vers le mauvais depot. Depuis le 2026-10-18, le catalogue
+// de main sert les deux lignes (Jellyfin choisit la version faite pour lui) : c'est la seule
+// adresse a donner.
+check('DOC: le README renvoie au README principal et donne le catalogue unique',
   readme.includes('github.com/peterdu1109/MediaCarousel#readme')
-    && readme.includes('/jellyfin-12/repository-12.json'), readme.slice(0, 200));
+    && readme.includes('https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/manifest.json'),
+  readme.slice(0, 200));
 check('DOC: l exemple du README garde les affiches a la taille native',
   Math.abs(exempleApplique.afficheClassee - exempleApplique.afficheNative) < 0.5, exempleApplique);
 check('DOC: l exemple du README laisse le chiffre visible',
