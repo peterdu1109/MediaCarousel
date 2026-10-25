@@ -97,9 +97,10 @@ public class PluginConfiguration : BasePluginConfiguration
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Actif par défaut. Sur un serveur sans plugin de chaîne le réglage n'a aucun effet ;
-    /// sur un serveur qui en a un, l'ancien comportement était presque toujours subi plutôt
-    /// que voulu. Le basculer à <c>false</c> restaure le classement d'avant.
+    /// Toujours actif depuis la 4.5.1. La case a quitté la page de réglages en 4.5.0 ; un serveur
+    /// qui l'avait décochée gardait alors ces catalogues dans ses rangées sans pouvoir les en
+    /// retirer. Une valeur <c>false</c> enregistrée par une version antérieure est donc lue puis
+    /// ignorée. Sur un serveur sans plugin de chaîne, rien ne change.
     /// </para>
     /// <para>
     /// Un catalogue IPTV compte couramment plus de titres que toute la bibliothèque locale, et il
@@ -110,7 +111,11 @@ public class PluginConfiguration : BasePluginConfiguration
     /// les distingue en dehors de leur <c>ChannelId</c>.
     /// </para>
     /// </remarks>
-    public bool ExcludeChannelContent { get; set; } = true;
+    public bool ExcludeChannelContent
+    {
+        get => true;
+        set { /* lue pour la compatibilité du fichier, jamais appliquée */ }
+    }
 
     // ------------------------------------------------------------------
     // Top 10 global (base de données externe)
