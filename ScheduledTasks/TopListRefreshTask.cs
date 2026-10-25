@@ -16,12 +16,12 @@ public sealed class TopListRefreshTask : IScheduledTask
     private const int DefaultIntervalHours = 6;
 
     /// <summary>
-    /// Lit l'intervalle de recalcul configuré, borné aux valeurs acceptables.
+    /// Lit l'intervalle de la première installation, borné aux valeurs acceptables.
     /// </summary>
     /// <remarks>
-    /// Exposé parce que <see cref="JellyfinCarouselPlugin.Services.RefreshScheduleSynchronizer"/>
-    /// doit lire exactement la même valeur : c'est lui qui applique le réglage après la
-    /// première installation, <see cref="GetDefaultTriggers"/> n'étant plus consulté ensuite.
+    /// Il ne sert qu'au déclencheur par défaut. Ensuite, le calendrier se règle dans Tableau de
+    /// bord → Tâches planifiées : la page du plugin n'en a plus de copie depuis la 4.5.0, qui
+    /// réécrivait le déclencheur à chaque démarrage et effaçait ce qu'on y avait changé.
     /// </remarks>
     /// <returns>L'intervalle en heures, entre 1 et 168.</returns>
     public static int ResolveIntervalHours()

@@ -100,7 +100,9 @@ public static class UserPreferenceRules
     /// </summary>
     /// <remarks>
     /// Une valeur laissée à <see langword="null"/> n'écrase rien : le compte suit alors
-    /// l'administrateur, y compris pour une rangée apparue après son dernier choix.
+    /// l'administrateur, y compris pour une rangée apparue après son dernier choix. Un compte
+    /// peut masquer une rangée, jamais rallumer celle que l'administrateur a coupée : elle
+    /// n'est plus recalculée, et il aurait reçu son dernier classement, figé.
     /// </remarks>
     /// <param name="options">Les réglages du serveur, modifiés sur place.</param>
     /// <param name="preferences">Les choix du compte, éventuellement <see langword="null"/>.</param>
@@ -109,20 +111,22 @@ public static class UserPreferenceRules
     {
         ArgumentNullException.ThrowIfNull(options);
 
+        options.ServerRows = ServerRows(options);
+
         if (preferences is null)
         {
             return options;
         }
 
-        options.EnableHomeRows = preferences.EnableHomeRows ?? options.EnableHomeRows;
-        options.ShowLocalRow = preferences.ShowLocalRow ?? options.ShowLocalRow;
-        options.ShowAllTimeRow = preferences.ShowAllTimeRow ?? options.ShowAllTimeRow;
-        options.ShowGlobalRow = preferences.ShowGlobalRow ?? options.ShowGlobalRow;
-        options.ShowReturningRow = preferences.ShowReturningRow ?? options.ShowReturningRow;
-        options.ShowNeverPlayedRow = preferences.ShowNeverPlayedRow ?? options.ShowNeverPlayedRow;
-        options.ShowBecauseRow = preferences.ShowBecauseRow ?? options.ShowBecauseRow;
-        options.ShowStudioRow = preferences.ShowStudioRow ?? options.ShowStudioRow;
-        options.ShowGenreRows = preferences.ShowGenreRows ?? options.ShowGenreRows;
+        options.EnableHomeRows = options.EnableHomeRows && (preferences.EnableHomeRows ?? true);
+        options.ShowLocalRow = options.ShowLocalRow && (preferences.ShowLocalRow ?? true);
+        options.ShowAllTimeRow = options.ShowAllTimeRow && (preferences.ShowAllTimeRow ?? true);
+        options.ShowGlobalRow = options.ShowGlobalRow && (preferences.ShowGlobalRow ?? true);
+        options.ShowReturningRow = options.ShowReturningRow && (preferences.ShowReturningRow ?? true);
+        options.ShowNeverPlayedRow = options.ShowNeverPlayedRow && (preferences.ShowNeverPlayedRow ?? true);
+        options.ShowBecauseRow = options.ShowBecauseRow && (preferences.ShowBecauseRow ?? true);
+        options.ShowStudioRow = options.ShowStudioRow && (preferences.ShowStudioRow ?? true);
+        options.ShowGenreRows = options.ShowGenreRows && (preferences.ShowGenreRows ?? true);
         options.HideNativeSections = preferences.HideNativeSections ?? options.HideNativeSections;
         options.RowOrder = preferences.RowOrder ?? options.RowOrder;
         options.HighlightColor = preferences.HighlightColor ?? options.HighlightColor;
@@ -131,6 +135,35 @@ public static class UserPreferenceRules
         options.RankNumberScale = SanitizeScale(preferences.RankNumberScale) ?? options.RankNumberScale;
 
         return options;
+    }
+
+    /// <summary>
+    /// Relève les rangées que l'administrateur affiche, avant tout choix du compte.
+    /// </summary>
+    /// <param name="options">Les réglages du serveur.</param>
+    /// <returns>Les noms des cases cochées.</returns>
+    public static IReadOnlyList<string> ServerRows(ClientOptionsDto options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+
+        var rows = new List<string>();
+        void Add(bool shown, string name)
+        {
+            if (shown)
+            {
+                rows.Add(name);
+            }
+        }
+
+        Add(options.ShowLocalRow, nameof(ClientOptionsDto.ShowLocalRow));
+        Add(options.ShowAllTimeRow, nameof(ClientOptionsDto.ShowAllTimeRow));
+        Add(options.ShowGlobalRow, nameof(ClientOptionsDto.ShowGlobalRow));
+        Add(options.ShowReturningRow, nameof(ClientOptionsDto.ShowReturningRow));
+        Add(options.ShowNeverPlayedRow, nameof(ClientOptionsDto.ShowNeverPlayedRow));
+        Add(options.ShowBecauseRow, nameof(ClientOptionsDto.ShowBecauseRow));
+        Add(options.ShowStudioRow, nameof(ClientOptionsDto.ShowStudioRow));
+        Add(options.ShowGenreRows, nameof(ClientOptionsDto.ShowGenreRows));
+        return rows;
     }
 
     /// <summary>

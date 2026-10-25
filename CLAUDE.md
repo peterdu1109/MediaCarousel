@@ -466,6 +466,14 @@ distinction, une préférence enregistrée figerait la valeur du jour : un admin
 active une nouvelle rangée ne la verrait apparaître chez personne, puisque tous les comptes
 porteraient un « faux » explicite hérité d'un panneau ouvert des mois plus tôt.
 
+**Un compte masque, il ne rallume pas** (audit du 2026-10-24). `Apply` fait
+`admin && (choix ?? true)` : une rangée coupée par l'administrateur n'est plus recalculée, et
+la rallumer servait un classement figé, parfois vieux de mois. `ClientOptions` publie donc
+`ServerRows` (les cases de l'administrateur) ; le panneau ne propose que celles-là et
+n'enregistre une rangée que **masquée** — cochée, elle suit le serveur. Les réglages se
+relisent après `CACHE_TTL` (5 min), comme les classements : une appli TV restée ouverte voit
+enfin un changement de l'administrateur.
+
 Ce que ces préférences **ne** couvrent pas : tailles de rangées, titres, fenêtre
 d'observation, source externe. Ceux-là décident de ce qui est *calculé*, une seule fois pour
 tout le serveur ; les préférences ne décident que de ce qui est *montré*. Un utilisateur qui
@@ -526,10 +534,20 @@ enregistre la page de configuration.
 précédent** en cas d'échec. Une coupure réseau ne vide jamais la liste côté client. Un
 `SemaphoreSlim` empêche deux recalculs simultanés (tâche planifiée + bouton manuel).
 
+**Une annulation n'est un arrêt que si on l'a demandée** (audit du 2026-10-24). Un délai dépassé
+chez TMDB ou Trakt se signale aussi par une annulation : au second essai, elle remontait telle
+quelle et chaque `catch (OperationCanceledException) { throw; }` la prenait pour un arrêt — tout le
+passage s'interrompait, « jamais vu », studios, genres et purge compris. `TrendingFetch` la change
+en `TimeoutException`, et les sections ne relancent une annulation que si
+`cancellationToken.IsCancellationRequested`. De même, **rien ne se publie à vide sur une panne** :
+une liste de tendances vide lève (sauf « prochaines sorties » de séries sur TMDB, vide par nature),
+et `CatalogBuilder` ne rattrape plus ses erreurs — il rendait des catalogues partiels, publiés
+par-dessus les bons.
+
 **Cette tolérance rend les échecs invisibles**, c'est son revers : une clé TMDB expirée laisse
 une rangée d'apparence normale dont la date vieillit en silence. `RefreshHealth` consigne donc
 chaque échec rattrapé — section et message — plus la durée du passage, `Status` l'expose, et la
-tuile « Dernier calcul » de la page de configuration passe en alerte en nommant la section. Le
+bandeau « Dernier calcul » de la page de configuration passe en alerte en nommant la section. Le
 bilan vit en mémoire : un redémarrage le remet à zéro, comme tout ce qu'il décrit. La durée sert
 aussi de mesure : c'est elle qu'on regarde avant de parler d'optimiser le balayage.
 
@@ -580,16 +598,13 @@ identifiant perdu coûte cher : sans lui, `CollectionSynchronizer` crée une nou
 - **Une requête PAR TYPE de média, chacune avec ses créneaux.** Une requête unique mêlant
   films et épisodes laissait un seul binge-watcher consommer ses cent créneaux avec quatre
   saisons : ses films n'atteignaient jamais le classement.
-- **`RefreshIntervalHours` est appliqué par `RefreshScheduleSynchronizer`.**
-  `GetDefaultTriggers()` n'est consulté par Jellyfin qu'à la PREMIÈRE installation de la
-  tâche ; ensuite le calendrier vit dans sa configuration. Sans ce service, le réglage ne
-  faisait plus rien. Seul le déclencheur d'intervalle est réécrit : un passage quotidien
-  ajouté à la main survit. **Au démarrage, les tâches n'existent pas encore** : Jellyfin démarre
-  les services hébergés AVANT de les enregistrer (« Running startup tasks » vient ensuite —
-  huit démarrages sur huit sur un serveur 12.1). L'application au démarrage échouait donc
-  toujours, le réglage n'étant repris qu'au prochain enregistrement de la page. Le service
-  s'abonne désormais à `ITaskManager.TaskExecuting` et applique l'intervalle dès que la
-  première tâche s'exécute — la nôtre, que son déclencheur de démarrage lance aussitôt.
+- **Le calendrier du recalcul appartient à Jellyfin** (depuis la 4.5.0). `RefreshIntervalHours`
+  ne sert plus qu'au déclencheur par défaut de la première installation ; la page n'a plus ce
+  champ. L'ancien `RefreshScheduleSynchronizer` réécrivait le déclencheur d'intervalle à chaque
+  démarrage et à chaque enregistrement : un intervalle changé dans Tâches planifiées était
+  effacé. `Status.NextRunUtc` lit désormais le déclencheur d'intervalle de la tâche, sans le
+  toucher. De même, la langue du Top mondial vient des métadonnées de Jellyfin
+  (`MetadataLanguage.Resolve`) ; `MetadataLanguage` du plugin ne sert que si Jellyfin n'en a pas.
 - **Le contrat d'API ne publie que ce que le rendu consomme.** Le score, le nombre de
   lectures, le nombre de spectateurs distincts et la date de dernière lecture en ont été
   retirés : le client ne les lisait pas, et ils décrivent le comportement de visionnage des
@@ -960,7 +975,7 @@ dotnet run --project tests/ScriptTag.Tests -c Release
 cd tests/browser && npm install && node home-rows.test.mjs && node config-page.test.mjs
 ```
 
-Trois suites sans framework — 563 assertions — exécutées en CI avant la publication ; voir
+Trois suites sans framework — 636 assertions — exécutées en CI avant la publication ; voir
 `tests/README.md`. L'une charge un extrait des règles d'ElegantFin **après** les nôtres pour
 vérifier que la cohabitation tient.
 Les deux suites navigateur chargent le vrai `media-carousel.js` et le vrai `configPage.html`
@@ -993,7 +1008,7 @@ Trois règles, chacune venue d'un défaut constaté :
 
 1. **`Configuration/PluginConfiguration.cs`** — propriété + valeur par défaut + commentaire XML français.
 2. **`Configuration/configPage.html`** — contrôle de formulaire dans le bloc concerné, avec
-   **une ligne** d'explication au plus, puis ajout de l'identifiant dans le tableau JS
+   **une ligne** d'explication au plus (libellé et aide en `data-i18n`, texte dans `strings.fr` ET `strings.en`), puis ajout de l'identifiant dans le tableau JS
    correspondant (`checkboxes`, `numbers`, `decimals`, `texts` ou `lists`). Le chargement et la
    sauvegarde sont pilotés par ces tableaux : **un champ absent de ces tableaux n'est ni chargé ni
    enregistré**, quel que soit son emplacement dans la page.
@@ -1005,11 +1020,32 @@ Trois règles, chacune venue d'un défaut constaté :
 ### Structure de la page de configuration
 
 Une seule page, cinq blocs et un pli, choisie par Elie le 2026-10-01 (la page avait six onglets,
-58 réglages et près de 1 000 mots d'aide ; il en reste moins de 320) :
+58 réglages et près de 1 000 mots d'aide ; il en reste moins de 320). Refaite le 2026-10-24, à sa
+demande, « moderne et simple, des chiffres pertinents avant tout » et **bilingue comme NotifySync** :
+
+- **En tête, avant tout réglage** : quatre pastilles de services (Playback Reporting, clé
+  TMDB/Trakt, Seerr, File Transformation), quatre chiffres clés (comptes ayant regardé sur la
+  période et visionnages/heures, titres du Top mondial déjà présents, titres à demander, comptes
+  ayant personnalisé leur accueil), puis le bandeau du calcul (dernier, durée, prochain) avec
+  « Recalculer maintenant ». Tout vient de `GET MediaCarousel/Status` : `Activity` (relevée par
+  `LocalTopListBuilder` dans `ActivityStats`, en mémoire, seulement avec Playback Reporting et une
+  période non nulle), `GlobalInLibrary`/`GlobalTotal` (`GlobalTopCoverage` : les listes que
+  l'accueil montre, sans additionner les trois), `CustomizedAccounts`/`Accounts` (comptes actifs
+  seulement), `NextRunUtc`, `FileTransformation`. Les chiffres ne sont **pas** une zone
+  `aria-live` : ils se redessinent à chaque frappe.
+- **Textes** : aucun dans le HTML. `data-i18n` (texte), `data-i18n-label` (libellé d'un champ :
+  attribut `label` ET `<label for>` déjà créé par jellyfin-web), `data-i18n-aria`, tirés des
+  tables `strings.fr` / `strings.en`. Langue : `localStorage["{userId}-language"]` (langue
+  d'affichage du compte), sinon le navigateur ; `fr*` → français, le reste → anglais ; relue à
+  chaque `pageshow`. Les sections de Jellyfin portent les noms de `fr.json` / `en-us.json`.
+  **Un texte ajouté va dans les deux tables** : le banc échoue sur une clé affichée telle quelle.
+  Les titres de rangées par défaut restent ceux de `PluginConfiguration` (en français).
 - **Rangées de l'accueil** : l'interrupteur général, la liste des rangées — case et flèches sur
   la même ligne —, puis les réglages propres à chaque rangée cochée ;
 - **Top du serveur** (aussi pour « de tous les temps »), **Top mondial**, **Seerr**, **Apparence** ;
-- un seul `<details>` « Réglages avancés » : exclusions, comptage par nombre de lectures,
+- un seul `<details>` « Réglages avancés » : exclusions (comptes et bibliothèques **à cocher**,
+  lus sur `Users` et `Library/VirtualFolders` ; la zone de texte d'identifiants ne revient que si
+  la liste est illisible), comptage par nombre de lectures,
   recalcul et collections, sections de Jellyfin, minimums des studios et genres, langue.
 
 **L'affichage conditionnel passe par `data-show-if`**, lu par `applyVisibility` : `A|B` (l'un ou

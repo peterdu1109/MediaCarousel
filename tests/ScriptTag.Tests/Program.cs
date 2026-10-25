@@ -490,6 +490,18 @@ UserPreferenceRules.Apply(serveur, new UserRowPreferences { HighlightColor = "#0
 Check("PREFS: couleur et echelle sont reprises",
     serveur.HighlightColor == "#000000" && serveur.RankNumberScale == 55);
 
+// AUDIT 2026-10-24 — une rangee coupee par l'administrateur n'est plus recalculee : un compte
+// qui la rallumait recevait son dernier classement, fige.
+var coupee = new ClientOptionsDto { EnableHomeRows = true, ShowLocalRow = true, ShowGlobalRow = false };
+UserPreferenceRules.Apply(coupee, new UserRowPreferences { ShowGlobalRow = true, ShowLocalRow = false });
+Check("PREFS: un compte ne rallume pas une rangee coupee par l'administrateur", !coupee.ShowGlobalRow);
+Check("PREFS: mais il peut masquer une rangee affichee", !coupee.ShowLocalRow);
+Check("PREFS: le panneau connait les rangees du serveur, avant les choix du compte",
+    coupee.ServerRows.SequenceEqual(new[] { "ShowLocalRow" }));
+var accueilCoupe = new ClientOptionsDto { EnableHomeRows = false };
+UserPreferenceRules.Apply(accueilCoupe, new UserRowPreferences { EnableHomeRows = true });
+Check("PREFS: rangees coupees sur tout le serveur, un compte ne les rallume pas", !accueilCoupe.EnableHomeRows);
+
 // Le fichier des preferences peut porter une valeur enregistree sous les anciennes bornes.
 var avecAncienneEchelle = new ClientOptionsDto { RankNumberScale = 100 };
 UserPreferenceRules.Apply(avecAncienneEchelle, new UserRowPreferences { RankNumberScale = 25 });
@@ -498,6 +510,71 @@ Check("PREFS: un 25 deja enregistre n'est plus applique, le serveur reprend la m
 UserPreferenceRules.Apply(avecAncienneEchelle, new UserRowPreferences { RankNumberScale = 150 });
 Check("PREFS: un 150 deja enregistre est ramene au plafond du rendu",
     avecAncienneEchelle.RankNumberScale == 100);
+
+// DELAI — constate a l'audit du 2026-10-24 : une source muette deux fois de suite levait une
+// annulation, prise pour un arret demande ; tout le recalcul s'arretait sans rien noter.
+var essaisSource = 0;
+var relances = 0;
+Exception? echecDelai = null;
+try
+{
+    await TrendingFetch.WithRetryAsync<int>(
+        async token => { essaisSource++; await Task.Delay(Timeout.Infinite, token); return 0; },
+        TimeSpan.FromMilliseconds(50), TimeSpan.FromMilliseconds(1), _ => relances++, CancellationToken.None);
+}
+catch (Exception ex)
+{
+    echecDelai = ex;
+}
+Check("DELAI: deux delais depasses deviennent un echec ordinaire, pas un arret",
+    echecDelai is TimeoutException && echecDelai is not OperationCanceledException);
+Check("DELAI: deux essais, une seule relance", essaisSource == 2 && relances == 1);
+
+var reponseApresRelance = await TrendingFetch.WithRetryAsync(
+    async token =>
+    {
+        if (++essaisSource == 3)
+        {
+            await Task.Delay(Timeout.Infinite, token);
+        }
+
+        return 42;
+    },
+    TimeSpan.FromMilliseconds(50), TimeSpan.FromMilliseconds(1), null, CancellationToken.None);
+Check("DELAI: un premier delai depasse puis une reponse, la reponse est rendue", reponseApresRelance == 42);
+
+using var arretDemande = new CancellationTokenSource();
+arretDemande.Cancel();
+Exception? echecArret = null;
+try
+{
+    await TrendingFetch.WithRetryAsync<int>(
+        async token => { await Task.Delay(Timeout.Infinite, token); return 0; },
+        TimeSpan.FromSeconds(5), TimeSpan.FromMilliseconds(1), null, arretDemande.Token);
+}
+catch (Exception ex)
+{
+    echecArret = ex;
+}
+Check("DELAI: un arret demande reste un arret", echecArret is OperationCanceledException);
+
+Check("VIDE: TMDB sans prochaines sorties de series, le vide est normal", TrendingFetch.EmptyIsExpected(true, true, true));
+Check("VIDE: une liste de tendances vide est une panne", !TrendingFetch.EmptyIsExpected(true, false, true));
+Check("VIDE: des films a venir absents est une panne", !TrendingFetch.EmptyIsExpected(true, true, false));
+Check("VIDE: Trakt vide est une panne", !TrendingFetch.EmptyIsExpected(false, true, true));
+
+// LANGUE — reprise des metadonnees de Jellyfin depuis la 4.5.0 : plus de champ a saisir.
+Check("LANGUE: la langue et le pays de Jellyfin donnent fr-FR", MetadataLanguage.Resolve("fr", "FR", "en-US") == "fr-FR");
+Check("LANGUE: une forme complete est gardee telle quelle", MetadataLanguage.Resolve("pt-BR", "FR", null) == "pt-BR");
+Check("LANGUE: sans pays, la langue seule", MetadataLanguage.Resolve("de", "", null) == "de");
+Check("LANGUE: sans langue chez Jellyfin, l'ancien reglage du plugin", MetadataLanguage.Resolve(null, "FR", "it-IT") == "it-IT");
+Check("LANGUE: sans rien, l'anglais", MetadataLanguage.Resolve(" ", null, "") == "en-US");
+
+// SEERR — les demandes suivent le Top mondial : eteint, ou limite aux titres presents, rien a demander.
+Check("SEERR: demandes proposees avec le Top mondial et ses titres absents", SeerrRules.RequestsApply(true, true, false));
+Check("SEERR: Top mondial eteint, plus de demandes", !SeerrRules.RequestsApply(true, false, false));
+Check("SEERR: titres presents seulement, plus de demandes", !SeerrRules.RequestsApply(true, true, true));
+Check("SEERR: case decochee, plus de demandes", !SeerrRules.RequestsApply(false, true, false));
 
 // SEERR — association des comptes, etats calques sur Jellyfin Enhanced, choix des saisons.
 var jellyfinId = Guid.Parse("22ae9f6f-970a-4447-a5f7-02ae3fbeb896");
@@ -718,6 +795,21 @@ Check("SECOURS: et les series de meme",
 Check("SECOURS: une liste deja calculee est servie telle quelle",
     ReferenceEquals(GlobalTopFallback.For(TopListKind.Global, Lire), stock[TopListKind.Global]));
 
+// Titres du Top mondial deja dans la bibliotheque : on mesure les listes que l'accueil montre,
+// sans additionner la liste melee et les listes separees (un reste du reglage precedent).
+var dejaLa = new TopListEntry { Rank = 1, Name = "Present", MediaType = "movie", ItemId = Guid.NewGuid() };
+var pasLa = new TopListEntry { Rank = 2, Name = "Absent", MediaType = "movie" };
+var couverture = new Dictionary<TopListKind, TopListSnapshot>
+{
+    [TopListKind.Global] = new(TopListKind.Global, "Tmdb", new[] { dejaLa, pasLa, pasLa }),
+    [TopListKind.GlobalMovies] = new(TopListKind.GlobalMovies, "Tmdb", new[] { dejaLa, pasLa }),
+    [TopListKind.GlobalSeries] = new(TopListKind.GlobalSeries, "Tmdb", new[] { dejaLa })
+};
+Check("COUVERTURE: liste melee, ses titres seulement", GlobalTopCoverage.Measure(false, k => couverture[k]) == (1, 3));
+Check("COUVERTURE: listes separees, films et series sans la melee", GlobalTopCoverage.Measure(true, k => couverture[k]) == (2, 3));
+Check("COUVERTURE: listes separees pas encore calculees, la melee en attendant",
+    GlobalTopCoverage.Measure(true, k => k == TopListKind.Global ? couverture[k] : TopListSnapshot.Empty(k)) == (1, 3));
+
 stock[TopListKind.GlobalMovies] = filmsTires;
 stock[TopListKind.Global] = TopListSnapshot.Empty(TopListKind.Global);
 Check("SECOURS: au retour a la liste melee, elle est refaite des deux moities",
@@ -772,6 +864,14 @@ Check("VRAIES LECTURES: deux spectateurs passent devant un seul",
 Check("VRAIES LECTURES: entre spectateurs uniques, le temps passe departage, pas la recence",
     reel[1].TitleId == Id(2) && reel[2].TitleId == Id(3));
 Check("VRAIES LECTURES: la taille est respectee", PlaybackTop.Rank(vues, 2).Count == 2);
+
+// Chiffres de la page de reglages : la meme regle que le classement (5 minutes par compte
+// et par titre), sur les memes lectures.
+var activite = PlaybackTop.Summarize(vues);
+Check("ACTIVITE: les comptes qui ont vraiment regarde, chacun une fois (3)", activite.Viewers == 3);
+Check("ACTIVITE: un visionnage par compte et par titre, les courts et les nuls ecartes (5)", activite.Views == 5);
+Check("ACTIVITE: le temps des seuls visionnages comptes", activite.Seconds == 349860);
+Check("ACTIVITE: aucune lecture, aucun chiffre", PlaybackTop.Summarize(new List<PlaybackView>()) == new PlaybackActivity(0, 0, 0));
 
 // Fichier remplace apres lecture : l'episode est retrouve par serie, saison et numero,
 // lus dans le nom que Playback Reporting enregistre (noms releves sur la prod).

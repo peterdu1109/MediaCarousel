@@ -34,6 +34,9 @@
     <Compile Include="../../Services/GlobalTopFallback.cs" />
     <Compile Include="../../Services/SettingsSignature.cs" />
     <Compile Include="../../Services/PlaybackTop.cs" />
+    <Compile Include="../../Services/GlobalTopCoverage.cs" />
+    <Compile Include="../../Services/TrendingFetch.cs" />
+    <Compile Include="../../Services/MetadataLanguage.cs" />
     <Compile Include="../../Services/PlaybackNames.cs" />
     <Compile Include="../../Configuration/ConfigurationFile.cs" />
     <Compile Include="../../Services/PluginDescription.cs" />

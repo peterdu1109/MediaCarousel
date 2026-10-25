@@ -81,6 +81,21 @@ public static class SeerrRules
     private const int MaxSeasonNumber = 10000;
 
     /// <summary>
+    /// Dit si les demandes ont lieu d'être proposées : elles portent sur les titres absents du
+    /// Top mondial, donc rien à demander sans lui, ou s'il ne garde que les titres présents.
+    /// </summary>
+    /// <remarks>
+    /// Sans cette garde, décocher le Top mondial laissait les routes Seerr ouvertes sur son
+    /// dernier instantané, alors que la page de réglages montrait Seerr éteint.
+    /// </remarks>
+    /// <param name="seerrEnabled">La case des demandes Seerr.</param>
+    /// <param name="globalTopEnabled">La case du Top mondial.</param>
+    /// <param name="libraryOnly">« Ne garder que les titres présents ».</param>
+    /// <returns><see langword="true"/> si les demandes peuvent être proposées.</returns>
+    public static bool RequestsApply(bool seerrEnabled, bool globalTopEnabled, bool libraryOnly)
+        => seerrEnabled && globalTopEnabled && !libraryOnly;
+
+    /// <summary>
     /// Indique si un type de média est l'un de ceux que Seerr connaît.
     /// </summary>
     /// <param name="mediaType">Le type reçu.</param>

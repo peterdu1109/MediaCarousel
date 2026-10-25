@@ -95,4 +95,49 @@ public sealed class PluginStatusDto
     /// configuration masque alors les réglages du comptage par nombre de lectures, sans effet.
     /// </summary>
     public bool PlaybackReporting { get; set; }
+
+    /// <summary>
+    /// Obtient ou définit une valeur indiquant si le plugin File Transformation est chargé : le
+    /// script passe alors par lui, sans modifier <c>index.html</c> sur le disque.
+    /// </summary>
+    public bool FileTransformation { get; set; }
+
+    /// <summary>
+    /// Obtient ou définit l'activité de la fenêtre du Top du serveur, ou <see langword="null"/>
+    /// sans Playback Reporting ou avant le premier calcul.
+    /// </summary>
+    public ActivityDto? Activity { get; set; }
+
+    /// <summary>Obtient ou définit le nombre de titres du Top mondial déjà dans la bibliothèque.</summary>
+    public int GlobalInLibrary { get; set; }
+
+    /// <summary>Obtient ou définit le nombre de titres que montre le Top mondial.</summary>
+    public int GlobalTotal { get; set; }
+
+    /// <summary>Obtient ou définit le nombre de comptes qui ont réglé leurs propres rangées.</summary>
+    public int CustomizedAccounts { get; set; }
+
+    /// <summary>Obtient ou définit le nombre de comptes actifs du serveur.</summary>
+    public int Accounts { get; set; }
+
+    /// <summary>Obtient ou définit l'heure prévue du prochain recalcul, si on la connaît.</summary>
+    public DateTime? NextRunUtc { get; set; }
+}
+
+/// <summary>
+/// Activité retenue sur la fenêtre du Top du serveur.
+/// </summary>
+public sealed class ActivityDto
+{
+    /// <summary>Obtient ou définit le nombre de comptes qui ont regardé quelque chose.</summary>
+    public int Viewers { get; set; }
+
+    /// <summary>Obtient ou définit le nombre de visionnages comptés (un par compte et par titre).</summary>
+    public int Views { get; set; }
+
+    /// <summary>Obtient ou définit les heures regardées, arrondies au dixième.</summary>
+    public double Hours { get; set; }
+
+    /// <summary>Obtient ou définit la fenêtre, en jours.</summary>
+    public int WindowDays { get; set; }
 }

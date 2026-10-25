@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using JellyfinCarouselPlugin.Configuration;
 using JellyfinCarouselPlugin.Models;
 using JellyfinCarouselPlugin.Providers;
+using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Library;
 using Microsoft.Extensions.Logging;
 
@@ -23,6 +24,7 @@ public sealed class GlobalTopListBuilder
 
     private readonly IReadOnlyList<ITrendingProvider> _providers;
     private readonly ILibraryManager _libraryManager;
+    private readonly IServerConfigurationManager _serverConfiguration;
     private readonly ILogger<GlobalTopListBuilder> _logger;
 
     /// <summary>
@@ -30,14 +32,17 @@ public sealed class GlobalTopListBuilder
     /// </summary>
     /// <param name="providers">Sources de tendances enregistrées.</param>
     /// <param name="libraryManager">Gestionnaire de bibliothèque.</param>
+    /// <param name="serverConfiguration">Configuration du serveur, pour la langue des métadonnées.</param>
     /// <param name="logger">Journal.</param>
     public GlobalTopListBuilder(
         IEnumerable<ITrendingProvider> providers,
         ILibraryManager libraryManager,
+        IServerConfigurationManager serverConfiguration,
         ILogger<GlobalTopListBuilder> logger)
     {
         _providers = providers.ToArray();
         _libraryManager = libraryManager;
+        _serverConfiguration = serverConfiguration;
         _logger = logger;
     }
 
@@ -82,7 +87,10 @@ public sealed class GlobalTopListBuilder
         var request = new TrendingRequest(
             mediaKind,
             fetchLimit,
-            string.IsNullOrWhiteSpace(config.MetadataLanguage) ? "en-US" : config.MetadataLanguage,
+            MetadataLanguage.Resolve(
+                _serverConfiguration.Configuration.PreferredMetadataLanguage,
+                _serverConfiguration.Configuration.MetadataCountryCode,
+                config.MetadataLanguage),
             config.GlobalTopApiKey,
             config.GlobalTopFeed);
 
@@ -90,7 +98,16 @@ public sealed class GlobalTopListBuilder
 
         if (titles.Count == 0)
         {
-            _logger.LogWarning("{Provider} n'a renvoyé aucun titre.", provider.Kind);
+            if (!TrendingFetch.EmptyIsExpected(
+                    provider.Kind == TrendingProviderKind.Tmdb,
+                    config.GlobalTopFeed == TrendingFeed.Upcoming,
+                    mediaKind == TopListMediaKind.Series))
+            {
+                // Levée plutôt que publiée : le classement précédent reste, et le bilan le dit.
+                throw new InvalidOperationException($"{provider.Kind} n'a renvoyé aucun titre.");
+            }
+
+            _logger.LogInformation("{Provider} n'a aucun titre pour cette liste.", provider.Kind);
             return new TopListSnapshot(kind, provider.Kind.ToString(), Array.Empty<TopListEntry>());
         }
 
@@ -196,29 +213,14 @@ public sealed class GlobalTopListBuilder
     /// <summary>
     /// Interroge la source avec un délai maximal et une unique nouvelle tentative sur erreur transitoire.
     /// </summary>
-    private async Task<IReadOnlyList<TrendingTitle>> FetchWithRetryAsync(
+    private Task<IReadOnlyList<TrendingTitle>> FetchWithRetryAsync(
         ITrendingProvider provider,
         TrendingRequest request,
         CancellationToken cancellationToken)
-    {
-        for (var attempt = 1; ; attempt++)
-        {
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeout.CancelAfter(RequestTimeout);
-
-            try
-            {
-                return await provider.GetTrendingAsync(request, timeout.Token).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch (Exception ex) when (attempt == 1 && ex is HttpRequestException or OperationCanceledException)
-            {
-                _logger.LogWarning(ex, "Échec de l'appel à {Provider}, nouvelle tentative dans {Delay}.", provider.Kind, RetryDelay);
-                await Task.Delay(RetryDelay, cancellationToken).ConfigureAwait(false);
-            }
-        }
-    }
+        => TrendingFetch.WithRetryAsync(
+            token => provider.GetTrendingAsync(request, token),
+            RequestTimeout,
+            RetryDelay,
+            ex => _logger.LogWarning(ex, "Échec de l'appel à {Provider}, nouvelle tentative dans {Delay}.", provider.Kind, RetryDelay),
+            cancellationToken);
 }

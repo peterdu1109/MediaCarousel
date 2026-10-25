@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+
 namespace JellyfinCarouselPlugin.Api;
 
 /// <summary>
@@ -139,4 +142,15 @@ public sealed class ClientOptionsDto
     /// qualité et dossier racine.
     /// </summary>
     public bool SeerrAdvanced { get; set; }
+
+    /// <summary>
+    /// Obtient ou définit les rangées que l'administrateur affiche, par nom de case
+    /// (<c>ShowLocalRow</c>…).
+    /// </summary>
+    /// <remarks>
+    /// Le panneau « Mes rangées » ne propose que celles-là : une rangée coupée par
+    /// l'administrateur n'est plus recalculée, un compte qui la rallumait recevait un
+    /// classement figé, parfois vieux de plusieurs mois.
+    /// </remarks>
+    public IReadOnlyList<string> ServerRows { get; set; } = Array.Empty<string>();
 }

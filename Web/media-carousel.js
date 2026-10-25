@@ -42,7 +42,12 @@
     var EMPTY_RETRY_DELAY = 2000;
 
     var cache = {};
+    var HOME_CONTAINER_CLASS = 'homeSectionsContainer';
     var options = null;
+    // Les réglages se relisent eux aussi après CACHE_TTL : gardés toute la session, un
+    // changement de l'administrateur, ou un choix fait sur un autre appareil, n'arrivait
+    // jamais sur une appli TV restée ouverte.
+    var optionsTime = 0;
     // Compte auquel appartiennent `cache` et `options` : voir scopeMemoryToUser().
     var memoryUser = null;
     // Demandes à Seerr : proposées ou non par le serveur, et dernier état connu de chaque
@@ -2537,12 +2542,13 @@
     // ------------------------------------------------------------------
 
     function loadOptions() {
-        if (options) {
+        if (options && Date.now() - optionsTime < CACHE_TTL) {
             return Promise.resolve(options);
         }
 
         return getJson('MediaCarousel/ClientOptions').then(function (result) {
             options = result || {};
+            optionsTime = Date.now();
             return options;
         });
     }
@@ -2666,6 +2672,22 @@
      * Les rangées de genre sont remplies quand elles approchent du champ de vision,
      * pour ne pas déclencher toutes les requêtes au chargement de la page.
      */
+    /* Observateurs des rangées de genre pas encore chargées. Une rangée retirée avant d'avoir
+       été vue gardait le sien, jamais déconnecté : sur une longue session TV, ils
+       s'accumulaient. Ceux des rangées disparues sont relâchés au rendu suivant : une
+       rangée neuve n'est pas encore dans la page quand son observateur est créé. */
+    var genreObservers = [];
+
+    function releaseDetachedGenreObservers() {
+        genreObservers = genreObservers.filter(function (entry) {
+            if (entry.section.isConnected) {
+                return true;
+            }
+            entry.observer.disconnect();
+            return false;
+        });
+    }
+
     function deferGenreRow(section, genre, limit) {
         var loaded = false;
 
@@ -2689,6 +2711,7 @@
             for (var i = 0; i < entries.length; i++) {
                 if (entries[i].isIntersecting) {
                     observer.disconnect();
+                    genreObservers = genreObservers.filter(function (entry) { return entry.observer !== observer; });
                     load();
                     return;
                 }
@@ -2696,6 +2719,7 @@
         }, { rootMargin: '400px 0px' });
 
         observer.observe(section);
+        genreObservers.push({ section: section, observer: observer });
     }
 
     // ------------------------------------------------------------------
@@ -2853,13 +2877,11 @@
         'native:livetv', 'native:nextup', 'native:latestmedia'
     ];
 
-    /* Ce que Jellyfin place dans homesection{i} quand l'utilisateur n'a rien choisi.
-       Doit rester aligné sur DEFAULT_SECTIONS de jellyfin-web. */
-    /* Ordre par défaut du compte, repris de DEFAULT_SECTIONS
-       (jellyfin-web/src/types/homeSectionType.ts). */
+    /* Ce que Jellyfin place dans homesection{i} quand l'utilisateur n'a rien choisi : les
+       dix entrées de DEFAULT_SECTIONS (jellyfin-web 12.1, src/constants/homeSectionType.ts). */
     var NATIVE_DEFAULT_LAYOUT = [
         'smalllibrarytiles', 'resume', 'resumeaudio', 'resumebook',
-        'livetv', 'nextup', 'latestmedia', 'none'
+        'livetv', 'nextup', 'latestmedia', 'none', 'none', 'none'
     ];
 
     /* jellyfin-web rend DIX sections (`userSectionCount = 10` dans homesections.js),
@@ -3059,7 +3081,14 @@
     function openPreferences(opts) {
         closePreferences(true);
 
-        var order = rowOrder(opts.RowOrder, opts.ManageNativeSections === true);
+        // Seules les rangées que le serveur affiche se proposent : une rangée coupée par
+        // l'administrateur n'est plus recalculée, et le serveur refuse de la rallumer. Un
+        // serveur plus ancien, sans cette liste, laisse tout proposer comme avant.
+        var serverRows = opts.ServerRows;
+        var order = rowOrder(opts.RowOrder, opts.ManageNativeSections === true).filter(function (id) {
+            var toggle = ROW_TOGGLES[id];
+            return !toggle || !serverRows || serverRows.indexOf(toggle) !== -1;
+        });
         var backdrop = document.createElement('div');
         var html = '<div class="mc-prefs focuscontainer" role="dialog" aria-modal="true"'
             + ' aria-labelledby="mc-prefs-title" tabindex="-1">'
@@ -3239,9 +3268,10 @@
     /**
      * Lit le panneau et en fait des préférences.
      *
-     * Tout ce que le panneau montre devient un choix EXPLICITE : le compte cesse de suivre
-     * l'administrateur sur ces points-là, et le reste — titres, tailles, source externe —
-     * continue de le suivre. C'est « Réinitialiser » qui rend le compte au serveur.
+     * Ordre, couleur et taille deviennent des choix EXPLICITES. Une rangée, elle, ne
+     * s'enregistre que masquée : cochée, elle suit le serveur. Enregistrées toutes à vrai,
+     * une rangée que l'administrateur coupait puis rallumait plus tard ne revenait jamais
+     * chez ce compte. C'est « Réinitialiser » qui rend le compte au serveur.
      */
     function collectPreferences(backdrop) {
         var items = backdrop.querySelectorAll('.mc-prefs li');
@@ -3259,8 +3289,8 @@
 
             ids.push(id);
 
-            if (toggle) {
-                preferences[toggle] = items[i].querySelector('input[type=checkbox]').checked;
+            if (toggle && !items[i].querySelector('input[type=checkbox]').checked) {
+                preferences[toggle] = false;
             }
         }
 
@@ -3387,6 +3417,8 @@
             return Promise.resolve();
         }
 
+        releaseDetachedGenreObservers();
+
         scopeMemoryToUser();
 
         var container = findSectionsContainer();
@@ -3491,6 +3523,41 @@
         scheduled = window.setTimeout(render, 250);
     }
 
+    function holdsHome(node) {
+        return node.nodeType === 1
+            && (node.classList.contains(HOME_CONTAINER_CLASS) || !!node.querySelector('.' + HOME_CONTAINER_CLASS));
+    }
+
+    /**
+     * Vrai si une rafale de mutations concerne l'accueil : dans ses sections, ou en ajoutant
+     * ou retirant le conteneur lui-même.
+     *
+     * L'observateur suit tout le document : sans ce tri, chaque mise à jour de l'affichage
+     * pendant une vidéo relançait un rendu, qui lit `offsetParent` et force un calcul de mise
+     * en page — un coût réel sur une TV modeste. Le tri lui-même ne lit aucune géométrie.
+     */
+    function touchesHome(mutations) {
+        for (var i = 0; i < mutations.length; i++) {
+            var mutation = mutations[i];
+            var target = mutation.target;
+
+            if (target.nodeType === 1 && target.closest('.' + HOME_CONTAINER_CLASS)) {
+                return true;
+            }
+
+            var lists = [mutation.addedNodes, mutation.removedNodes];
+            for (var l = 0; l < lists.length; l++) {
+                for (var n = 0; n < lists[l].length; n++) {
+                    if (holdsHome(lists[l][n])) {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
+    }
+
     /** Un nouvel affichage a droit à son essai, quel qu'ait été le sort du précédent. */
     function onNavigation() {
         emptyUntil = 0;
@@ -3505,7 +3572,11 @@
         // Jellyfin reconstruit entièrement `.homeSectionsContainer` à chaque affichage
         // de l'accueil : on réagit aux mutations plutôt qu'à un évènement de navigation
         // dont le nom change selon les versions.
-        var observer = new MutationObserver(schedule);
+        var observer = new MutationObserver(function (mutations) {
+            if (touchesHome(mutations)) {
+                schedule();
+            }
+        });
         observer.observe(document.body, { childList: true, subtree: true });
 
         window.addEventListener('hashchange', onNavigation);

@@ -166,6 +166,21 @@ const stub = () => {
 };
 
 await page.evaluate(stub);
+// Compte les observateurs encore actifs : une rangee de genre retiree avant d'avoir ete vue
+// gardait le sien (audit du 2026-10-24).
+await page.evaluate(() => {
+  const Natif = window.IntersectionObserver;
+  window.__observateursActifs = 0;
+  window.IntersectionObserver = function (cb, opts) {
+    const o = new Natif(cb, opts);
+    let actif = false;
+    const observe = o.observe.bind(o);
+    const disconnect = o.disconnect.bind(o);
+    o.observe = (el) => { if (!actif) { actif = true; window.__observateursActifs++; } observe(el); };
+    o.disconnect = () => { if (actif) { actif = false; window.__observateursActifs--; } disconnect(); };
+    return o;
+  };
+});
 await page.evaluate(script);
 await page.waitForFunction(() => document.querySelectorAll('.mc-row').length === 10, { timeout: 8000 });
 
@@ -308,6 +323,21 @@ await page.evaluate(() => {
               + '<div class="verticalSection section1"></div>';
 });
 await page.waitForFunction(() => document.querySelectorAll('.mc-row').length === 10, { timeout: 8000 });
+// Deux reconstructions de plus : les observateurs des rangees disparues sont relaches.
+for (let tour = 0; tour < 2; tour++) {
+  await page.evaluate(() => {
+    const c = document.querySelector('#homeTab .homeSectionsContainer');
+    c.innerHTML = '<div class="verticalSection section0"><div class="card" data-type="CollectionFolder">Films</div></div>'
+                + '<div class="verticalSection section1"></div>';
+  });
+  await page.waitForFunction(() => document.querySelectorAll('.mc-row').length === 10, { timeout: 8000 });
+}
+await page.waitForTimeout(400);
+const observateurs = await page.evaluate(() => ({
+  actifs: window.__observateursActifs,
+  // Une rangee de genre encore en silhouettes attend son observateur ; les autres n'en ont plus.
+  enAttente: Array.from(document.querySelectorAll('.mc-row')).filter(r => r.querySelector('.mc-skeleton')).length
+}));
 const afterRebuild = await page.evaluate(() => document.querySelectorAll('.mc-row').length);
 
 // PAUSE 12.1 — en quittant l'accueil, jellyfin-web 12.1 appelle pause() sur chaque
@@ -1284,9 +1314,14 @@ const serveurParCompte = () => {
           LocalRowSize: 10, RankNumberScale: 100, AllowUserPreferences: true,
           HighlightColor: window.__user === 'A' ? '#ff0000' : '#775BF4'
         };
+        // Comme UserPreferenceRules.Apply : un compte masque, il ne rallume pas.
+        // Le vrai serveur envoie chaque case, cochee ou non.
+        bascules.forEach((b) => { if (o[b] === undefined) { o[b] = false; } });
+        o.ServerRows = bascules.filter((b) => o[b] === true);
+        if (window.__adminTitre) { o.LocalRowTitle = window.__adminTitre; }
         const choix = window.__prefs[window.__user];
         if (choix) {
-          bascules.forEach((b) => { if (choix[b] != null) { o[b] = choix[b]; } });
+          bascules.forEach((b) => { if (choix[b] != null) { o[b] = o[b] === true && choix[b]; } });
           if (choix.RankNumberScale != null && choix.RankNumberScale >= 40) {
             o.RankNumberScale = Math.min(choix.RankNumberScale, 100);
           }
@@ -1408,6 +1443,36 @@ if (toutMasque.boutons === 1) {
   rangeesRevenues = await culDeSac.evaluate(() => document.querySelectorAll('.mc-ranked').length);
 }
 await culDeSac.close();
+
+// AUDIT 2026-10-24 — le panneau ne propose que les rangees du serveur, et n'enregistre une
+// rangee que masquee : enregistree a vrai, une rangee coupee puis rallumee par
+// l'administrateur ne revenait jamais chez ce compte.
+const panneauServeur = await pageAudit();
+await panneauServeur.waitForSelector('.mc-prefs-open');
+await panneauServeur.click('.mc-prefs-open');
+const rangeesProposees = await panneauServeur.evaluate(() =>
+  Array.from(document.querySelectorAll('.mc-prefs li')).map(li => li.dataset.row));
+await panneauServeur.click('.mc-prefs-save');
+await panneauServeur.waitForFunction(() => window.__prefs.A, { timeout: 5000 });
+const enregistreSansRangee = await panneauServeur.evaluate(() =>
+  Object.keys(window.__prefs.A).filter(k => /^Show/.test(k)));
+await panneauServeur.close();
+
+// REGLAGES — gardes toute la session, un changement de l'administrateur n'arrivait jamais
+// sur une appli TV restee ouverte. Ils se relisent apres CACHE_TTL, a la navigation suivante.
+const reglagesFrais = await pageAudit({ horloge: true });
+await reglagesFrais.clock.runFor(2000);
+await reglagesFrais.waitForSelector('.mc-ranked', { timeout: 5000 }).catch(() => {});
+await reglagesFrais.evaluate(() => { window.__adminTitre = 'Nouveau titre du serveur'; });
+await reglagesFrais.clock.runFor(6 * 60 * 1000);
+await reglagesFrais.evaluate(() => {
+  document.querySelectorAll('.mc-row').forEach(r => r.remove());
+  document.querySelector('.homeSectionsContainer').appendChild(document.createElement('div'));
+});
+await reglagesFrais.clock.runFor(3000);
+const titreApresDelai = await reglagesFrais.evaluate(() =>
+  Array.from(document.querySelectorAll('.mc-row [id^=mc-row-title]')).map(e => e.textContent).join('|'));
+await reglagesFrais.close();
 
 // BOUCLE — constate en prod le 2026-09-27 : la build 10.11 sur Jellyfin 12.1 repondait 500 a
 // chaque liste, et chaque accueil ouvert relancait ses requetes a CHAQUE mutation de la page,
@@ -2198,6 +2263,8 @@ check('logo de studio affiche', result.studioLogo === true, result.studioLogo);
 check('studio sans logo : repli sur le nom', result.studioFallbackName === 1 && result.studioEscaped === 'Studio <sans logo>', result);
 check('rangee de genre remplie', result.genreCards === 6, result.genreCards);
 check('genre vide : message explicite', result.genreEmptyMessage === 'Aucun titre dans ce genre.', result.genreEmptyMessage);
+check('GENRES: les observateurs des rangees disparues sont relaches',
+  observateurs.actifs === observateurs.enAttente, observateurs);
 check('chargement differe des genres (3 requetes, pas plus)', genreCallsAtRest === 3, genreCallsAtRest);
 check('BECAUSE: deux requetes, pas plus', becauseCallsAtRest === 2, becauseCallsAtRest);
 check('BECAUSE: aucune rangee pour un compte sans historique',
@@ -2678,6 +2745,11 @@ check('TV: Retour ferme la fenetre Seerr sans rien demander, focus rendu a la ca
   retourSeerr === true && apresRetourSeerr.fenetre === 0 && apresRetourSeerr.focus
     && apresRetourSeerr.demandes === 0, apresRetourSeerr);
 
+check('AUDIT: le panneau ne propose que les rangees affichees par le serveur',
+  rangeesProposees.filter(id => id.indexOf('native:') !== 0).join(',') === 'local', rangeesProposees);
+check('AUDIT: enregistrer sans rien masquer n ecrit aucune rangee', enregistreSansRangee.length === 0, enregistreSansRangee);
+check('AUDIT: les reglages du serveur se relisent apres le delai du cache',
+  /Nouveau titre du serveur/.test(titreApresDelai), titreApresDelai);
 check('aucune erreur js', errors.length === 0, errors);
 
 console.log(failed === 0 ? '\nTous les tests passent.' : '\n' + failed + ' echec(s).');

@@ -203,6 +203,12 @@ public sealed class ScriptInjectionTask : IScheduledTask
         return parse.Invoke(null, new object[] { json });
     }
 
+    /// <summary>
+    /// Indique si le plugin File Transformation est chargé.
+    /// </summary>
+    /// <returns><see langword="true"/> s'il l'est.</returns>
+    internal static bool IsFileTransformationLoaded() => FindFileTransformationAssembly() is not null;
+
     private static Assembly? FindFileTransformationAssembly()
     {
         return AssemblyLoadContext.All

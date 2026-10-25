@@ -36,6 +36,7 @@ public sealed class LocalTopListBuilder
     private readonly IUserManager _userManager;
     private readonly IUserDataManager _userDataManager;
     private readonly PlaybackReportingReader _playback;
+    private readonly ActivityStats _activity;
     private readonly ILogger<LocalTopListBuilder> _logger;
 
     /// <summary>
@@ -45,18 +46,21 @@ public sealed class LocalTopListBuilder
     /// <param name="userManager">Gestionnaire d'utilisateurs.</param>
     /// <param name="userDataManager">Gestionnaire des données utilisateur.</param>
     /// <param name="playback">Historique de Playback Reporting, s'il est installé.</param>
+    /// <param name="activity">Activité relevée pour la page de réglages.</param>
     /// <param name="logger">Journal.</param>
     public LocalTopListBuilder(
         ILibraryManager libraryManager,
         IUserManager userManager,
         IUserDataManager userDataManager,
         PlaybackReportingReader playback,
+        ActivityStats activity,
         ILogger<LocalTopListBuilder> logger)
     {
         _libraryManager = libraryManager;
         _userManager = userManager;
         _userDataManager = userDataManager;
         _playback = playback;
+        _activity = activity;
         _logger = logger;
     }
 
@@ -123,6 +127,12 @@ public sealed class LocalTopListBuilder
         // Les vraies lectures d'abord, quand Playback Reporting les tient : voir PlaybackTop.
         // Le palmarès « de tous les temps » garde les compteurs de Jellyfin, dont l'histoire
         // remonte plus loin que celle que Playback Reporting conserve.
+        if (kind == TopListKind.Local && windowDays <= 0)
+        {
+            // Depuis toujours : pas de fenêtre, donc pas d'activité « de la semaine » à montrer.
+            _activity.Clear();
+        }
+
         if (kind == TopListKind.Local && windowDays > 0)
         {
             var fromPlayback = BuildFromPlayback(
@@ -302,6 +312,11 @@ public sealed class LocalTopListBuilder
         var rows = _playback.ReadSince(DateTime.Now.AddDays(-windowDays));
         if (rows is null)
         {
+            if (kind == TopListKind.Local)
+            {
+                _activity.Clear();
+            }
+
             return null;
         }
 
@@ -353,6 +368,12 @@ public sealed class LocalTopListBuilder
 
             titles[target.Id] = target;
             views.Add(new PlaybackView(target.Id, userId, row.Seconds, row.PlayedAt));
+        }
+
+        // La page de réglages montre l'activité de la fenêtre du Top, selon la même règle.
+        if (kind == TopListKind.Local)
+        {
+            _activity.Record(PlaybackTop.Summarize(views), windowDays);
         }
 
         var ranked = PlaybackTop.Rank(views, size);

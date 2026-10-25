@@ -63,6 +63,7 @@ public sealed class RefreshOnSettingsChange : IHostedService, IDisposable
 
             _handler = (_, configuration) => OnChanged(configuration as PluginConfiguration ?? plugin.Configuration);
             plugin.ConfigurationChanged += _handler;
+            _refreshService.RunStarting += OnRunStarting;
 
             lock (_lock)
             {
@@ -86,8 +87,17 @@ public sealed class RefreshOnSettingsChange : IHostedService, IDisposable
             _handler = null;
         }
 
+        _refreshService.RunStarting -= OnRunStarting;
         _timer.Change(Timeout.Infinite, Timeout.Infinite);
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Un recalcul part avec les derniers réglages : celui qui attendait n'a plus lieu d'être.
+    /// </summary>
+    private void OnRunStarting(object? sender, EventArgs e)
+    {
+        _timer.Change(Timeout.Infinite, Timeout.Infinite);
     }
 
     /// <inheritdoc />

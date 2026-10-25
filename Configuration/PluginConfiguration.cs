@@ -479,7 +479,12 @@ public class PluginConfiguration : BasePluginConfiguration
     /// <summary>
     /// Obtient ou définit le nom de la collection du Top global.
     /// </summary>
-    public string GlobalCollectionName { get; set; } = "Top 10 mondial";
+    /// <remarks>
+    /// Différent du titre de la rangée par défaut : identiques, la page de réglages annonçait un
+    /// doublon dès qu'on cochait « créer aussi une collection ». Une installation existante
+    /// garde le nom qu'elle a enregistré.
+    /// </remarks>
+    public string GlobalCollectionName { get; set; } = "Tendances mondiales";
 
     /// <summary>
     /// Obtient ou définit l'identifiant de la collection du Top local, mémorisé après création.

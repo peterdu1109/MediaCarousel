@@ -24,6 +24,14 @@ public readonly record struct PlaybackView(Guid TitleId, Guid UserId, int Second
 public readonly record struct PlaybackTitle(Guid TitleId, int Viewers, long Seconds, DateTime LastPlayed);
 
 /// <summary>
+/// Activité retenue sur la fenêtre du Top du serveur, pour la page de réglages.
+/// </summary>
+/// <param name="Viewers">Comptes qui ont regardé au moins un titre assez longtemps pour compter.</param>
+/// <param name="Views">Visionnages comptés : un par compte et par titre.</param>
+/// <param name="Seconds">Temps regardé dans ces visionnages.</param>
+public readonly record struct PlaybackActivity(int Viewers, int Views, long Seconds);
+
+/// <summary>
 /// Classe les titres d'après ce qui a vraiment été regardé.
 /// </summary>
 /// <remarks>
@@ -84,5 +92,36 @@ public static class PlaybackTop
             .ThenByDescending(title => title.LastPlayed)
             .Take(Math.Max(size, 0))
             .ToArray();
+    }
+
+    /// <summary>
+    /// Résume l'activité selon la même règle que le classement : un compte ne compte pour un
+    /// titre qu'à partir de <see cref="MinSecondsPerViewer"/> secondes regardées.
+    /// </summary>
+    /// <param name="views">Lectures de la fenêtre, déjà ramenées à leur titre.</param>
+    /// <returns>Le nombre de comptes, de visionnages comptés et le temps regardé.</returns>
+    public static PlaybackActivity Summarize(IEnumerable<PlaybackView> views)
+    {
+        ArgumentNullException.ThrowIfNull(views);
+
+        var watched = new Dictionary<(Guid Title, Guid User), long>();
+
+        foreach (var view in views)
+        {
+            if (view.Seconds <= 0)
+            {
+                continue;
+            }
+
+            var key = (view.TitleId, view.UserId);
+            watched[key] = (watched.TryGetValue(key, out var seconds) ? seconds : 0) + view.Seconds;
+        }
+
+        var counted = watched.Where(pair => pair.Value >= MinSecondsPerViewer).ToArray();
+
+        return new PlaybackActivity(
+            counted.Select(pair => pair.Key.User).Distinct().Count(),
+            counted.Length,
+            counted.Sum(pair => pair.Value));
     }
 }

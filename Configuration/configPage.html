@@ -14,71 +14,192 @@
             <div class="content-primary">
 
                 <style>
-                    /* Styles limités à cette page ; aucune classe de Jellyfin n'est surchargée.
-                       Les couleurs dérivent de currentColor pour rester lisibles sur les
-                       thèmes clairs comme sur les thèmes sombres. */
-                    .mcCfg-head { display: flex; align-items: baseline; gap: .8em; flex-wrap: wrap; margin-bottom: .2em; }
-                    .mcCfg-head h1 { margin: 0; font-size: 1.6em; }
-                    .mcCfg-version { font-size: .8em; opacity: .6; }
-                    .mcCfg-intro { margin: .2em 0 1.4em; opacity: .8; max-width: 60ch; }
+                    /* Même famille que les pages de NotifySync et de XFusion : en-tête en carte,
+                       sommaire « Aller à », bloc d'état en grille, panneaux titrés d'une icône, barre
+                       d'enregistrement flottante. Les gris sont des rgba(128,128,128,α) pour rester
+                       lisibles sur les thèmes clairs comme sombres ; seules les couleurs de sens
+                       (accent, succès, alerte) sont fixes. Aucune classe de Jellyfin n'est surchargée. */
+                    #mediaCarouselConfigPage {
+                        --mc-accent: #00a4dc;
+                        --mc-ok: #52b54b;
+                        --mc-warn: #e6a817;
+                        --mc-line: rgba(128, 128, 128, .34);
+                        --mc-line-soft: rgba(128, 128, 128, .2);
+                        --mc-surface: rgba(128, 128, 128, .08);
+                        --mc-surface-strong: rgba(128, 128, 128, .16);
+                        --mc-radius: 10px;
+                    }
+                    #mediaCarouselConfigPage .mcCfg-root { max-width: 980px; margin: 0 auto; padding-bottom: 90px; }
+                    #mediaCarouselConfigPage .mcCfg-root form { max-width: none; width: 100%; }
 
-                    /* Deux tuiles par ligne sur un téléphone : empilées, elles repoussaient
-                       les réglages d'un écran entier. */
-                    .mcCfg-status { display: grid; gap: .7em; margin-bottom: 1em;
-                        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
-                    .mcCfg-tile { border: 1px solid rgba(128, 128, 128, .35); border-radius: 8px;
-                        padding: .8em 1em; background: rgba(128, 128, 128, .08); }
-                    .mcCfg-tile-name { font-size: .78em; opacity: .75; display: flex; align-items: center; gap: .45em; }
-                    .mcCfg-tile-dot { width: .6em; height: .6em; border-radius: 50%; flex: 0 0 auto;
-                        background: currentColor; opacity: .35; }
-                    .mcCfg-tile[data-state="ok"] .mcCfg-tile-dot { opacity: 1; color: #2e9e4f; }
-                    .mcCfg-tile[data-state="warn"] .mcCfg-tile-dot { opacity: 1; color: #c98a1b; }
-                    .mcCfg-tile-value { font-size: 1.45em; font-weight: 700; line-height: 1.2; margin-top: .1em; }
-                    .mcCfg-tile-detail { font-size: .76em; opacity: .65; }
+                    /* En-tête : la carte de NotifySync. */
+                    .mcCfg-head { display: flex; align-items: center; gap: 16px; margin: 18px 0 14px;
+                        padding: 18px 22px; border: 1px solid var(--mc-line-soft); border-radius: var(--mc-radius);
+                        background: linear-gradient(135deg, rgba(0, 164, 220, .16), rgba(0, 164, 220, .03)); }
+                    .mcCfg-head-icon { flex: 0 0 auto; width: 54px; height: 54px; border-radius: 50%;
+                        display: flex; align-items: center; justify-content: center; font-size: 28px;
+                        background: rgba(0, 164, 220, .16); }
+                    .mcCfg-head-text { min-width: 0; }
+                    .mcCfg-head h1 { margin: 0; font-size: 1.5em; line-height: 1.2; }
+                    .mcCfg-version { display: inline-block; margin-left: .5em; padding: 2px 9px; border-radius: 999px;
+                        font-size: .5em; font-weight: 600; vertical-align: middle; background: var(--mc-surface-strong); opacity: .8; }
+                    .mcCfg-version:empty { display: none; }
+                    .mcCfg-intro { margin: .3em 0 0; opacity: .75; max-width: 62ch; font-size: .92em; }
 
-                    .mcCfg-order { list-style: none; margin: .4em 0 0; padding: 0; }
-                    .mcCfg-order li { display: flex; align-items: center; gap: .5em;
-                        border: 1px solid rgba(128, 128, 128, .35); border-radius: 6px;
-                        padding: .3em .6em; margin-bottom: .35em; }
-                    .mcCfg-order-rank { font-size: .8em; opacity: .6; min-width: 1.4em; }
-                    .mcCfg-order-name { flex: 1; }
-                    /* La case d'une rangée tient lieu de nom : son libellé s'étire, les
-                       flèches restent au bout de la ligne. */
-                    .mcCfg-order .emby-checkbox-label { flex: 1; margin: 0; }
-                    .mcCfg-order-native { opacity: .8; }
-                    .mcCfg-order button { min-width: 2.4em; }
-                    .mcCfg-order button[disabled] { opacity: .3; }
+                    /* Interrupteur « Aide » : comme « Descriptions » de Jellyfin Enhanced, il masque
+                       toutes les phrases d'explication pour qui connaît déjà la page. */
+                    .mcCfg-head-tools { margin-left: auto; flex: 0 0 auto; }
+                    .mcCfg-toggle { display: inline-flex; align-items: center; gap: .5em; padding: 6px 8px 6px 12px;
+                        border-radius: 999px; border: 1px solid var(--mc-line); background: var(--mc-surface);
+                        color: inherit; font: inherit; font-size: .85em; cursor: pointer; }
+                    .mcCfg-toggle-state { font-size: .78em; font-weight: 700; padding: 2px 8px; border-radius: 999px;
+                        background: var(--mc-surface-strong); }
+                    .mcCfg-toggle[aria-pressed="true"] .mcCfg-toggle-state { background: var(--mc-accent); color: #fff; }
+                    #mediaCarouselConfigPage.mcCfg-nohints .fieldDescription:not(#seerrTestResult),
+                    #mediaCarouselConfigPage.mcCfg-nohints .mcCfg-group-hint,
+                    #mediaCarouselConfigPage.mcCfg-nohints .mcCfg-intro { display: none; }
 
-                    .mcCfg-alert { display: flex; gap: .6em; align-items: flex-start; font-size: .9em;
-                        border: 1px solid #c98a1b; border-left-width: 4px; border-radius: 6px;
-                        padding: .75em 1em; margin: 0 0 1.4em; background: rgba(201, 138, 27, .1); }
-                    .mcCfg-alert strong { display: block; margin-bottom: .15em; }
+                    /* Sommaire « Aller à » : celui de XFusion, des pastilles qui passent à la ligne. */
+                    .mcCfg-nav { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 16px;
+                        padding: 8px 12px; border: 1px solid var(--mc-line-soft); border-radius: var(--mc-radius);
+                        background: var(--mc-surface); }
+                    .mcCfg-nav-title { font-size: .68em; letter-spacing: .1em; text-transform: uppercase; opacity: .55; margin-right: 6px; }
+                    .mcCfg-nav-link { padding: 5px 11px; border: 1px solid transparent; border-radius: 999px; background: transparent;
+                        color: inherit; font: inherit; font-size: .9em; cursor: pointer; opacity: .78; }
+                    .mcCfg-nav-link:hover { background: var(--mc-surface-strong); opacity: 1; }
+                    .mcCfg-nav-link.is-active { border-color: var(--mc-accent); color: var(--mc-accent); opacity: 1; font-weight: 600; }
 
-                    .mcCfg-group { border: 1px solid rgba(128, 128, 128, .35); border-radius: 8px;
-                        padding: 1.1em 1.3em 1.4em; margin: 0 0 1.4em; }
-                    .mcCfg-group > legend { font-size: 1.12em; font-weight: 600; padding: 0 .45em; }
-                    .mcCfg-group-hint { margin: .1em 0 1em; opacity: .75; max-width: 62ch; }
+                    /* Bloc d'état : le calcul en tête, les chiffres en grille, les services en pied. */
+                    .mcCfg-statusbox { margin: 0 0 18px; border: 1px solid var(--mc-line); border-radius: var(--mc-radius); overflow: hidden; }
+                    .mcCfg-run { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap;
+                        padding: 14px 16px; background: var(--mc-surface-strong); }
+                    .mcCfg-run[data-state="warn"] { background: rgba(230, 168, 23, .14); }
+                    .mcCfg-run-text { flex: 1 1 260px; min-width: 0; }
+                    .mcCfg-caption { font-size: .68em; letter-spacing: .1em; text-transform: uppercase; opacity: .6; margin-bottom: 3px; }
+                    .mcCfg-run-value { font-size: 1.18em; font-weight: 600; display: flex; align-items: center; gap: .45em; }
+                    .mcCfg-run[data-state="ok"] .mcCfg-run-value { color: var(--mc-ok); }
+                    .mcCfg-run[data-state="warn"] .mcCfg-run-value { color: var(--mc-warn); }
+                    .mcCfg-run-detail { font-size: .82em; opacity: .7; overflow-wrap: anywhere; }
+                    .mcCfg-run .raised { margin: 0; width: auto; flex: 0 0 auto; }
 
-                    .mcCfg-section-state { font-size: .82em; opacity: .7; margin: -.4em 0 1.1em; }
+                    .mcCfg-status { display: grid; gap: 1px; background: var(--mc-line-soft);
+                        grid-template-columns: repeat(4, minmax(0, 1fr)); }
+                    @media (max-width: 760px) { .mcCfg-status { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+                    /* Chaque chiffre mène à son réglage d'un clic, comme les cartes de Jellyfin Enhanced. */
+                    .mcCfg-tile { display: block; width: 100%; text-align: left; border: 0; margin: 0; color: inherit; font: inherit;
+                        padding: 12px 16px; background: var(--mc-surface); min-width: 0; cursor: pointer; }
+                    .mcCfg-tile:hover { background: var(--mc-surface-strong); }
+                    .mcCfg-tile > span { display: block; }
+                    button.mcCfg-chip { background: transparent; color: inherit; font: inherit; font-size: .8em; cursor: pointer; }
+                    button.mcCfg-chip:hover { background: var(--mc-surface-strong); }
+                    .mcCfg-tile-name { font-size: .68em; letter-spacing: .08em; text-transform: uppercase; opacity: .6;
+                        display: flex; align-items: center; gap: .45em; }
+                    .mcCfg-tile-dot { width: .7em; height: .7em; border-radius: 50%; flex: 0 0 auto; background: currentColor; opacity: .35; }
+                    [data-state="ok"] > .mcCfg-tile-name .mcCfg-tile-dot { opacity: 1; color: var(--mc-ok); }
+                    [data-state="warn"] > .mcCfg-tile-name .mcCfg-tile-dot { opacity: 1; color: var(--mc-warn); }
+                    .mcCfg-tile-value { font-size: 1.8em; font-weight: 700; line-height: 1.2; margin-top: .1em;
+                        font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+                    .mcCfg-tile[data-state="ok"] .mcCfg-tile-value { color: var(--mc-accent); }
+                    .mcCfg-tile[data-state="off"] .mcCfg-tile-value { opacity: .45; }
+                    .mcCfg-tile-detail { font-size: .78em; opacity: .7; }
+
+                    .mcCfg-health { display: flex; flex-wrap: wrap; gap: .45em; list-style: none; margin: 0; padding: 10px 16px;
+                        border-top: 1px solid var(--mc-line-soft); }
+                    .mcCfg-chip { display: inline-flex; align-items: center; gap: .4em; font-size: .8em;
+                        padding: .25em .7em; border-radius: 999px; border: 1px solid var(--mc-line-soft); }
+                    .mcCfg-chip-mark { font-weight: 700; }
+                    .mcCfg-chip[data-state="ok"] .mcCfg-chip-mark { color: var(--mc-ok); }
+                    .mcCfg-chip[data-state="warn"] { border-color: var(--mc-warn); }
+                    .mcCfg-chip[data-state="warn"] .mcCfg-chip-mark { color: var(--mc-warn); }
+                    .mcCfg-chip[data-state="off"] { opacity: .65; }
+                    .mcCfg-chip-detail { opacity: .75; }
+
+                    /* Panneaux : une section, un titre précédé de son icône. */
+                    .mcCfg-group, .mcCfg-advanced { border: 1px solid var(--mc-line-soft); border-radius: var(--mc-radius);
+                        background: var(--mc-surface); padding: 16px 20px 8px; margin: 0 0 18px; min-width: 0;
+                        scroll-margin-top: 5em; }
+                    .mcCfg-group > legend { float: left; width: 100%; padding: 0; margin: 0 0 6px;
+                        font-size: 1.18em; font-weight: 600; display: flex; align-items: center; gap: .55em; }
+                    .mcCfg-group > legend + * { clear: both; }
+                    .mcCfg-group > legend[data-icon]::before, .mcCfg-advanced > summary[data-icon]::before {
+                        content: attr(data-icon); margin-right: .1em; }
+                    .mcCfg-count { font-size: .68em; font-weight: 600; padding: .15em .65em; border-radius: 999px;
+                        color: var(--mc-accent); background: rgba(0, 164, 220, .14); }
+                    .mcCfg-count:empty { display: none; }
+                    .mcCfg-group-hint { margin: 0 0 14px; opacity: .7; max-width: 62ch; font-size: .9em; line-height: 1.45; }
+                    .mcCfg-group .inputContainer, .mcCfg-group .selectContainer, .mcCfg-group .checkboxContainer,
+                    .mcCfg-advanced .inputContainer, .mcCfg-advanced .selectContainer, .mcCfg-advanced .checkboxContainer { margin-bottom: 1.1em; }
+
+                    .mcCfg-section-state { font-size: .8em; opacity: .65; margin: -.6em 0 1em; }
                     .mcCfg-section-state:empty { display: none; }
 
-                    .mcCfg-grid { display: grid; gap: 0 1.4em;
-                        grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+                    /* auto-fill et non auto-fit : un champ seul garde la largeur d'une colonne au lieu
+                       de s'étirer sur toute la carte. Quatre champs tiennent sur une ligne quand il y a
+                       la place, sinon deux par deux : jamais un dernier champ seul sur sa ligne. */
+                    .mcCfg-grid { display: grid; gap: 0 1.4em; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+                    .mcCfg-grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+                    @media (min-width: 1100px) { .mcCfg-grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+                    @media (max-width: 520px) { .mcCfg-grid-4 { grid-template-columns: minmax(0, 1fr); } }
+                    /* Une pastille de couleur, pas une barre sur toute la largeur. */
+                    #mediaCarouselConfigPage #HighlightColor { max-width: 6em; height: 2.4em; padding: 2px; cursor: pointer; }
 
-                    /* Réglages d'une rangée ou d'un thème, à l'intérieur d'un bloc ou du pli. */
-                    .mcCfg-sub { margin-top: 1.3em; }
-                    .mcCfg-sub-title { font-size: 1em; font-weight: 600; margin: 0 0 .4em; }
+                    .mcCfg-sub { margin-top: .4em; padding-top: 1em; border-top: 1px solid var(--mc-line-soft); }
+                    .mcCfg-sub-title { font-size: .95em; font-weight: 600; margin: 0 0 .5em; }
 
-                    .mcCfg-advanced { border: 1px solid rgba(128, 128, 128, .35); border-radius: 8px;
-                        padding: .9em 1.3em; margin: 0 0 1.4em; }
-                    .mcCfg-advanced > summary { cursor: pointer; font-weight: 600; font-size: 1.12em; }
-                    .mcCfg-advanced[open] { padding-bottom: 1.4em; }
+                    /* Liste des rangées : des lignes fines, les flèches discrètes au bout. */
+                    .mcCfg-order { list-style: none; margin: .4em 0 0; padding: 0; }
+                    .mcCfg-order li { display: flex; align-items: center; gap: .6em; padding: .15em .5em .15em .7em;
+                        margin-bottom: 4px; border-radius: 8px; border: 1px solid var(--mc-line-soft); background: var(--mc-surface); }
+                    .mcCfg-order-rank { font-size: .78em; opacity: .5; min-width: 1.3em; font-variant-numeric: tabular-nums; }
+                    .mcCfg-order-name { flex: 1; }
+                    .mcCfg-order .emby-checkbox-label { flex: 1; margin: 0; min-width: 0; }
+                    .mcCfg-order-native { opacity: .75; padding: .55em 0; }
+                    /* jellyfin-web met ses boutons en flex sans centrage horizontal : la flèche
+                       se collait au bord gauche de sa case. */
+                    #mediaCarouselConfigPage .mcCfg-order button { display: inline-flex; align-items: center; justify-content: center;
+                        min-width: 0; width: 2.2em; height: 2.2em; padding: 0; margin: 0;
+                        font-size: .8em; border-radius: 6px; background: transparent; border: 1px solid var(--mc-line-soft); }
+                    #mediaCarouselConfigPage .mcCfg-order button[disabled] { opacity: .25; }
 
-                    .mcCfg-actions { display: flex; gap: .8em; flex-wrap: wrap; margin: 1.6em 0 1em; }
-                    .mcCfg-actions .raised { flex: 1 1 220px; margin: 0; }
+                    .mcCfg-alert { display: flex; gap: .6em; align-items: flex-start; font-size: .9em;
+                        border: 1px solid var(--mc-warn); border-left-width: 4px; border-radius: 8px;
+                        padding: .75em 1em; margin: 0 0 18px; background: rgba(230, 168, 23, .1); }
+                    .mcCfg-alert strong { display: block; margin-bottom: .15em; }
 
-                    .mcCfg-feedback { margin-top: 1em; padding: .8em 1em; border-radius: 6px;
-                        border: 1px solid rgba(128, 128, 128, .35); background: rgba(128, 128, 128, .08); }
+                    /* Choix des comptes : réglages du serveur = point de départ. */
+                    .mcCfg-note { margin: 0 0 1.1em; padding: .8em 1em; border-radius: 8px; border-left: 3px solid var(--mc-accent);
+                        background: rgba(0, 164, 220, .08); font-size: .9em; }
+                    .mcCfg-note p { margin: 0 0 .7em; }
+                    #mediaCarouselConfigPage .mcCfg-note button { margin: 0; width: auto; }
+                    .mcCfg-note-result { margin: .6em 0 0 !important; opacity: .8; }
+                    .mcCfg-note-result:empty { display: none; }
+
+                    /* Comptes et bibliothèques à exclure : des cases, plus des identifiants à taper. */
+                    .mcCfg-picks { display: grid; gap: 0 1.2em; margin: .2em 0 .3em;
+                        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+                    .mcCfg-picks .emby-checkbox-label { margin: 0; }
+
+                    .mcCfg-advanced > summary { cursor: pointer; font-weight: 600; font-size: 1.18em; padding-bottom: 8px; }
+                    .mcCfg-advanced[open] > summary { margin-bottom: 4px; }
+
+                    /* Barre d'enregistrement : celle de XFusion, montrée seulement quand un réglage
+                       attend d'être enregistré. Fixe, pour ne rien décaler en apparaissant. */
+                    .mcCfg-savebar { position: fixed; left: 50%; bottom: 1.4rem; z-index: 120; display: flex; gap: 18px;
+                        align-items: center; max-width: calc(100vw - 2rem); padding: 10px 12px 10px 18px;
+                        border: 1px solid var(--mc-warn); border-radius: 999px; background: rgba(128, 128, 128, .26);
+                        backdrop-filter: blur(16px) saturate(140%); -webkit-backdrop-filter: blur(16px) saturate(140%);
+                        box-shadow: 0 6px 24px rgba(0, 0, 0, .4);
+                        transform: translateX(-50%) translateY(180%); opacity: 0; pointer-events: none;
+                        transition: transform .22s ease, opacity .22s ease; }
+                    .mcCfg-savebar.is-visible { transform: translateX(-50%) translateY(0); opacity: 1; pointer-events: auto; }
+                    .mcCfg-savebar-state { display: flex; align-items: center; gap: 9px; font-size: .9em; font-weight: 600;
+                        color: var(--mc-warn); white-space: nowrap; }
+                    .mcCfg-savebar-state::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--mc-warn); }
+                    #mediaCarouselConfigPage .mcCfg-savebar button { margin: 0; width: auto; min-width: 150px; border-radius: 999px; }
+                    @media (max-width: 480px) { .mcCfg-savebar-state span { display: none; } }
+
+                    .mcCfg-feedback { margin: 0 0 18px; padding: .8em 1em; border-radius: 8px;
+                        border: 1px solid var(--mc-line-soft); background: var(--mc-surface); }
                     .mcCfg-feedback:empty { display: none; }
 
                     /* `hidden` doit l'emporter partout : une grille, une case à cocher de
@@ -98,22 +219,61 @@
                     #mediaCarouselConfigPage div.checkboxContainer { flex-direction: column; }
                     #mediaCarouselConfigPage .emby-checkbox-label { height: auto; min-height: 2.35em; }
 
+                    @media (max-width: 480px) {
+                        .mcCfg-head { padding: 14px; gap: 12px; }
+                        .mcCfg-head-icon { width: 44px; height: 44px; font-size: 22px; }
+                        .mcCfg-group, .mcCfg-advanced { padding: 14px 12px 6px; }
+                        .mcCfg-tile-value { font-size: 1.45em; }
+                    }
+
                     @media (prefers-reduced-motion: reduce) {
                         #mediaCarouselConfigPage * { transition: none !important; }
+                        .mcCfg-savebar { transform: translateX(-50%) translateY(0); }
                     }
                 </style>
 
+                <!-- Les textes viennent des tables `strings` du script, en français ou en
+                     anglais selon la langue d'affichage du compte : un élément porteur de
+                     `data-i18n` reçoit son texte, `data-i18n-label` le libellé d'un champ. -->
+                <div class="mcCfg-root">
                 <div class="mcCfg-head">
-                    <h1>Media Carousel</h1>
-                    <span class="mcCfg-version" id="mcVersion"></span>
+                    <div class="mcCfg-head-icon" aria-hidden="true">🎬</div>
+                    <div class="mcCfg-head-text">
+                        <h1>Media Carousel<span class="mcCfg-version" id="mcVersion"></span></h1>
+                        <p class="mcCfg-intro" data-i18n="intro"></p>
+                    </div>
+                    <div class="mcCfg-head-tools">
+                        <button type="button" class="mcCfg-toggle" id="mcHintsToggle" aria-pressed="true">
+                            <span data-i18n="hintsLabel"></span><span class="mcCfg-toggle-state" id="mcHintsState"></span>
+                        </button>
+                    </div>
                 </div>
-                <p class="mcCfg-intro">
-                    Des rangées façon Netflix sur la page d'accueil. Cochez-les et rangez-les
-                    ci-dessous : elles se recalculent toutes seules.
-                </p>
 
-                <div class="mcCfg-status" id="mcStatus" role="status" aria-live="polite"
-                     aria-label="État du plugin"></div>
+                <!-- Sommaire construit par `buildNav` à partir des `data-nav` des panneaux. -->
+                <nav class="mcCfg-nav" id="mcNav" data-i18n-aria="navLabel">
+                    <span class="mcCfg-nav-title" data-i18n="navTitle"></span>
+                </nav>
+
+                <div class="mcCfg-statusbox">
+                    <div class="mcCfg-run" id="mcRun" data-state="pending">
+                        <div class="mcCfg-run-text">
+                            <div class="mcCfg-caption" data-i18n="runCaption"></div>
+                            <div class="mcCfg-run-value" id="mcRunValue"></div>
+                            <div class="mcCfg-run-detail" id="mcRunDetail"></div>
+                        </div>
+                        <button is="emby-button" type="button" id="refreshNowButton" class="raised button-submit">
+                            <span data-i18n="refreshNow"></span>
+                        </button>
+                    </div>
+
+                    <!-- Pas de zone `aria-live` : les chiffres se redessinent à chaque frappe dans
+                         une clé ou un nombre, un lecteur d'écran les relirait tous à chaque touche. -->
+                    <div class="mcCfg-status" id="mcStatus" role="group" data-i18n-aria="statusLabel"></div>
+
+                    <ul class="mcCfg-health" id="mcHealth" data-i18n-aria="healthLabel"></ul>
+                </div>
+
+                <p class="mcCfg-feedback" id="mcFeedback" role="status" aria-live="polite"></p>
 
                 <p class="mcCfg-alert" id="mcDuplicateAlert" role="status" aria-live="polite" hidden></p>
 
@@ -122,22 +282,25 @@
                      configuration ; le script ne connaît qu'eux. -->
                 <form id="mediaCarouselConfigForm">
 
-                    <fieldset class="mcCfg-group" id="blockRows">
-                        <legend>Rangées de l'accueil</legend>
+                    <fieldset class="mcCfg-group" id="blockRows" data-nav="navRows">
+                        <legend data-icon="📺"><span data-i18n="legendRows"></span><span class="mcCfg-count" id="mcActiveRows"></span></legend>
 
-                        <div class="checkboxContainer">
-                            <label class="emby-checkbox-label">
-                                <input is="emby-checkbox" type="checkbox" id="EnableHomeRows"
-                                       aria-describedby="hintHomeRows" />
-                                <span>Afficher les rangées sur la page d'accueil</span>
-                            </label>
-                            <div class="fieldDescription" id="hintHomeRows">
-                                Décoché, aucune rangée ne s'affiche ; les collections restent à jour.
-                            </div>
+                        <!-- L'interrupteur général n'est plus proposé (2026-10-25) : les cases des
+                             rangées en tiennent lieu. Il reste chargé et enregistré ; un serveur qui
+                             l'avait coupé le voit annoncé ici, avec de quoi le rallumer. -->
+                        <input type="checkbox" id="EnableHomeRows" hidden />
+                        <div class="mcCfg-alert" id="mcRowsOff" data-show-if="!EnableHomeRows">
+                            <span aria-hidden="true">&#9888;</span><span>
+                                <strong data-i18n="rowsOffTitle"></strong>
+                                <span data-i18n="rowsOffText"></span>
+                                <button is="emby-button" type="button" class="raised button-alt" id="mcRowsOn">
+                                    <span data-i18n="rowsOn"></span>
+                                </button>
+                            </span>
                         </div>
 
                         <div class="inputContainer">
-                            <span class="inputLabel" id="labelRowOrder">Rangées affichées, de haut en bas</span>
+                            <span class="inputLabel" id="labelRowOrder" data-i18n="rowOrder"></span>
                             <!-- La liste écrit son ordre dans ce champ, que les tableaux de
                                  chargement et de sauvegarde connaissent. Chaque rangée du plugin
                                  porte sa case ; les sections de Jellyfin, ajoutées par le script,
@@ -149,170 +312,150 @@
                                     <span class="mcCfg-order-rank"></span>
                                     <label class="emby-checkbox-label">
                                         <input is="emby-checkbox" type="checkbox" id="EnableLocalTop" />
-                                        <span class="mcCfg-order-name">Top du serveur</span>
+                                        <span class="mcCfg-order-name" data-i18n="rowLocal"></span>
                                     </label>
-                                    <button is="emby-button" type="button" class="raised mcCfg-order-up"
-                                            aria-label="Monter : Top du serveur">&#9650;</button>
-                                    <button is="emby-button" type="button" class="raised mcCfg-order-down"
-                                            aria-label="Descendre : Top du serveur">&#9660;</button>
+                                    <button is="emby-button" type="button" class="raised mcCfg-order-up">&#9650;</button>
+                                    <button is="emby-button" type="button" class="raised mcCfg-order-down">&#9660;</button>
                                 </li>
                                 <li data-row="alltime">
                                     <span class="mcCfg-order-rank"></span>
                                     <label class="emby-checkbox-label">
                                         <input is="emby-checkbox" type="checkbox" id="EnableAllTimeRow" />
-                                        <span class="mcCfg-order-name">Les plus regardés de tous les temps</span>
+                                        <span class="mcCfg-order-name" data-i18n="rowAllTime"></span>
                                     </label>
-                                    <button is="emby-button" type="button" class="raised mcCfg-order-up"
-                                            aria-label="Monter : Les plus regardés de tous les temps">&#9650;</button>
-                                    <button is="emby-button" type="button" class="raised mcCfg-order-down"
-                                            aria-label="Descendre : Les plus regardés de tous les temps">&#9660;</button>
+                                    <button is="emby-button" type="button" class="raised mcCfg-order-up">&#9650;</button>
+                                    <button is="emby-button" type="button" class="raised mcCfg-order-down">&#9660;</button>
                                 </li>
                                 <li data-row="global">
                                     <span class="mcCfg-order-rank"></span>
                                     <label class="emby-checkbox-label">
                                         <input is="emby-checkbox" type="checkbox" id="EnableGlobalTop" />
-                                        <span class="mcCfg-order-name">Top mondial</span>
+                                        <span class="mcCfg-order-name" data-i18n="rowGlobal"></span>
                                     </label>
-                                    <button is="emby-button" type="button" class="raised mcCfg-order-up"
-                                            aria-label="Monter : Top mondial">&#9650;</button>
-                                    <button is="emby-button" type="button" class="raised mcCfg-order-down"
-                                            aria-label="Descendre : Top mondial">&#9660;</button>
+                                    <button is="emby-button" type="button" class="raised mcCfg-order-up">&#9650;</button>
+                                    <button is="emby-button" type="button" class="raised mcCfg-order-down">&#9660;</button>
                                 </li>
                                 <li data-row="returning">
                                     <span class="mcCfg-order-rank"></span>
                                     <label class="emby-checkbox-label">
                                         <input is="emby-checkbox" type="checkbox" id="EnableReturningRow" />
-                                        <span class="mcCfg-order-name">De retour cette semaine</span>
+                                        <span class="mcCfg-order-name" data-i18n="rowReturning"></span>
                                     </label>
-                                    <button is="emby-button" type="button" class="raised mcCfg-order-up"
-                                            aria-label="Monter : De retour cette semaine">&#9650;</button>
-                                    <button is="emby-button" type="button" class="raised mcCfg-order-down"
-                                            aria-label="Descendre : De retour cette semaine">&#9660;</button>
+                                    <button is="emby-button" type="button" class="raised mcCfg-order-up">&#9650;</button>
+                                    <button is="emby-button" type="button" class="raised mcCfg-order-down">&#9660;</button>
                                 </li>
                                 <li data-row="neverplayed">
                                     <span class="mcCfg-order-rank"></span>
                                     <label class="emby-checkbox-label">
                                         <input is="emby-checkbox" type="checkbox" id="EnableNeverPlayedRow" />
-                                        <span class="mcCfg-order-name">Jamais vu</span>
+                                        <span class="mcCfg-order-name" data-i18n="rowNeverPlayed"></span>
                                     </label>
-                                    <button is="emby-button" type="button" class="raised mcCfg-order-up"
-                                            aria-label="Monter : Jamais vu">&#9650;</button>
-                                    <button is="emby-button" type="button" class="raised mcCfg-order-down"
-                                            aria-label="Descendre : Jamais vu">&#9660;</button>
+                                    <button is="emby-button" type="button" class="raised mcCfg-order-up">&#9650;</button>
+                                    <button is="emby-button" type="button" class="raised mcCfg-order-down">&#9660;</button>
                                 </li>
                                 <li data-row="because">
                                     <span class="mcCfg-order-rank"></span>
                                     <label class="emby-checkbox-label">
                                         <input is="emby-checkbox" type="checkbox" id="EnableBecauseRow" />
-                                        <span class="mcCfg-order-name">Parce que tu as regardé…</span>
+                                        <span class="mcCfg-order-name" data-i18n="rowBecause"></span>
                                     </label>
-                                    <button is="emby-button" type="button" class="raised mcCfg-order-up"
-                                            aria-label="Monter : Parce que tu as regardé…">&#9650;</button>
-                                    <button is="emby-button" type="button" class="raised mcCfg-order-down"
-                                            aria-label="Descendre : Parce que tu as regardé…">&#9660;</button>
+                                    <button is="emby-button" type="button" class="raised mcCfg-order-up">&#9650;</button>
+                                    <button is="emby-button" type="button" class="raised mcCfg-order-down">&#9660;</button>
                                 </li>
                                 <li data-row="studios">
                                     <span class="mcCfg-order-rank"></span>
                                     <label class="emby-checkbox-label">
                                         <input is="emby-checkbox" type="checkbox" id="EnableStudioRow" />
-                                        <span class="mcCfg-order-name">Par studio</span>
+                                        <span class="mcCfg-order-name" data-i18n="rowStudios"></span>
                                     </label>
-                                    <button is="emby-button" type="button" class="raised mcCfg-order-up"
-                                            aria-label="Monter : Par studio">&#9650;</button>
-                                    <button is="emby-button" type="button" class="raised mcCfg-order-down"
-                                            aria-label="Descendre : Par studio">&#9660;</button>
+                                    <button is="emby-button" type="button" class="raised mcCfg-order-up">&#9650;</button>
+                                    <button is="emby-button" type="button" class="raised mcCfg-order-down">&#9660;</button>
                                 </li>
                                 <li data-row="genres">
                                     <span class="mcCfg-order-rank"></span>
                                     <label class="emby-checkbox-label">
                                         <input is="emby-checkbox" type="checkbox" id="EnableGenreRows" />
-                                        <span class="mcCfg-order-name">Par genre</span>
+                                        <span class="mcCfg-order-name" data-i18n="rowGenres"></span>
                                     </label>
-                                    <button is="emby-button" type="button" class="raised mcCfg-order-up"
-                                            aria-label="Monter : Par genre">&#9650;</button>
-                                    <button is="emby-button" type="button" class="raised mcCfg-order-down"
-                                            aria-label="Descendre : Par genre">&#9660;</button>
+                                    <button is="emby-button" type="button" class="raised mcCfg-order-up">&#9650;</button>
+                                    <button is="emby-button" type="button" class="raised mcCfg-order-down">&#9660;</button>
                                 </li>
                             </ol>
-                            <div class="fieldDescription" id="hintRowOrder">
-                                Les flèches changent la place d'une rangée sur l'accueil.
-                            </div>
+                            <div class="fieldDescription" id="hintRowOrder" data-i18n="hintRowOrder"></div>
                         </div>
 
                         <div class="mcCfg-sub" id="groupReturning" data-show-if="EnableReturningRow">
-                            <h3 class="mcCfg-sub-title">De retour cette semaine</h3>
+                            <h3 class="mcCfg-sub-title" data-i18n="rowReturning"></h3>
                             <div class="mcCfg-grid">
                                 <div class="inputContainer">
-                                    <input is="emby-input" type="text" id="ReturningRowTitle" label="Titre de la rangée" />
+                                    <input is="emby-input" type="text" id="ReturningRowTitle" data-i18n-label="rowTitle" />
                                 </div>
                                 <div class="inputContainer">
                                     <input is="emby-input" type="number" id="ReturningRowDays" min="1" max="365" step="1"
-                                           label="Épisodes ajoutés depuis (jours)" required />
+                                           data-i18n-label="returningDays" required />
                                 </div>
                                 <div class="inputContainer">
                                     <input is="emby-input" type="number" id="ReturningRowSize" min="1" max="100" step="1"
-                                           label="Nombre de séries" required />
+                                           data-i18n-label="seriesCount" required />
                                 </div>
                             </div>
                         </div>
 
                         <div class="mcCfg-sub" id="groupNeverPlayed" data-show-if="EnableNeverPlayedRow">
-                            <h3 class="mcCfg-sub-title">Jamais vu</h3>
+                            <h3 class="mcCfg-sub-title" data-i18n="rowNeverPlayed"></h3>
                             <div class="mcCfg-grid">
                                 <div class="inputContainer">
-                                    <input is="emby-input" type="text" id="NeverPlayedRowTitle" label="Titre de la rangée" />
+                                    <input is="emby-input" type="text" id="NeverPlayedRowTitle" data-i18n-label="rowTitle" />
                                 </div>
                                 <div class="inputContainer">
                                     <input is="emby-input" type="number" id="NeverPlayedRowSize" min="1" max="100" step="1"
-                                           label="Nombre de films" required />
+                                           data-i18n-label="moviesCount" required />
                                 </div>
                                 <div class="inputContainer">
                                     <input is="emby-input" type="number" id="NeverPlayedMinRating" min="0" max="10" step="0.1"
-                                           label="Note minimale (sur 10)" required />
+                                           data-i18n-label="minRating" required />
                                 </div>
                             </div>
                         </div>
 
                         <div class="mcCfg-sub" id="groupBecause" data-show-if="EnableBecauseRow">
-                            <h3 class="mcCfg-sub-title">Parce que tu as regardé…</h3>
+                            <h3 class="mcCfg-sub-title" data-i18n="rowBecause"></h3>
                             <div class="mcCfg-grid">
                                 <div class="inputContainer">
                                     <input is="emby-input" type="text" id="BecauseRowTitle"
-                                           label="Titre de la rangée" aria-describedby="hintBecauseTitle" />
-                                    <div class="fieldDescription" id="hintBecauseTitle">
-                                        {0} devient le titre du dernier film vu.
-                                    </div>
+                                           data-i18n-label="rowTitle" aria-describedby="hintBecauseTitle" />
+                                    <div class="fieldDescription" id="hintBecauseTitle" data-i18n="hintBecauseTitle"></div>
                                 </div>
                                 <div class="inputContainer">
                                     <input is="emby-input" type="number" id="BecauseRowSize" min="1" max="100" step="1"
-                                           label="Nombre de titres" required />
+                                           data-i18n-label="titlesCount" required />
                                 </div>
                             </div>
                         </div>
 
                         <div class="mcCfg-sub" id="groupStudio" data-show-if="EnableStudioRow">
-                            <h3 class="mcCfg-sub-title">Par studio</h3>
+                            <h3 class="mcCfg-sub-title" data-i18n="rowStudios"></h3>
                             <div class="mcCfg-grid">
                                 <div class="inputContainer">
-                                    <input is="emby-input" type="text" id="StudioRowTitle" label="Titre de la rangée" />
+                                    <input is="emby-input" type="text" id="StudioRowTitle" data-i18n-label="rowTitle" />
                                 </div>
                                 <div class="inputContainer">
                                     <input is="emby-input" type="number" id="StudioRowSize" min="1" max="100" step="1"
-                                           label="Nombre de studios" required />
+                                           data-i18n-label="studiosCount" required />
                                 </div>
                             </div>
                         </div>
 
                         <div class="mcCfg-sub" id="groupGenre" data-show-if="EnableGenreRows">
-                            <h3 class="mcCfg-sub-title">Par genre</h3>
+                            <h3 class="mcCfg-sub-title" data-i18n="rowGenres"></h3>
                             <div class="mcCfg-grid">
                                 <div class="inputContainer">
                                     <input is="emby-input" type="number" id="GenreRowCount" min="1" max="30" step="1"
-                                           label="Nombre de genres" required />
+                                           data-i18n-label="genresCount" required />
                                 </div>
                                 <div class="inputContainer">
                                     <input is="emby-input" type="number" id="GenreRowItemCount" min="5" max="60" step="1"
-                                           label="Titres par rangée" required />
+                                           data-i18n-label="titlesPerRow" required />
                                 </div>
                             </div>
                         </div>
@@ -320,143 +463,129 @@
                         <p class="mcCfg-section-state" data-state-for="ReturningSeries,NeverPlayed,Studios,Genres"></p>
                     </fieldset>
 
-                    <fieldset class="mcCfg-group" id="groupLocal" data-show-if="EnableLocalTop|EnableAllTimeRow">
-                        <legend>Top du serveur</legend>
-                        <p class="mcCfg-group-hint" id="hintLocal">
-                            Les titres les plus regardés ici. Un compte vaut au plus un point par titre,
-                            et un épisode compte pour sa série.
-                        </p>
+                    <fieldset class="mcCfg-group" id="groupLocal" data-show-if="EnableLocalTop|EnableAllTimeRow" data-nav="legendLocal">
+                        <legend data-icon="🏆"><span data-i18n="legendLocal"></span></legend>
+                        <p class="mcCfg-group-hint" id="hintLocal" data-i18n="hintLocal"></p>
                         <p class="mcCfg-section-state" data-state-for="LocalTop,AllTime"></p>
 
-                        <div class="mcCfg-grid">
+                        <div class="mcCfg-grid mcCfg-grid-4">
                             <div class="inputContainer" data-show-if="EnableLocalTop">
-                                <input is="emby-input" type="text" id="LocalRowTitle" label="Titre de la rangée" />
+                                <input is="emby-input" type="text" id="LocalRowTitle" data-i18n-label="rowTitle" />
                             </div>
                             <div class="inputContainer" data-show-if="EnableLocalTop">
                                 <input is="emby-input" type="number" id="LocalTopSize" min="1" max="100" step="1"
-                                       label="Nombre de titres" required />
+                                       data-i18n-label="titlesCount" required />
                             </div>
                             <div class="inputContainer" data-show-if="EnableLocalTop">
                                 <input is="emby-input" type="number" id="LocalTopWindowDays" min="0" max="3650" step="1"
-                                       label="Période (jours)" required aria-describedby="hintWindow" />
-                                <div class="fieldDescription" id="hintWindow">
-                                    7 : la semaine. 30 : le mois. 0 : depuis toujours.
-                                </div>
+                                       data-i18n-label="windowDays" required aria-describedby="hintWindow" />
+                                <div class="fieldDescription" id="hintWindow" data-i18n="hintWindow"></div>
                             </div>
                             <div class="selectContainer">
-                                <select is="emby-select" id="LocalTopMediaKind" label="Types de médias">
-                                    <option value="Movies">Films</option>
-                                    <option value="Series">Séries</option>
-                                    <option value="Both">Films et séries</option>
+                                <select is="emby-select" id="LocalTopMediaKind" data-i18n-label="mediaKind">
+                                    <option value="Movies" data-i18n="kindMovies"></option>
+                                    <option value="Series" data-i18n="kindSeries"></option>
+                                    <option value="Both" data-i18n="kindBoth"></option>
                                 </select>
                             </div>
                         </div>
 
                         <div class="mcCfg-sub" id="groupAllTime" data-show-if="EnableAllTimeRow">
-                            <h3 class="mcCfg-sub-title">Les plus regardés de tous les temps</h3>
+                            <h3 class="mcCfg-sub-title" data-i18n="rowAllTime"></h3>
                             <div class="mcCfg-grid">
                                 <div class="inputContainer">
-                                    <input is="emby-input" type="text" id="AllTimeRowTitle" label="Titre de la rangée" />
+                                    <input is="emby-input" type="text" id="AllTimeRowTitle" data-i18n-label="rowTitle" />
                                 </div>
                                 <div class="inputContainer">
                                     <input is="emby-input" type="number" id="AllTimeRowSize" min="1" max="100" step="1"
-                                           label="Nombre de titres" required />
+                                           data-i18n-label="titlesCount" required />
                                 </div>
                             </div>
                         </div>
                     </fieldset>
 
-                    <fieldset class="mcCfg-group" id="groupGlobal" data-show-if="EnableGlobalTop">
-                        <legend>Top mondial</legend>
-                        <p class="mcCfg-group-hint" id="hintGlobal">
-                            Les tendances de TMDB ou de Trakt, rapprochées de votre bibliothèque.
-                        </p>
+                    <fieldset class="mcCfg-group" id="groupGlobal" data-show-if="EnableGlobalTop" data-nav="legendGlobal">
+                        <legend data-icon="🌍"><span data-i18n="legendGlobal"></span></legend>
+                        <p class="mcCfg-group-hint" id="hintGlobal" data-i18n="hintGlobal"></p>
                         <p class="mcCfg-section-state" data-state-for="GlobalTop"></p>
 
-                        <div class="mcCfg-grid">
+                        <div class="mcCfg-grid mcCfg-grid-4">
                             <div class="selectContainer">
-                                <select is="emby-select" id="GlobalTopProvider" label="Source">
+                                <select is="emby-select" id="GlobalTopProvider" data-i18n-label="provider">
                                     <option value="Tmdb">TMDB</option>
                                     <option value="Trakt">Trakt</option>
                                 </select>
                             </div>
                             <div class="selectContainer">
-                                <select is="emby-select" id="GlobalTopFeed" label="Liste" aria-describedby="hintFeed">
-                                    <option value="Trending">Tendances du moment</option>
-                                    <option value="NowPlaying">À l'affiche / en diffusion</option>
-                                    <option value="Upcoming">Prochaines sorties</option>
+                                <select is="emby-select" id="GlobalTopFeed" data-i18n-label="feed" aria-describedby="hintFeed">
+                                    <option value="Trending" data-i18n="feedTrending"></option>
+                                    <option value="NowPlaying" data-i18n="feedNowPlaying"></option>
+                                    <option value="Upcoming" data-i18n="feedUpcoming"></option>
                                 </select>
-                                <div class="fieldDescription" id="hintFeed">
-                                    TMDB seulement. « Prochaines sorties » : films seulement.
-                                </div>
+                                <div class="fieldDescription" id="hintFeed" data-i18n="hintFeed"></div>
                             </div>
                             <div class="selectContainer">
-                                <select is="emby-select" id="GlobalTopMediaKind" label="Types de médias">
-                                    <option value="Movies">Films</option>
-                                    <option value="Series">Séries</option>
-                                    <option value="Both">Films et séries</option>
+                                <select is="emby-select" id="GlobalTopMediaKind" data-i18n-label="mediaKind">
+                                    <option value="Movies" data-i18n="kindMovies"></option>
+                                    <option value="Series" data-i18n="kindSeries"></option>
+                                    <option value="Both" data-i18n="kindBoth"></option>
                                 </select>
                             </div>
                             <div class="inputContainer">
                                 <input is="emby-input" type="number" id="GlobalTopSize" min="1" max="100" step="1"
-                                       label="Nombre de titres" required />
+                                       data-i18n-label="titlesCount" required />
                             </div>
                         </div>
 
                         <div class="checkboxContainer" data-show-if="GlobalTopMediaKind=Both">
                             <label class="emby-checkbox-label">
                                 <input is="emby-checkbox" type="checkbox" id="GlobalTopSplitByType" />
-                                <span>Une rangée pour les films, une pour les séries</span>
+                                <span data-i18n="splitByType"></span>
                             </label>
                         </div>
 
                         <div class="mcCfg-grid">
                             <div class="inputContainer" data-show-if="!GlobalTopSplitByType|!GlobalTopMediaKind=Both">
-                                <input is="emby-input" type="text" id="GlobalRowTitle" label="Titre de la rangée" />
+                                <input is="emby-input" type="text" id="GlobalRowTitle" data-i18n-label="rowTitle" />
                             </div>
                             <div class="inputContainer" data-show-if="GlobalTopSplitByType&GlobalTopMediaKind=Both">
-                                <input is="emby-input" type="text" id="GlobalMoviesRowTitle" label="Titre — films" />
+                                <input is="emby-input" type="text" id="GlobalMoviesRowTitle" data-i18n-label="titleMovies" />
                             </div>
                             <div class="inputContainer" data-show-if="GlobalTopSplitByType&GlobalTopMediaKind=Both">
-                                <input is="emby-input" type="text" id="GlobalSeriesRowTitle" label="Titre — séries" />
+                                <input is="emby-input" type="text" id="GlobalSeriesRowTitle" data-i18n-label="titleSeries" />
                             </div>
                         </div>
 
                         <div class="inputContainer">
                             <input is="emby-input" type="password" id="GlobalTopApiKey" autocomplete="off"
-                                   label="Clé d'API" aria-describedby="hintApiKey" />
-                            <div class="fieldDescription" id="hintApiKey">
-                                TMDB : clé v3 ou jeton v4. Trakt : identifiant client. Jamais envoyée aux navigateurs.
-                            </div>
+                                   data-i18n-label="apiKey" aria-describedby="hintApiKey" />
+                            <div class="fieldDescription" id="hintApiKey" data-i18n="hintApiKey"></div>
                         </div>
 
                         <div class="checkboxContainer">
                             <label class="emby-checkbox-label">
                                 <input is="emby-checkbox" type="checkbox" id="GlobalTopLibraryOnly" />
-                                <span>Ne garder que les titres présents dans la bibliothèque</span>
+                                <span data-i18n="libraryOnly"></span>
                             </label>
                         </div>
                     </fieldset>
 
-                    <fieldset class="mcCfg-group" id="blockSeerr" data-show-if="EnableGlobalTop">
-                        <legend>Seerr</legend>
-                        <p class="mcCfg-group-hint" id="hintSeerr">
-                            Un bouton « Demander » sur les titres du Top mondial absents de la
-                            bibliothèque, au nom du compte Seerr de chacun.
-                        </p>
+                    <fieldset class="mcCfg-group" id="blockSeerr" data-show-if="EnableGlobalTop" data-nav="navSeerr">
+                        <legend data-icon="📥"><span>Seerr</span></legend>
+                        <p class="mcCfg-group-hint" id="hintSeerr" data-i18n="hintSeerr"></p>
 
                         <div class="checkboxContainer">
                             <label class="emby-checkbox-label">
                                 <input is="emby-checkbox" type="checkbox" id="EnableSeerrRequests"
                                        aria-describedby="hintSeerr" />
-                                <span>Proposer les demandes à Seerr</span>
+                                <span data-i18n="seerrEnable"></span>
                             </label>
                         </div>
                         <p class="mcCfg-alert" id="mcSeerrAlert" role="status" aria-live="polite"
                            data-show-if="EnableSeerrRequests&GlobalTopLibraryOnly" hidden>
                             <span aria-hidden="true">&#9888;</span><span>
-                                <strong>Aucun bouton ne s'affichera</strong>
-                                Le Top mondial ne garde que les titres présents : il n'y a rien à demander.
+                                <strong data-i18n="seerrAlertTitle"></strong>
+                                <span data-i18n="seerrAlertText"></span>
                             </span>
                         </p>
 
@@ -464,203 +593,158 @@
                             <div class="mcCfg-grid">
                                 <div class="inputContainer">
                                     <input is="emby-input" type="url" id="SeerrUrl" autocomplete="off"
-                                           label="Adresse de Seerr" aria-describedby="hintSeerrUrl" />
-                                    <div class="fieldDescription" id="hintSeerrUrl">
-                                        Vue depuis le serveur, par exemple http://192.168.1.10:5055.
-                                    </div>
+                                           data-i18n-label="seerrUrl" aria-describedby="hintSeerrUrl" />
+                                    <div class="fieldDescription" id="hintSeerrUrl" data-i18n="hintSeerrUrl"></div>
                                 </div>
                                 <div class="inputContainer">
                                     <input is="emby-input" type="password" id="SeerrApiKey" autocomplete="off"
-                                           label="Clé d'API de Seerr" aria-describedby="hintSeerrKey" />
-                                    <div class="fieldDescription" id="hintSeerrKey">
-                                        Dans Seerr : Paramètres, Général.
-                                    </div>
+                                           data-i18n-label="seerrKey" aria-describedby="hintSeerrKey" />
+                                    <div class="fieldDescription" id="hintSeerrKey" data-i18n="hintSeerrKey"></div>
                                 </div>
                             </div>
                             <div class="checkboxContainer">
                                 <label class="emby-checkbox-label">
                                     <input is="emby-checkbox" type="checkbox" id="SeerrAdvancedRequests" />
-                                    <span>Proposer le serveur, le profil de qualité et le dossier</span>
+                                    <span data-i18n="seerrAdvanced"></span>
                                 </label>
                             </div>
                             <button is="emby-button" type="button" id="seerrTestButton" class="raised button-alt">
-                                <span>Tester la connexion</span>
+                                <span data-i18n="seerrTest"></span>
                             </button>
                             <p class="fieldDescription" id="seerrTestResult" role="status" aria-live="polite"></p>
                         </div>
                     </fieldset>
 
-                    <fieldset class="mcCfg-group" id="blockLook">
-                        <legend>Apparence</legend>
+                    <fieldset class="mcCfg-group" id="blockLook" data-nav="legendLook">
+                        <legend data-icon="🎨"><span data-i18n="legendLook"></span></legend>
                         <div class="mcCfg-grid">
                             <div class="inputContainer">
                                 <input is="emby-input" type="color" id="HighlightColor"
-                                       label="Couleur d'accentuation" aria-describedby="hintColor" />
-                                <div class="fieldDescription" id="hintColor">
-                                    Contour du chiffre au survol, et focus.
-                                </div>
+                                       data-i18n-label="color" aria-describedby="hintColor" />
+                                <div class="fieldDescription" id="hintColor" data-i18n="hintColor"></div>
                             </div>
                             <div class="inputContainer">
                                 <input is="emby-input" type="number" id="RankNumberScale" min="40" max="100" step="5"
-                                       label="Taille du chiffre (%)" required aria-describedby="hintRankScale" />
-                                <div class="fieldDescription" id="hintRankScale">
-                                    100 : comme Netflix. Plus bas, la rangée se resserre ; l'affiche ne change pas.
-                                </div>
+                                       data-i18n-label="rankScale" required aria-describedby="hintRankScale" />
+                                <div class="fieldDescription" id="hintRankScale" data-i18n="hintRankScale"></div>
                             </div>
                         </div>
                         <div class="checkboxContainer">
                             <label class="emby-checkbox-label">
                                 <input is="emby-checkbox" type="checkbox" id="AllowUserPreferences"
                                        aria-describedby="hintUserPrefs" />
-                                <span>Laisser chaque compte régler son accueil</span>
+                                <span data-i18n="userPrefs"></span>
                             </label>
-                            <div class="fieldDescription" id="hintUserPrefs">
-                                Un bouton sur l'accueil : rangées, ordre, couleur. Cette page reste le réglage par défaut.
-                            </div>
+                            <div class="fieldDescription" id="hintUserPrefs" data-i18n="hintUserPrefs"></div>
+                        </div>
+                        <!-- Comme l'encadré de Jellyfin Enhanced : cette page n'est qu'un point de
+                             départ pour les comptes qui ont fait leurs propres choix. -->
+                        <div class="mcCfg-note" id="mcPrefsNote" data-show-if="AllowUserPreferences">
+                            <p id="mcPrefsInfo"></p>
+                            <button is="emby-button" type="button" class="raised button-alt" id="mcResetAll">
+                                <span id="mcResetAllLabel"></span>
+                            </button>
+                            <p class="mcCfg-note-result" id="mcResetAllResult" role="status" aria-live="polite"></p>
                         </div>
                     </fieldset>
 
-                    <details class="mcCfg-advanced" id="advancedSettings">
-                        <summary>Réglages avancés</summary>
+                    <details class="mcCfg-advanced" id="advancedSettings" data-nav="navAdvanced">
+                        <summary data-icon="⚙️" data-i18n="advanced"></summary>
 
                         <div class="mcCfg-sub">
-                            <h3 class="mcCfg-sub-title">Exclusions</h3>
-                            <div class="checkboxContainer">
-                                <label class="emby-checkbox-label">
-                                    <input is="emby-checkbox" type="checkbox" id="ExcludeChannelContent"
-                                           aria-describedby="hintChannel" />
-                                    <span>Ignorer le contenu IPTV (XFusion et autres chaînes)</span>
-                                </label>
-                                <div class="fieldDescription" id="hintChannel">
-                                    Garde les rangées sur votre propre bibliothèque.
+                            <h3 class="mcCfg-sub-title" data-i18n="exclusions"></h3>
+                            <!-- « Ignorer les chaînes » n'est plus proposé (2026-10-25) : le réglage reste
+                                 actif, enregistré tel quel, et le contenu des chaînes reste hors des rangées. -->
+                            <!-- Les comptes et les bibliothèques du serveur se cochent ; la zone de
+                                 texte, qui porte la valeur enregistrée, ne se montre que si la liste
+                                 n'a pas pu être lue. -->
+                            <div class="inputContainer">
+                                <span class="inputLabel" id="labelPickUsers" data-i18n="excludedUsers"></span>
+                                <div class="mcCfg-picks" id="mcPickUsers" role="group"
+                                     aria-labelledby="labelPickUsers" aria-describedby="hintExcluded" hidden></div>
+                                <div id="mcRawUsers">
+                                    <textarea is="emby-textarea" id="ExcludedUserIds" rows="2"
+                                              data-i18n-label="excludedIds" aria-describedby="hintExcluded"></textarea>
                                 </div>
+                                <div class="fieldDescription" id="hintExcluded" data-i18n="hintExcluded"></div>
                             </div>
                             <div class="inputContainer">
-                                <textarea is="emby-textarea" id="ExcludedUserIds" rows="2"
-                                          label="Comptes exclus" aria-describedby="hintExcluded"></textarea>
-                                <div class="fieldDescription" id="hintExcluded">
-                                    Un identifiant par ligne : comptes de service, invités.
+                                <span class="inputLabel" id="labelPickLibraries" data-i18n="excludedLibraries"></span>
+                                <div class="mcCfg-picks" id="mcPickLibraries" role="group"
+                                     aria-labelledby="labelPickLibraries" aria-describedby="hintExcludedLib" hidden></div>
+                                <div id="mcRawLibraries">
+                                    <textarea is="emby-textarea" id="ExcludedLibraryIds" rows="2"
+                                              data-i18n-label="excludedIds" aria-describedby="hintExcludedLib"></textarea>
                                 </div>
-                            </div>
-                            <div class="inputContainer">
-                                <textarea is="emby-textarea" id="ExcludedLibraryIds" rows="2"
-                                          label="Bibliothèques exclues" aria-describedby="hintExcludedLib"></textarea>
-                                <div class="fieldDescription" id="hintExcludedLib">
-                                    Un identifiant par ligne. Vaut pour toutes les rangées.
-                                </div>
+                                <div class="fieldDescription" id="hintExcludedLib" data-i18n="hintExcludedLib"></div>
                             </div>
                         </div>
 
                         <div class="mcCfg-sub" id="groupPlayCount" data-show-if="@playCount">
-                            <h3 class="mcCfg-sub-title">Comptage par nombre de lectures</h3>
-                            <p class="mcCfg-group-hint">
-                                Pour « de tous les temps », et pour le Top du serveur sans Playback Reporting.
-                            </p>
+                            <h3 class="mcCfg-sub-title" data-i18n="playCount"></h3>
+                            <p class="mcCfg-group-hint" data-i18n="hintPlayCount"></p>
                             <div class="mcCfg-grid">
                                 <div class="inputContainer">
                                     <input is="emby-input" type="number" id="MaxPlaysCountedPerUser" min="0" max="100" step="1"
-                                           label="Lectures comptées par compte" required aria-describedby="hintCap" />
-                                    <div class="fieldDescription" id="hintCap">Par titre, sur un classement depuis toujours. 0 : sans limite.</div>
-                                </div>
-                                <div class="inputContainer">
-                                    <input is="emby-input" type="number" id="CandidatesPerUser" min="10" max="1000" step="10"
-                                           label="Titres examinés par compte" required aria-describedby="hintCandidates" />
-                                    <div class="fieldDescription" id="hintCandidates">Plus haut : plus précis, plus lent.</div>
+                                           data-i18n-label="maxPlays" required aria-describedby="hintCap" />
+                                    <div class="fieldDescription" id="hintCap" data-i18n="hintCap"></div>
                                 </div>
                             </div>
                         </div>
 
                         <div class="mcCfg-sub">
-                            <h3 class="mcCfg-sub-title">Recalcul et collections</h3>
-                            <div class="inputContainer">
-                                <input is="emby-input" type="number" id="RefreshIntervalHours" min="1" max="168" step="1"
-                                       label="Recalcul toutes les (heures)" required aria-describedby="hintInterval" />
-                                <div class="fieldDescription" id="hintInterval">
-                                    Remplace l'intervalle de la tâche planifiée de Jellyfin.
-                                </div>
-                            </div>
+                            <h3 class="mcCfg-sub-title" data-i18n="collections"></h3>
                             <div class="checkboxContainer">
                                 <label class="emby-checkbox-label">
                                     <input is="emby-checkbox" type="checkbox" id="SyncCollections"
                                            aria-describedby="hintCollections" />
-                                    <span>Créer aussi une collection par classement</span>
+                                    <span data-i18n="syncCollections"></span>
                                 </label>
-                                <div class="fieldDescription" id="hintCollections">
-                                    Pour les clients sans les rangées : Kodi, certains boîtiers TV.
-                                </div>
+                                <div class="fieldDescription" id="hintCollections" data-i18n="hintCollections"></div>
                             </div>
                             <div class="mcCfg-grid" id="groupCollections" data-show-if="SyncCollections">
                                 <div class="inputContainer">
                                     <input is="emby-input" type="text" id="LocalCollectionName"
-                                           label="Collection — Top du serveur" />
+                                           data-i18n-label="collectionLocal" />
                                 </div>
                                 <div class="inputContainer">
                                     <input is="emby-input" type="text" id="GlobalCollectionName"
-                                           label="Collection — Top mondial" />
+                                           data-i18n-label="collectionGlobal" />
                                 </div>
                             </div>
                         </div>
 
                         <div class="mcCfg-sub">
-                            <h3 class="mcCfg-sub-title">Sections de Jellyfin</h3>
+                            <h3 class="mcCfg-sub-title" data-i18n="nativeSections"></h3>
                             <div class="checkboxContainer">
                                 <label class="emby-checkbox-label">
                                     <input is="emby-checkbox" type="checkbox" id="ManageNativeSections"
                                            aria-describedby="hintManageNative" />
-                                    <span>Les ranger avec les rangées du plugin</span>
+                                    <span data-i18n="manageNative"></span>
                                 </label>
-                                <div class="fieldDescription" id="hintManageNative">
-                                    « Continuer de regarder », « À suivre »… rejoignent la liste plus haut ;
-                                    cet ordre s'impose à tous les comptes.
-                                </div>
+                                <div class="fieldDescription" id="hintManageNative" data-i18n="hintManageNative"></div>
                             </div>
                             <div class="checkboxContainer">
                                 <label class="emby-checkbox-label">
                                     <input is="emby-checkbox" type="checkbox" id="HideNativeHomeSections"
                                            aria-describedby="hintHideNative" />
-                                    <span>Les masquer</span>
+                                    <span data-i18n="hideNative"></span>
                                 </label>
-                                <div class="fieldDescription" id="hintHideNative">
-                                    Ne restent que vos bibliothèques et les rangées du plugin, pour tous les comptes.
-                                </div>
+                                <div class="fieldDescription" id="hintHideNative" data-i18n="hintHideNative"></div>
                             </div>
                         </div>
 
-                        <div class="mcCfg-sub" data-show-if="EnableStudioRow|EnableGenreRows">
-                            <h3 class="mcCfg-sub-title">Studios et genres</h3>
-                            <div class="mcCfg-grid">
-                                <div class="inputContainer" data-show-if="EnableStudioRow">
-                                    <input is="emby-input" type="number" id="MinItemsPerStudio" min="1" max="100" step="1"
-                                           label="Titres minimum par studio" required />
-                                </div>
-                                <div class="inputContainer" data-show-if="EnableGenreRows">
-                                    <input is="emby-input" type="number" id="MinItemsPerGenre" min="1" max="100" step="1"
-                                           label="Titres minimum par genre" required />
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="mcCfg-sub" data-show-if="EnableGlobalTop">
-                            <h3 class="mcCfg-sub-title">Top mondial</h3>
-                            <div class="inputContainer">
-                                <input is="emby-input" type="text" id="MetadataLanguage"
-                                       label="Langue des titres" aria-describedby="hintLang" />
-                                <div class="fieldDescription" id="hintLang">Par exemple fr-FR.</div>
-                            </div>
-                        </div>
                     </details>
 
-                    <div class="mcCfg-actions">
-                        <button is="emby-button" type="submit" class="raised button-submit">
-                            <span>Enregistrer</span>
-                        </button>
-                        <button is="emby-button" type="button" id="refreshNowButton" class="raised">
-                            <span>Recalculer maintenant</span>
+                    <!-- Celle de XFusion : visible seulement quand un réglage attend d'être enregistré. -->
+                    <div class="mcCfg-savebar" id="mcSaveBar" aria-hidden="true">
+                        <div class="mcCfg-savebar-state"><span data-i18n="unsaved"></span></div>
+                        <button is="emby-button" type="submit" class="raised button-submit" id="mcSaveButton">
+                            <span data-i18n="save"></span>
                         </button>
                     </div>
-
-                    <p class="mcCfg-feedback" id="mcFeedback" role="status" aria-live="polite"></p>
                 </form>
+                </div>
             </div>
         </div>
 
@@ -677,23 +761,22 @@
                     'EnableBecauseRow', 'EnableAllTimeRow',
                     'EnableHomeRows', 'HideNativeHomeSections', 'ManageNativeSections', 'SyncCollections',
                     'AllowUserPreferences',
-                    'ExcludeChannelContent',
                     'EnableSeerrRequests', 'SeerrAdvancedRequests', 'GlobalTopSplitByType'
                 ];
                 var numbers = [
-                    'LocalTopSize', 'LocalTopWindowDays', 'MaxPlaysCountedPerUser', 'CandidatesPerUser',
-                    'GlobalTopSize', 'StudioRowSize', 'MinItemsPerStudio',
-                    'GenreRowCount', 'GenreRowItemCount', 'MinItemsPerGenre',
+                    'LocalTopSize', 'LocalTopWindowDays', 'MaxPlaysCountedPerUser',
+                    'GlobalTopSize', 'StudioRowSize',
+                    'GenreRowCount', 'GenreRowItemCount',
                     'ReturningRowDays', 'ReturningRowSize', 'NeverPlayedRowSize', 'BecauseRowSize',
                     'AllTimeRowSize',
-                    'RefreshIntervalHours', 'RankNumberScale'
+                    'RankNumberScale'
                 ];
                 // Seul reglage a virgule : parseInt le tronquerait a 7.
                 var decimals = ['NeverPlayedMinRating'];
                 var texts = [
                     'LocalTopMediaKind', 'GlobalTopProvider', 'GlobalTopApiKey', 'GlobalTopMediaKind',
                     'GlobalTopFeed',
-                    'MetadataLanguage', 'StudioRowTitle', 'ReturningRowTitle', 'NeverPlayedRowTitle',
+                    'StudioRowTitle', 'ReturningRowTitle', 'NeverPlayedRowTitle',
                     'BecauseRowTitle', 'AllTimeRowTitle', 'RowOrder',
                     'LocalRowTitle', 'GlobalRowTitle', 'GlobalMoviesRowTitle', 'GlobalSeriesRowTitle',
                     'HighlightColor', 'LocalCollectionName', 'GlobalCollectionName',
@@ -708,20 +791,501 @@
                     'EnableBecauseRow', 'EnableAllTimeRow'
                 ];
 
-                var sectionLabels = {
-                    LocalTop: 'Top du serveur',
-                    AllTime: 'De tous les temps',
-                    GlobalTop: 'Top mondial',
-                    ReturningSeries: 'De retour',
-                    NeverPlayed: 'Jamais vu',
-                    Studios: 'Studios',
-                    Genres: 'Genres'
+                // ----------------------------------------------------------
+                // Textes, en français et en anglais
+                // ----------------------------------------------------------
+
+                /* Une table par langue, les mêmes clés dans les deux : le test de la page
+                   vérifie qu'aucune ne manque. `{nom}` est remplacé à l'affichage. Les noms
+                   des sections de Jellyfin sont ceux de jellyfin-web (fr.json, en-us.json). */
+                var strings = {
+                    fr: {
+                        intro: 'Des rangées façon Netflix sur la page d\'accueil. Cochez-les et rangez-les ci-dessous : elles se recalculent toutes seules.',
+                        healthLabel: 'Services utilisés',
+                        statusLabel: 'Chiffres clés',
+                        refreshNow: 'Recalculer maintenant',
+                        runCaption: 'Calcul des rangées',
+                        navTitle: 'Aller à', navLabel: 'Sections de la page',
+                        navRows: 'Rangées', navSeerr: 'Seerr', navAdvanced: 'Avancé',
+                        unsaved: 'Modifications non enregistrées',
+                        hintsLabel: 'Aide', hintsOn: 'OUI', hintsOff: 'NON',
+                        prefsInfo: 'Cette page est le point de départ : un compte qui a fait ses propres choix les garde. Comptes concernés : {n}.',
+                        resetAll: 'Remettre tous les comptes aux réglages du serveur',
+                        resetAllConfirm: 'Confirmer : effacer les choix de {n} compte(s)',
+                        resetAllDone: 'Choix effacés pour {n} compte(s).',
+                        resetAllFailed: 'L\'effacement a échoué.',
+                        legendRows: 'Rangées de l\'accueil',
+                        rowsOffTitle: 'Les rangées sont masquées sur l\'accueil.',
+                        rowsOffText: 'Elles restent calculées, mais personne ne les voit.',
+                        rowsOn: 'Les afficher',
+                        activeRows: '{n} / {total} actives',
+                        rowOrder: 'Rangées affichées, de haut en bas',
+                        hintRowOrder: 'Les flèches changent la place d\'une rangée sur l\'accueil.',
+                        rowLocal: 'Top du serveur',
+                        rowAllTime: 'Les plus regardés de tous les temps',
+                        rowGlobal: 'Top mondial',
+                        rowReturning: 'De retour cette semaine',
+                        rowNeverPlayed: 'Jamais vu',
+                        rowBecause: 'Parce que tu as regardé…',
+                        rowStudios: 'Par studio',
+                        rowGenres: 'Par genre',
+                        moveUp: 'Monter : {name}',
+                        moveDown: 'Descendre : {name}',
+                        rowTitle: 'Titre de la rangée',
+                        returningDays: 'Épisodes ajoutés depuis (jours)',
+                        seriesCount: 'Nombre de séries',
+                        moviesCount: 'Nombre de films',
+                        minRating: 'Note minimale (sur 10)',
+                        hintBecauseTitle: '{0} est remplacé par le titre du dernier film vu.',
+                        titlesCount: 'Nombre de titres',
+                        studiosCount: 'Nombre de studios',
+                        genresCount: 'Nombre de genres',
+                        titlesPerRow: 'Titres par rangée',
+                        legendLocal: 'Top du serveur',
+                        hintLocal: 'Les titres vus par le plus de comptes sur ce serveur. Un épisode compte pour sa série.',
+                        windowDays: 'Période (jours)',
+                        hintWindow: '7 : la semaine. 30 : le mois. 0 : depuis toujours.',
+                        mediaKind: 'Types de médias',
+                        kindMovies: 'Films',
+                        kindSeries: 'Séries',
+                        kindBoth: 'Films et séries',
+                        legendGlobal: 'Top mondial',
+                        hintGlobal: 'Les titres en vogue sur TMDB ou Trakt, comparés à votre bibliothèque.',
+                        provider: 'Source',
+                        feed: 'Liste',
+                        feedTrending: 'Tendances du moment',
+                        feedNowPlaying: 'À l\'affiche / en diffusion',
+                        feedUpcoming: 'Prochaines sorties',
+                        hintFeed: 'Ce choix ne vaut que pour TMDB. Les prochaines sorties ne concernent que les films.',
+                        splitByType: 'Une rangée pour les films, une pour les séries',
+                        titleMovies: 'Titre — films',
+                        titleSeries: 'Titre — séries',
+                        apiKey: 'Clé d\'API',
+                        hintApiKey: 'Pour TMDB, une clé v3 ou un jeton v4. Pour Trakt, l\'identifiant client. Elle reste sur le serveur.',
+                        libraryOnly: 'Ne garder que les titres présents dans la bibliothèque',
+                        hintSeerr: 'Ajoute un bouton « Demander » sur les titres du Top mondial que vous n\'avez pas. La demande part au nom du compte Seerr de chacun.',
+                        seerrEnable: 'Proposer les demandes à Seerr',
+                        seerrAlertTitle: 'Aucun bouton ne s\'affichera',
+                        seerrAlertText: 'Le Top mondial ne garde que les titres présents : il n\'y a rien à demander.',
+                        seerrUrl: 'Adresse de Seerr',
+                        hintSeerrUrl: 'L\'adresse vue depuis le serveur Jellyfin, par exemple http://192.168.1.10:5055.',
+                        seerrKey: 'Clé d\'API de Seerr',
+                        hintSeerrKey: 'Dans Seerr : Paramètres, Général.',
+                        seerrAdvanced: 'Proposer le serveur, le profil de qualité et le dossier',
+                        seerrTest: 'Tester la connexion',
+                        legendLook: 'Apparence',
+                        color: 'Couleur d\'accentuation',
+                        hintColor: 'Elle entoure le chiffre au survol et la carte sélectionnée.',
+                        rankScale: 'Taille du chiffre (%)',
+                        hintRankScale: 'À 100, comme sur Netflix. Plus bas, la rangée se resserre.',
+                        userPrefs: 'Laisser chaque compte régler son accueil',
+                        hintUserPrefs: 'Chacun choisit ses rangées, leur ordre et la couleur depuis un bouton sur l\'accueil.',
+                        advanced: 'Réglages avancés',
+                        exclusions: 'Exclusions',
+                        excludedUsers: 'Comptes exclus',
+                        hintExcluded: 'Leurs lectures ne comptent pas, comme pour un invité.',
+                        excludedIds: 'Identifiants, un par ligne',
+                        unknownId: 'Introuvable : {id}',
+                        quoteOpen: '« ', quoteClose: ' »',
+                        excludedLibraries: 'Bibliothèques exclues',
+                        hintExcludedLib: 'Vaut pour toutes les rangées.',
+                        playCount: 'Comptage par nombre de lectures',
+                        hintPlayCount: 'Sert à « de tous les temps », et au Top du serveur sans Playback Reporting.',
+                        maxPlays: 'Lectures comptées par compte',
+                        hintCap: 'Lectures d\'un même titre comptées au plus pour un compte. 0 : sans limite.',
+                        collections: 'Collections',
+                        syncCollections: 'Créer aussi une collection par classement',
+                        hintCollections: 'Utile pour les applis sans rangées, comme Kodi.',
+                        collectionLocal: 'Collection — Top du serveur',
+                        collectionGlobal: 'Collection — Top mondial',
+                        nativeSections: 'Sections de Jellyfin',
+                        manageNative: 'Les ranger avec les rangées du plugin',
+                        hintManageNative: '« Continuer de regarder », « À suivre »… rejoignent la liste plus haut. Cet ordre vaut pour tous les comptes.',
+                        hideNative: 'Les masquer',
+                        hintHideNative: 'Ne restent que vos bibliothèques et les rangées du plugin, pour tous les comptes.',
+                        save: 'Enregistrer',
+
+                        native: {
+                            'native:smalllibrarytiles': 'Jellyfin — Mes médias',
+                            'native:librarybuttons': 'Jellyfin — Mes médias (petit)',
+                            'native:activerecordings': 'Jellyfin — Enregistrements actifs',
+                            'native:resume': 'Jellyfin — Continuer de regarder',
+                            'native:resumeaudio': 'Jellyfin — Reprendre l’écoute',
+                            'native:resumebook': 'Jellyfin — Reprendre la lecture',
+                            'native:livetv': 'Jellyfin — TV en direct',
+                            'native:nextup': 'Jellyfin — À suivre',
+                            'native:latestmedia': 'Jellyfin — Médias récemment ajoutés'
+                        },
+                        sections: {
+                            LocalTop: 'Top du serveur', AllTime: 'De tous les temps', GlobalTop: 'Top mondial',
+                            ReturningSeries: 'De retour', NeverPlayed: 'Jamais vu', Studios: 'Studios', Genres: 'Genres'
+                        },
+
+                        // Santé des services
+                        chipPresent: 'présent',
+                        chipAbsent: 'absent',
+                        chipKeyMissing: 'clé manquante',
+                        chipKeySet: 'clé renseignée',
+                        chipOff: 'éteint',
+                        chipIncomplete: 'adresse ou clé manquante',
+                        chipReady: 'prêt',
+                        chipFtAbsent: 'absent, solution de secours',
+                        chipKeyName: 'Clé {provider}',
+
+                        // Chiffres clés
+                        figActivityWeek: 'Ont regardé cette semaine',
+                        figActivityDays: 'Ont regardé ({n} j)',
+                        figActivityDetail: '{accounts} · {views} · {hours} h',
+                        accountOne: 'compte', accountMany: 'comptes',
+                        viewOne: 'visionnage', viewMany: 'visionnages',
+                        figActivityNeedsPlayback: 'Playback Reporting requis',
+                        figActivityNoWindow: 'Top du serveur éteint ou sans période',
+                        figActivityPending: 'au prochain calcul',
+                        figGlobal: 'Top mondial déjà là',
+                        figGlobalDetail: 'titres dans la bibliothèque',
+                        figGlobalOff: 'désactivé',
+                        figGlobalNoKey: 'Clé absente',
+                        figGlobalNoKeyDetail: '{provider} : à renseigner',
+                        figGlobalPending: 'au prochain calcul',
+                        figRequest: 'À demander',
+                        figRequestSeerr: 'bouton « Demander » via Seerr',
+                        figRequestNoSeerr: 'absents de la bibliothèque',
+                        figRequestHidden: 'seuls les titres présents sont gardés',
+                        figAccounts: 'Accueil personnalisé',
+                        figAccountsDetail: 'comptes ont leurs propres choix',
+                        figAccountsOff: 'désactivé',
+
+                        // Calcul
+                        runLast: 'Dernier calcul : {when}',
+                        runNever: 'Jamais calculé',
+                        runNeverDetail: 'en attente du premier calcul',
+                        runRunning: 'Recalcul en cours…',
+                        runFailed: 'Échec : {sections}',
+                        runFailedDetail: 'voir le journal du serveur',
+                        runLessThanSecond: 'moins d’une seconde',
+                        runNext: 'prochain {when}',
+                        justNow: 'à l\'instant',
+                        ago: 'il y a {n} {unit}',
+                        inTime: 'dans {n} {unit}',
+                        soon: 'imminent',
+                        unitMin: 'min', unitHour: 'h', unitDay: 'j',
+
+                        // Détail par section
+                        sectionComputed: '{name} : {count} entrée(s), calculé le {when}',
+                        sectionPlayback: ' d’après les vraies lectures',
+                        sectionPending: '{name} : en attente du premier calcul',
+
+                        // Doublons
+                        dupOne: 'Ce classement apparaîtra deux fois',
+                        dupMany: 'Deux classements apparaîtront en double',
+                        dupText: '{list} : la rangée et la collection portent le même nom, et les deux s\'affichent sur la page d\'accueil. Renommez l\'une des deux, ou décochez « Créer aussi une collection » dans les réglages avancés.',
+
+                        // Seerr
+                        seerrTesting: 'Essai en cours…',
+                        seerrOk: 'Connexion réussie. Enregistrez pour activer les demandes.',
+                        seerrInvalid: 'Renseignez une adresse commençant par http:// ou https://, et la clé d\'API.',
+                        seerrUnauthorized: 'Seerr refuse cette clé d\'API.',
+                        seerrForbidden: 'Seerr accepte la clé, mais elle n\'a pas les droits nécessaires.',
+                        seerrOffline: 'Seerr ne répond pas à cette adresse depuis le serveur Jellyfin.',
+                        seerrError: 'Seerr a répondu de façon inattendue : est-ce bien son adresse ?',
+                        seerrNotStarted: 'L\'essai n\'a pas pu être lancé.',
+
+                        // Retours
+                        statusUnavailable: 'État indisponible.',
+                        loadFailed: 'Impossible de charger la configuration du plugin.',
+                        saveFailed: 'L\'enregistrement a échoué.',
+                        saved: 'Réglages enregistrés. Les rangées se mettent à jour dans un instant.',
+                        savedSame: 'Réglages enregistrés, sans changement.',
+                        refreshStarting: 'Recalcul lancé…',
+                        refreshStarted: 'Recalcul lancé en arrière-plan. Les chiffres ci-dessus se mettent à jour une fois terminé.',
+                        refreshFailed: 'Le recalcul n\'a pas pu être lancé.'
+                    },
+                    en: {
+                        intro: 'Netflix-style rows on the home page. Tick them and order them below: they refresh on their own.',
+                        healthLabel: 'Services used',
+                        statusLabel: 'Key figures',
+                        refreshNow: 'Refresh now',
+                        runCaption: 'Row refresh',
+                        navTitle: 'Go to', navLabel: 'Page sections',
+                        navRows: 'Rows', navSeerr: 'Seerr', navAdvanced: 'Advanced',
+                        unsaved: 'Unsaved changes',
+                        hintsLabel: 'Help', hintsOn: 'ON', hintsOff: 'OFF',
+                        prefsInfo: 'This page is the starting point: an account that made its own choices keeps them. Accounts concerned: {n}.',
+                        resetAll: 'Reset every account to the server settings',
+                        resetAllConfirm: 'Confirm: erase the choices of {n} account(s)',
+                        resetAllDone: 'Choices erased for {n} account(s).',
+                        resetAllFailed: 'Erasing failed.',
+                        legendRows: 'Home rows',
+                        rowsOffTitle: 'The rows are hidden on the home page.',
+                        rowsOffText: 'They are still computed, but nobody sees them.',
+                        rowsOn: 'Show them',
+                        activeRows: '{n} / {total} on',
+                        rowOrder: 'Rows shown, top to bottom',
+                        hintRowOrder: 'The arrows move a row up or down the home page.',
+                        rowLocal: 'Server Top',
+                        rowAllTime: 'Most watched of all time',
+                        rowGlobal: 'Worldwide Top',
+                        rowReturning: 'Back this week',
+                        rowNeverPlayed: 'Never watched',
+                        rowBecause: 'Because you watched…',
+                        rowStudios: 'By studio',
+                        rowGenres: 'By genre',
+                        moveUp: 'Move up: {name}',
+                        moveDown: 'Move down: {name}',
+                        rowTitle: 'Row title',
+                        returningDays: 'Episodes added in the last (days)',
+                        seriesCount: 'Number of series',
+                        moviesCount: 'Number of movies',
+                        minRating: 'Minimum rating (out of 10)',
+                        hintBecauseTitle: '{0} is replaced by the title of the last movie watched.',
+                        titlesCount: 'Number of titles',
+                        studiosCount: 'Number of studios',
+                        genresCount: 'Number of genres',
+                        titlesPerRow: 'Titles per row',
+                        legendLocal: 'Server Top',
+                        hintLocal: 'The titles watched by the most accounts on this server. An episode counts for its series.',
+                        windowDays: 'Period (days)',
+                        hintWindow: '7: the week. 30: the month. 0: all time.',
+                        mediaKind: 'Media types',
+                        kindMovies: 'Movies',
+                        kindSeries: 'Series',
+                        kindBoth: 'Movies and series',
+                        legendGlobal: 'Worldwide Top',
+                        hintGlobal: 'Titles trending on TMDB or Trakt, compared with your library.',
+                        provider: 'Source',
+                        feed: 'List',
+                        feedTrending: 'Trending now',
+                        feedNowPlaying: 'In theaters / on air',
+                        feedUpcoming: 'Upcoming',
+                        hintFeed: 'This choice only applies to TMDB. Upcoming releases are movies only.',
+                        splitByType: 'One row for movies, one for series',
+                        titleMovies: 'Title — movies',
+                        titleSeries: 'Title — series',
+                        apiKey: 'API key',
+                        hintApiKey: 'For TMDB, a v3 key or a v4 token. For Trakt, the client ID. It stays on the server.',
+                        libraryOnly: 'Keep only titles already in the library',
+                        hintSeerr: 'Adds a “Request” button on Worldwide Top titles you do not have. The request is made with each person\'s own Seerr account.',
+                        seerrEnable: 'Offer requests to Seerr',
+                        seerrAlertTitle: 'No button will show',
+                        seerrAlertText: 'The Worldwide Top keeps only titles you have: there is nothing to request.',
+                        seerrUrl: 'Seerr address',
+                        hintSeerrUrl: 'The address as seen from the Jellyfin server, for example http://192.168.1.10:5055.',
+                        seerrKey: 'Seerr API key',
+                        hintSeerrKey: 'In Seerr: Settings, General.',
+                        seerrAdvanced: 'Offer the server, quality profile and folder',
+                        seerrTest: 'Test the connection',
+                        legendLook: 'Appearance',
+                        color: 'Accent color',
+                        hintColor: 'It outlines the number on hover and the selected card.',
+                        rankScale: 'Number size (%)',
+                        hintRankScale: 'At 100, like Netflix. Lower, the row gets tighter.',
+                        userPrefs: 'Let each account set up its home page',
+                        hintUserPrefs: 'Everyone picks their rows, their order and the color from a button on the home page.',
+                        advanced: 'Advanced settings',
+                        exclusions: 'Exclusions',
+                        excludedUsers: 'Excluded accounts',
+                        hintExcluded: 'Their plays do not count, as for a guest.',
+                        excludedIds: 'IDs, one per line',
+                        unknownId: 'Not found: {id}',
+                        quoteOpen: '“', quoteClose: '”',
+                        excludedLibraries: 'Excluded libraries',
+                        hintExcludedLib: 'Applies to every row.',
+                        playCount: 'Counting by number of plays',
+                        hintPlayCount: 'Used for “of all time”, and for the Server Top without Playback Reporting.',
+                        maxPlays: 'Plays counted per account',
+                        hintCap: 'Most plays of one title counted for an account. 0: no limit.',
+                        collections: 'Collections',
+                        syncCollections: 'Also create a collection per ranking',
+                        hintCollections: 'Useful for apps without the rows, such as Kodi.',
+                        collectionLocal: 'Collection — Server Top',
+                        collectionGlobal: 'Collection — Worldwide Top',
+                        nativeSections: 'Jellyfin sections',
+                        manageNative: 'Order them with the plugin rows',
+                        hintManageNative: '“Continue Watching”, “Next Up”… join the list above. This order applies to every account.',
+                        hideNative: 'Hide them',
+                        hintHideNative: 'Only your libraries and the plugin rows remain, for every account.',
+                        save: 'Save',
+
+                        native: {
+                            'native:smalllibrarytiles': 'Jellyfin — My Media',
+                            'native:librarybuttons': 'Jellyfin — My Media (small)',
+                            'native:activerecordings': 'Jellyfin — Active Recordings',
+                            'native:resume': 'Jellyfin — Continue Watching',
+                            'native:resumeaudio': 'Jellyfin — Continue Listening',
+                            'native:resumebook': 'Jellyfin — Continue Reading',
+                            'native:livetv': 'Jellyfin — Live TV',
+                            'native:nextup': 'Jellyfin — Next Up',
+                            'native:latestmedia': 'Jellyfin — Recently Added Media'
+                        },
+                        sections: {
+                            LocalTop: 'Server Top', AllTime: 'All time', GlobalTop: 'Worldwide Top',
+                            ReturningSeries: 'Back', NeverPlayed: 'Never watched', Studios: 'Studios', Genres: 'Genres'
+                        },
+
+                        chipPresent: 'installed',
+                        chipAbsent: 'missing',
+                        chipKeyMissing: 'key missing',
+                        chipKeySet: 'key set',
+                        chipOff: 'off',
+                        chipIncomplete: 'address or key missing',
+                        chipReady: 'ready',
+                        chipFtAbsent: 'missing, fallback in use',
+                        chipKeyName: '{provider} key',
+
+                        figActivityWeek: 'Watched this week',
+                        figActivityDays: 'Watched ({n} d)',
+                        figActivityDetail: '{accounts} · {views} · {hours} h',
+                        accountOne: 'account', accountMany: 'accounts',
+                        viewOne: 'view', viewMany: 'views',
+                        figActivityNeedsPlayback: 'needs Playback Reporting',
+                        figActivityNoWindow: 'Server Top off or without a period',
+                        figActivityPending: 'after the next refresh',
+                        figGlobal: 'Worldwide Top you have',
+                        figGlobalDetail: 'titles in the library',
+                        figGlobalOff: 'off',
+                        figGlobalNoKey: 'No key',
+                        figGlobalNoKeyDetail: '{provider}: enter it below',
+                        figGlobalPending: 'after the next refresh',
+                        figRequest: 'To request',
+                        figRequestSeerr: '“Request” button via Seerr',
+                        figRequestNoSeerr: 'missing from the library',
+                        figRequestHidden: 'only titles you have are kept',
+                        figAccounts: 'Custom home',
+                        figAccountsDetail: 'accounts made their own choices',
+                        figAccountsOff: 'off',
+
+                        runLast: 'Last refresh: {when}',
+                        runNever: 'Never refreshed',
+                        runNeverDetail: 'waiting for the first refresh',
+                        runRunning: 'Refreshing…',
+                        runFailed: 'Failed: {sections}',
+                        runFailedDetail: 'see the server log',
+                        runLessThanSecond: 'under a second',
+                        runNext: 'next {when}',
+                        justNow: 'just now',
+                        ago: '{n} {unit} ago',
+                        inTime: 'in {n} {unit}',
+                        soon: 'soon',
+                        unitMin: 'min', unitHour: 'h', unitDay: 'd',
+
+                        sectionComputed: '{name}: {count} item(s), computed {when}',
+                        sectionPlayback: ' from real playback',
+                        sectionPending: '{name}: waiting for the first refresh',
+
+                        dupOne: 'This ranking will show twice',
+                        dupMany: 'Two rankings will show twice',
+                        dupText: '{list}: the row and the collection have the same name, and both show on the home page. Rename one of them, or untick “Also create a collection” in the advanced settings.',
+
+                        seerrTesting: 'Testing…',
+                        seerrOk: 'Connected. Save to turn requests on.',
+                        seerrInvalid: 'Enter an address starting with http:// or https://, and the API key.',
+                        seerrUnauthorized: 'Seerr rejects this API key.',
+                        seerrForbidden: 'Seerr accepts the key, but it lacks the required permissions.',
+                        seerrOffline: 'Seerr does not answer at this address from the Jellyfin server.',
+                        seerrError: 'Seerr answered unexpectedly: is this its address?',
+                        seerrNotStarted: 'The test could not start.',
+
+                        statusUnavailable: 'Status unavailable.',
+                        loadFailed: 'Could not load the plugin configuration.',
+                        saveFailed: 'Saving failed.',
+                        saved: 'Settings saved. The rows update in a moment.',
+                        savedSame: 'Settings saved, nothing changed.',
+                        refreshStarting: 'Refresh started…',
+                        refreshStarted: 'Refresh running in the background. The figures above update when it is done.',
+                        refreshFailed: 'The refresh could not start.'
+                    }
                 };
+
+                /* La langue d'affichage choisie dans Jellyfin, comme NotifySync ; à défaut
+                   celle du navigateur. Le français pour « fr-* », l'anglais sinon. */
+                function detectLanguage() {
+                    var wanted = navigator.language || 'en';
+                    try {
+                        var userId = ApiClient.getCurrentUserId();
+                        if (userId) {
+                            wanted = localStorage.getItem(userId + '-language') || wanted;
+                        }
+                    } catch (e) { /* la langue du navigateur reste */ }
+                    return /^fr/i.test(wanted) ? 'fr' : 'en';
+                }
+
+                var lang = detectLanguage();
+                var T = strings[lang];
+
+                function t(key, values) {
+                    var text = T[key] == null ? key : String(T[key]);
+                    return text.replace(/\{(\w+)\}/g, function (all, name) {
+                        return values && values[name] != null ? values[name] : all;
+                    });
+                }
+
+                function plural(n, one, many) {
+                    return n + ' ' + t(n === 1 ? one : many);
+                }
+
+                function locale() {
+                    return lang === 'fr' ? 'fr-FR' : 'en-US';
+                }
+
+                /* jellyfin-web lit l'attribut `label` une fois, à la création du champ, et
+                   en tire un `<label for>` voisin : on remplit les deux. */
+                function applyTranslations() {
+                    page.setAttribute('lang', lang);
+
+                    page.querySelectorAll('[data-i18n]').forEach(function (el) {
+                        el.textContent = t(el.getAttribute('data-i18n'));
+                    });
+
+                    page.querySelectorAll('[data-i18n-placeholder]').forEach(function (el) {
+                        el.setAttribute('placeholder', t(el.getAttribute('data-i18n-placeholder')));
+                    });
+
+                    page.querySelectorAll('[data-i18n-aria]').forEach(function (el) {
+                        el.setAttribute('aria-label', t(el.getAttribute('data-i18n-aria')));
+                    });
+
+                    page.querySelectorAll('[data-i18n-label]').forEach(function (el) {
+                        var text = t(el.getAttribute('data-i18n-label'));
+                        el.setAttribute('label', text);
+                        var labels = el.parentNode.querySelectorAll('label');
+                        for (var i = 0; i < labels.length; i++) {
+                            if (labels[i].htmlFor === el.id) {
+                                labels[i].textContent = text;
+                            }
+                        }
+                    });
+
+                    labelRowButtons();
+                }
+
+                function rowName(li) {
+                    var id = li.getAttribute('data-row');
+                    return id.indexOf('native:') === 0 ? T.native[id] : li.querySelector('.mcCfg-order-name').textContent;
+                }
+
+                function labelRowButtons() {
+                    Array.prototype.forEach.call(page.querySelectorAll('#mcRowOrder li'), function (li) {
+                        var name = rowName(li);
+                        li.querySelector('.mcCfg-order-up').setAttribute('aria-label', t('moveUp', { name: name }));
+                        li.querySelector('.mcCfg-order-down').setAttribute('aria-label', t('moveDown', { name: name }));
+                        var native = li.querySelector('.mcCfg-order-native');
+                        if (native) {
+                            native.textContent = name;
+                        }
+                    });
+                }
+
+                applyTranslations();
 
                 /* Couples rangée / collection susceptibles de faire doublon sur l'accueil. */
                 var duplicatePairs = [
-                    { row: 'LocalRowTitle', collection: 'LocalCollectionName', enable: 'EnableLocalTop', label: 'Top du serveur' },
-                    { row: 'GlobalRowTitle', collection: 'GlobalCollectionName', enable: 'EnableGlobalTop', label: 'Top mondial' }
+                    { rows: function () { return ['LocalRowTitle']; },
+                      collection: 'LocalCollectionName', enable: 'EnableLocalTop', label: 'legendLocal' },
+                    // Films et séries séparés, ce sont leurs deux titres que l'accueil affiche.
+                    { rows: function () {
+                        return field('GlobalTopSplitByType').checked && field('GlobalTopMediaKind').value === 'Both'
+                            ? ['GlobalMoviesRowTitle', 'GlobalSeriesRowTitle'] : ['GlobalRowTitle'];
+                    }, collection: 'GlobalCollectionName', enable: 'EnableGlobalTop', label: 'legendGlobal' }
                 ];
 
                 var status = null;
@@ -748,8 +1312,8 @@
                     field('mcFeedback').textContent = message || '';
                 }
 
-                /* Une date absolue déborde de la tuile ; l'écart au présent se lit d'un
-                   coup d'œil, la date exacte reste en légende. */
+                /* Une date absolue déborde ; l'écart au présent se lit d'un coup d'œil, la
+                   date exacte reste en légende. Sert au dernier calcul comme au prochain. */
                 function relativeDate(value) {
                     var date = new Date(value);
                     if (isNaN(date.getTime())) {
@@ -757,28 +1321,282 @@
                     }
 
                     var minutes = Math.round((Date.now() - date.getTime()) / 60000);
+                    var future = minutes < 0;
+                    var size = Math.abs(minutes);
 
-                    if (minutes < 1) {
-                        return 'à l\'instant';
-                    }
-                    if (minutes < 60) {
-                        return 'il y a ' + minutes + ' min';
-                    }
-                    if (minutes < 1440) {
-                        return 'il y a ' + Math.round(minutes / 60) + ' h';
+                    if (size < 1) {
+                        return future ? t('soon') : t('justNow');
                     }
 
-                    return 'il y a ' + Math.round(minutes / 1440) + ' j';
+                    var amount = size < 60 ? { n: size, unit: t('unitMin') }
+                        : size < 1440 ? { n: Math.round(size / 60), unit: t('unitHour') }
+                            : { n: Math.round(size / 1440), unit: t('unitDay') };
+
+                    return t(future ? 'inTime' : 'ago', amount);
                 }
 
                 var providerLabels = { Tmdb: 'TMDB', Trakt: 'Trakt' };
+
+                function providerName() {
+                    var provider = field('GlobalTopProvider').value;
+                    return providerLabels[provider] || provider;
+                }
 
                 function formatDate(value) {
                     if (!value) {
                         return null;
                     }
                     var date = new Date(value);
-                    return isNaN(date.getTime()) ? null : date.toLocaleString();
+                    return isNaN(date.getTime()) ? null : date.toLocaleString(locale());
+                }
+
+                /* Un champ couleur n'accepte que « #rrggbb ». Le serveur admet aussi « #rgb » et les
+                   formes avec opacité : chargées telles quelles, elles s'affichaient en noir, et un
+                   simple « Enregistrer » enregistrait ce noir. */
+                function colorForInput(value) {
+                    var hex = String(value || '').trim();
+
+                    if (/^#[0-9a-f]{3,4}$/i.test(hex)) {
+                        return '#' + hex.charAt(1) + hex.charAt(1) + hex.charAt(2) + hex.charAt(2)
+                            + hex.charAt(3) + hex.charAt(3);
+                    }
+                    if (/^#[0-9a-f]{6}([0-9a-f]{2})?$/i.test(hex)) {
+                        return hex.substring(0, 7);
+                    }
+
+                    return '#775bf4';
+                }
+
+                // ----------------------------------------------------------
+                // Sommaire et barre d'enregistrement
+                // ----------------------------------------------------------
+
+                /* Une pastille par panneau visible, comme le sommaire de XFusion. Des boutons et
+                   non des liens « #… » : Jellyfin route sur le fragment, un ancrage ferait quitter
+                   la page. Refait à chaque changement : un panneau masqué n'y figure pas. */
+                function buildNav() {
+                    var nav = field('mcNav');
+                    Array.prototype.slice.call(nav.querySelectorAll('.mcCfg-nav-link')).forEach(function (link) {
+                        nav.removeChild(link);
+                    });
+
+                    Array.prototype.forEach.call(page.querySelectorAll('[data-nav]'), function (panel) {
+                        if (panel.hidden) {
+                            return;
+                        }
+                        var link = document.createElement('button');
+                        link.type = 'button';
+                        link.className = 'mcCfg-nav-link';
+                        link.textContent = t(panel.getAttribute('data-nav'));
+                        link.addEventListener('click', function () {
+                            Array.prototype.forEach.call(nav.querySelectorAll('.mcCfg-nav-link'), function (other) {
+                                other.classList.toggle('is-active', other === link);
+                            });
+                            if (panel.tagName === 'DETAILS') {
+                                panel.open = true;
+                            }
+                            panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        });
+                        nav.appendChild(link);
+                    });
+                }
+
+                /* Va au réglage : ouvre le pli s'il le faut, le fait défiler et y pose le focus. Un
+                   réglage masqué — son panneau éteint — renvoie à la case de sa rangée, dans la liste. */
+                var hiddenFallback = {
+                    LocalTopWindowDays: 'EnableLocalTop', GlobalTopApiKey: 'EnableGlobalTop',
+                    EnableSeerrRequests: 'EnableGlobalTop'
+                };
+
+                function goTo(id) {
+                    var target = field(id);
+                    if (target && target.closest('[hidden]') && hiddenFallback[id]) {
+                        target = field(hiddenFallback[id]);
+                    }
+                    if (!target) {
+                        return;
+                    }
+                    var fold = target.closest('details');
+                    if (fold) {
+                        fold.open = true;
+                    }
+                    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    target.focus({ preventScroll: true });
+                }
+
+                function wireShortcuts() {
+                    ['mcStatus', 'mcHealth'].forEach(function (id) {
+                        field(id).addEventListener('click', function (event) {
+                            var source = event.target.closest('[data-go]');
+                            if (source) {
+                                goTo(source.getAttribute('data-go'));
+                            }
+                        });
+                    });
+                }
+
+                /* Aide affichée ou non : une commodité de lecture, propre à ce navigateur. */
+                var hintsKey = 'mediacarousel-config-hints';
+
+                function applyHints(shownHints) {
+                    page.classList.toggle('mcCfg-nohints', !shownHints);
+                    field('mcHintsToggle').setAttribute('aria-pressed', shownHints ? 'true' : 'false');
+                    field('mcHintsState').textContent = t(shownHints ? 'hintsOn' : 'hintsOff');
+                }
+
+                function hintsShown() {
+                    try {
+                        return localStorage.getItem(hintsKey) !== 'off';
+                    } catch (e) {
+                        return true;
+                    }
+                }
+
+                function wireHints() {
+                    field('mcHintsToggle').addEventListener('click', function () {
+                        var next = page.classList.contains('mcCfg-nohints');
+                        try {
+                            localStorage.setItem(hintsKey, next ? 'on' : 'off');
+                        } catch (e) { /* le choix tient jusqu'au rechargement */ }
+                        applyHints(next);
+                    });
+                }
+
+                /* Choix des comptes : combien en ont, et l'effacement pour tous, en deux temps. */
+                var resetArmed = false;
+
+                function renderPrefsNote() {
+                    var count = (status && status.CustomizedAccounts) || 0;
+                    field('mcPrefsInfo').textContent = t('prefsInfo', { n: count });
+                    field('mcResetAllLabel').textContent = resetArmed
+                        ? t('resetAllConfirm', { n: count }) : t('resetAll');
+                    // Caché plutôt que désactivé : `applyVisibility` réactive les boutons des blocs
+                    // visibles, et un bouton qui n'efface rien n'a pas à être proposé.
+                    field('mcResetAll').hidden = count === 0;
+                }
+
+                function wireResetAll() {
+                    field('mcResetAll').addEventListener('click', function () {
+                        if (!resetArmed) {
+                            resetArmed = true;
+                            renderPrefsNote();
+                            return;
+                        }
+
+                        resetArmed = false;
+                        ApiClient.ajax({
+                            type: 'DELETE',
+                            url: ApiClient.getUrl('MediaCarousel/UserPreferences/All'),
+                            dataType: 'json'
+                        }).then(function (count) {
+                            field('mcResetAllResult').textContent = t('resetAllDone', { n: count || 0 });
+                            loadStatus();
+                        }, function () {
+                            field('mcResetAllResult').textContent = t('resetAllFailed');
+                            renderPrefsNote();
+                        });
+                    });
+                }
+
+                var dirty = false;
+
+                /* Centre la barre sur la colonne de la page : centrée sur la fenêtre, le menu
+                   latéral de Jellyfin la décalait d'une demi-largeur de menu. */
+                function placeSaveBar() {
+                    var column = page.querySelector('.mcCfg-root').getBoundingClientRect();
+                    if (column.width > 0) {
+                        field('mcSaveBar').style.left = Math.round(column.left + column.width / 2) + 'px';
+                    }
+                }
+
+                function setDirty(value) {
+                    dirty = value;
+                    if (dirty) {
+                        placeSaveBar();
+                    }
+                    field('mcSaveBar').classList.toggle('is-visible', dirty);
+                    field('mcSaveBar').setAttribute('aria-hidden', dirty ? 'false' : 'true');
+                    field('mcSaveButton').tabIndex = dirty ? 0 : -1;
+                }
+
+                // ----------------------------------------------------------
+                // Exclusions à cocher
+                // ----------------------------------------------------------
+
+                function sameId(value) {
+                    return String(value || '').toLowerCase().replace(/[^0-9a-f]/g, '');
+                }
+
+                /* Coche les comptes ou bibliothèques déjà exclus ; un identifiant qui ne
+                   correspond plus à rien reste coché, nommé comme tel, pour qu'on puisse le retirer. */
+                function renderPicks(listId, rawId, fieldId, entries) {
+                    var chosen = toList(field(fieldId).value);
+                    var known = entries.map(function (entry) { return sameId(entry.id); });
+                    var all = entries.concat(chosen.filter(function (id) {
+                        return known.indexOf(sameId(id)) === -1;
+                    }).map(function (id) {
+                        return { id: id, name: t('unknownId', { id: id }) };
+                    }));
+
+                    field(listId).innerHTML = all.map(function (entry) {
+                        var checked = chosen.some(function (id) { return sameId(id) === sameId(entry.id); });
+                        return '<label class="emby-checkbox-label">'
+                            + '<input is="emby-checkbox" type="checkbox" data-pick="' + escapeHtml(entry.id) + '"'
+                            + (checked ? ' checked' : '') + ' />'
+                            + '<span>' + escapeHtml(entry.name) + '</span></label>';
+                    }).join('');
+
+                    field(listId).hidden = false;
+                    field(rawId).hidden = true;
+                }
+
+                function showRaw(listId, rawId) {
+                    field(listId).hidden = true;
+                    field(rawId).hidden = false;
+                }
+
+                function loadPicks() {
+                    var sources = [
+                        { list: 'mcPickUsers', raw: 'mcRawUsers', target: 'ExcludedUserIds', route: 'Users',
+                          read: function (users) {
+                              return users.map(function (u) { return { id: u.Id, name: u.Name }; });
+                          } },
+                        { list: 'mcPickLibraries', raw: 'mcRawLibraries', target: 'ExcludedLibraryIds', route: 'Library/VirtualFolders',
+                          read: function (folders) {
+                              return folders.filter(function (f) { return f.ItemId; })
+                                  .map(function (f) { return { id: f.ItemId, name: f.Name }; });
+                          } }
+                    ];
+
+                    sources.forEach(function (source) {
+                        var answer;
+                        try {
+                            answer = ApiClient.getJSON(ApiClient.getUrl(source.route));
+                        } catch (e) {
+                            answer = Promise.reject(e);
+                        }
+
+                        Promise.resolve(answer).then(function (result) {
+                            if (!Array.isArray(result) || result.length === 0) {
+                                showRaw(source.list, source.raw);
+                                return;
+                            }
+                            renderPicks(source.list, source.raw, source.target, source.read(result));
+                        }, function () {
+                            showRaw(source.list, source.raw);
+                        });
+                    });
+                }
+
+                /* Une case cochée réécrit la liste enregistrée, dans la zone de texte cachée. */
+                function wirePicks() {
+                    [['mcPickUsers', 'ExcludedUserIds'], ['mcPickLibraries', 'ExcludedLibraryIds']].forEach(function (pair) {
+                        field(pair[0]).addEventListener('change', function () {
+                            field(pair[1]).value = Array.prototype.map.call(
+                                field(pair[0]).querySelectorAll('input[data-pick]:checked'),
+                                function (box) { return box.getAttribute('data-pick'); }).join('\n');
+                        });
+                    });
                 }
 
                 // ----------------------------------------------------------
@@ -841,9 +1659,11 @@
 
                 /* Les champs dont dépend l'affichage, relevés dans les conditions elles-mêmes :
                    une condition ajoutée au HTML est suivie sans toucher au script. La période
-                   s'y ajoute, lue par la condition nommée `playCount`. */
+                   s'y ajoute, lue par la condition nommée `playCount`, et les réglages que les
+                   chiffres et les pastilles reflètent. */
                 function watchedFields() {
-                    var ids = ['EnableHomeRows', 'LocalTopWindowDays'].concat(rowToggles);
+                    var ids = ['EnableHomeRows', 'LocalTopWindowDays', 'AllowUserPreferences', 'GlobalTopProvider']
+                        .concat(rowToggles);
                     var blocks = page.querySelectorAll('[data-show-if]');
 
                     for (var i = 0; i < blocks.length; i++) {
@@ -860,6 +1680,7 @@
 
                 function onSettingChange() {
                     applyVisibility();
+                    buildNav();
                     refreshDuplicateAlert();
                     renderStatus();
                 }
@@ -873,14 +1694,17 @@
                         }
                     });
 
-                    // Les champs qui alimentent le bandeau ou l'avertissement le rafraîchissent.
-                    ['LocalRowTitle', 'GlobalRowTitle', 'LocalCollectionName', 'GlobalCollectionName']
+                    // Les champs qui alimentent l'avertissement le rafraîchissent.
+                    ['LocalRowTitle', 'GlobalRowTitle', 'GlobalMoviesRowTitle', 'GlobalSeriesRowTitle',
+                        'LocalCollectionName', 'GlobalCollectionName']
                         .forEach(function (id) {
                             field(id).addEventListener('input', refreshDuplicateAlert);
                         });
 
-                    field('GlobalTopApiKey').addEventListener('input', renderStatus);
-                    field('GlobalTopProvider').addEventListener('change', renderStatus);
+                    // Et ceux que reflètent les pastilles.
+                    ['GlobalTopApiKey', 'SeerrUrl', 'SeerrApiKey'].forEach(function (id) {
+                        field(id).addEventListener('input', renderStatus);
+                    });
 
                     // Un champ invalide caché dans le pli fermé ne pourrait pas montrer son
                     // erreur : le navigateur refuserait l'envoi sans rien dire. Le pli s'ouvre.
@@ -905,21 +1729,6 @@
                     'native:activerecordings', 'native:resume', 'native:resumeaudio',
                     'native:resumebook', 'native:livetv', 'native:nextup', 'native:latestmedia'
                 ];
-                /* Ces libellés sont ceux de Jellyfin lui-même — les mêmes que dans « Écran
-                   d'accueil » des préférences du compte (fr.json de jellyfin-web : NextUp,
-                   HeaderLatestMedia…). En inventer d'autres revenait à faire chercher
-                   « À suivre » dans une liste qui affichait « Prochainement ». */
-                var nativeNames = {
-                    'native:smalllibrarytiles': 'Jellyfin — Mes médias',
-                    'native:librarybuttons': 'Jellyfin — Mes médias (petit)',
-                    'native:activerecordings': 'Jellyfin — Enregistrements actifs',
-                    'native:resume': 'Jellyfin — Continuer de regarder',
-                    'native:resumeaudio': 'Jellyfin — Reprendre l’écoute',
-                    'native:resumebook': 'Jellyfin — Reprendre la lecture',
-                    'native:livetv': 'Jellyfin — TV en direct',
-                    'native:nextup': 'Jellyfin — À suivre',
-                    'native:latestmedia': 'Jellyfin — Médias récemment ajoutés'
-                };
 
                 function activeRowIds() {
                     return field('ManageNativeSections').checked ? fullRowIds : pluginRowIds;
@@ -948,16 +1757,16 @@
                     return order;
                 }
 
+                /* Ces noms sont ceux de Jellyfin lui-même — les mêmes que dans « Écran
+                   d'accueil » des préférences du compte. En inventer d'autres revenait à faire
+                   chercher « À suivre » dans une liste qui affichait « Prochainement ». */
                 function nativeItem(id) {
-                    var name = escapeHtml(nativeNames[id]);
                     var li = document.createElement('li');
                     li.setAttribute('data-row', id);
                     li.innerHTML = '<span class="mcCfg-order-rank"></span>'
-                        + '<span class="mcCfg-order-name mcCfg-order-native">' + name + '</span>'
-                        + '<button is="emby-button" type="button" class="raised mcCfg-order-up"'
-                        + ' aria-label="Monter : ' + name + '">&#9650;</button>'
-                        + '<button is="emby-button" type="button" class="raised mcCfg-order-down"'
-                        + ' aria-label="Descendre : ' + name + '">&#9660;</button>';
+                        + '<span class="mcCfg-order-name mcCfg-order-native">' + escapeHtml(T.native[id]) + '</span>'
+                        + '<button is="emby-button" type="button" class="raised mcCfg-order-up">&#9650;</button>'
+                        + '<button is="emby-button" type="button" class="raised mcCfg-order-down">&#9660;</button>';
                     return li;
                 }
 
@@ -983,6 +1792,7 @@
                         list.appendChild(items[id] || nativeItem(id));
                     });
 
+                    labelRowButtons();
                     refreshOrderState();
                 }
 
@@ -1044,21 +1854,127 @@
                 }
 
                 // ----------------------------------------------------------
-                // Bandeau d'état
+                // Services, chiffres clés et calcul
                 // ----------------------------------------------------------
 
+                var marks = { ok: '✓', warn: '!', off: '–', pending: '…' };
+
+                /* `target` : le réglage où mène un clic ; sans lui, une pastille n'est qu'une étiquette. */
+                function chip(state, name, detail, target) {
+                    var inner = '<span class="mcCfg-chip-mark" aria-hidden="true">' + marks[state] + '</span>'
+                        + '<span>' + escapeHtml(name) + '</span>'
+                        + '<span class="mcCfg-chip-detail">· ' + escapeHtml(detail) + '</span>';
+                    return '<li>' + (target
+                        ? '<button type="button" class="mcCfg-chip" data-state="' + state + '" data-go="' + target + '">' + inner + '</button>'
+                        : '<span class="mcCfg-chip" data-state="' + state + '">' + inner + '</span>') + '</li>';
+                }
+
                 function tile(state, name, value, detail) {
-                    return '<div class="mcCfg-tile" data-state="' + state + '">'
-                        + '<div class="mcCfg-tile-name"><span class="mcCfg-tile-dot"></span>' + escapeHtml(name) + '</div>'
-                        + '<div class="mcCfg-tile-value">' + escapeHtml(value) + '</div>'
-                        + '<div class="mcCfg-tile-detail">' + escapeHtml(detail) + '</div>'
-                        + '</div>';
+                    return '<button type="button" class="mcCfg-tile" data-state="' + state + '">'
+                        + '<span class="mcCfg-tile-name"><span class="mcCfg-tile-dot"></span>' + escapeHtml(name) + '</span>'
+                        + '<span class="mcCfg-tile-value">' + escapeHtml(value) + '</span>'
+                        + '<span class="mcCfg-tile-detail">' + escapeHtml(detail) + '</span>'
+                        + '</button>';
+                }
+
+                /* Le réglage de chaque chiffre, dans l'ordre où ils s'affichent. */
+                var tileTargets = ['LocalTopWindowDays', 'GlobalTopApiKey', 'EnableSeerrRequests', 'AllowUserPreferences'];
+
+                function seerrReady() {
+                    return field('SeerrUrl').value.trim().length > 0 && field('SeerrApiKey').value.trim().length > 0;
+                }
+
+                /* Les services dont dépend le plugin : un coup d'œil dit ce qui manque. */
+                function renderHealth() {
+                    var globalOn = field('EnableGlobalTop').checked;
+                    var hasKey = field('GlobalTopApiKey').value.trim().length > 0;
+                    var seerrOn = globalOn && field('EnableSeerrRequests').checked;
+                    var keyName = t('chipKeyName', { provider: providerName() });
+
+                    field('mcHealth').innerHTML =
+                        chip(status.PlaybackReporting ? 'ok' : 'off', 'Playback Reporting',
+                            t(status.PlaybackReporting ? 'chipPresent' : 'chipAbsent'))
+                        + chip(!globalOn ? 'off' : hasKey ? 'ok' : 'warn', keyName,
+                            t(!globalOn ? 'chipOff' : hasKey ? 'chipKeySet' : 'chipKeyMissing'), 'GlobalTopApiKey')
+                        + chip(!seerrOn ? 'off' : seerrReady() ? 'ok' : 'warn', 'Seerr',
+                            t(!seerrOn ? 'chipOff' : seerrReady() ? 'chipReady' : 'chipIncomplete'), 'EnableSeerrRequests')
+                        + chip(status.FileTransformation ? 'ok' : 'warn', 'File Transformation',
+                            t(status.FileTransformation ? 'chipPresent' : 'chipFtAbsent'));
+                }
+
+                /* Combien de comptes ont vraiment regardé, sur la période du Top du serveur.
+                   Le serveur ne le sait qu'avec Playback Reporting, après un premier calcul. */
+                function activityTile() {
+                    var activity = status.Activity;
+                    var days = parseInt(field('LocalTopWindowDays').value, 10) || 0;
+                    // Le nom suit la période réglée, même sans chiffre à montrer.
+                    var title = days === 7 || days === 0 ? t('figActivityWeek') : t('figActivityDays', { n: days });
+
+                    if (!status.PlaybackReporting) {
+                        return tile('off', title, '—', t('figActivityNeedsPlayback'));
+                    }
+                    if (!field('EnableLocalTop').checked || days === 0) {
+                        return tile('off', title, '—', t('figActivityNoWindow'));
+                    }
+                    if (!activity) {
+                        return tile('pending', title, '—', t('figActivityPending'));
+                    }
+
+                    var name = activity.WindowDays === 7 ? t('figActivityWeek') : t('figActivityDays', { n: activity.WindowDays });
+                    var hours = Number(activity.Hours || 0).toLocaleString(locale(), { maximumFractionDigits: 1 });
+
+                    return tile(activity.Viewers ? 'ok' : 'pending', name, String(activity.Viewers),
+                        t('figActivityDetail', {
+                            accounts: t(activity.Viewers === 1 ? 'accountOne' : 'accountMany'),
+                            views: plural(activity.Views, 'viewOne', 'viewMany'),
+                            hours: hours
+                        }));
+                }
+
+                /* Les titres du Top mondial que la bibliothèque a déjà, et ceux qui manquent. */
+                function globalTiles() {
+                    var total = status.GlobalTotal || 0;
+                    var have = status.GlobalInLibrary || 0;
+
+                    if (!field('EnableGlobalTop').checked) {
+                        return tile('off', t('figGlobal'), '—', t('figGlobalOff'))
+                            + tile('off', t('figRequest'), '—', t('figGlobalOff'));
+                    }
+                    if (!field('GlobalTopApiKey').value.trim()) {
+                        return tile('warn', t('figGlobal'), t('figGlobalNoKey'), t('figGlobalNoKeyDetail', { provider: providerName() }))
+                            + tile('off', t('figRequest'), '—', t('figGlobalNoKeyDetail', { provider: providerName() }));
+                    }
+                    if (!total) {
+                        return tile('pending', t('figGlobal'), '—', t('figGlobalPending'))
+                            + tile('pending', t('figRequest'), '—', t('figGlobalPending'));
+                    }
+
+                    var html = tile('ok', t('figGlobal'), have + ' / ' + total, t('figGlobalDetail'));
+
+                    if (field('GlobalTopLibraryOnly').checked) {
+                        html += tile('off', t('figRequest'), '—', t('figRequestHidden'));
+                    } else {
+                        var seerr = field('EnableSeerrRequests').checked && seerrReady();
+                        html += tile(seerr ? 'ok' : 'pending', t('figRequest'), String(total - have),
+                            t(seerr ? 'figRequestSeerr' : 'figRequestNoSeerr'));
+                    }
+
+                    return html;
+                }
+
+                function accountsTile() {
+                    if (!field('AllowUserPreferences').checked) {
+                        return tile('off', t('figAccounts'), '—', t('figAccountsOff'));
+                    }
+                    var count = status.CustomizedAccounts || 0;
+                    var value = status.Accounts ? count + ' / ' + status.Accounts : String(count);
+                    return tile(count ? 'ok' : 'pending', t('figAccounts'), value, t('figAccountsDetail'));
                 }
 
                 function lastComputed() {
                     var newest = null;
 
-                    Object.keys(sectionLabels).forEach(function (key) {
+                    Object.keys(T.sections).forEach(function (key) {
                         var when = status && status[key] && status[key].GeneratedUtc;
                         if (when && (!newest || new Date(when) > new Date(newest))) {
                             newest = when;
@@ -1068,77 +1984,67 @@
                     return newest;
                 }
 
+                /* Le bilan d'exécution prime sur les dates : la tolérance aux pannes conserve
+                   les instantanés précédents, donc sans lui une clé expirée laisserait un
+                   calcul « réussi » dont la date vieillit en silence. */
+                function renderRun() {
+                    var run = status.LastRun || {};
+                    var failures = run.Failures || [];
+                    var newest = lastComputed();
+                    var state;
+                    var value;
+                    var detail;
+
+                    if (run.Running) {
+                        state = 'pending';
+                        value = t('runRunning');
+                        detail = '';
+                    } else if (failures.length) {
+                        var firstMessage = failures[0].Message || '';
+                        if (firstMessage.length > 120) {
+                            firstMessage = firstMessage.substring(0, 120) + '…';
+                        }
+                        state = 'warn';
+                        value = t('runFailed', { sections: failures.map(function (f) { return f.Section; }).join(', ') });
+                        detail = firstMessage || t('runFailedDetail');
+                    } else if (newest) {
+                        var parts = [formatDate(newest)];
+                        if (typeof run.DurationSeconds === 'number') {
+                            parts.push(run.DurationSeconds < 1 ? t('runLessThanSecond') : Math.round(run.DurationSeconds) + ' s');
+                        }
+                        if (status.NextRunUtc) {
+                            parts.push(t('runNext', { when: relativeDate(status.NextRunUtc) }));
+                        }
+                        state = 'ok';
+                        value = t('runLast', { when: relativeDate(newest) });
+                        detail = parts.join(' · ');
+                    } else {
+                        state = 'pending';
+                        value = t('runNever');
+                        detail = t('runNeverDetail');
+                    }
+
+                    field('mcRun').setAttribute('data-state', state);
+                    field('mcRunValue').textContent = value;
+                    field('mcRunDetail').textContent = detail;
+                }
+
                 function renderStatus() {
+                    var activeRows = rowToggles.filter(function (id) { return field(id).checked; }).length;
+                    field('mcActiveRows').textContent = t('activeRows', { n: activeRows, total: rowToggles.length });
+
                     if (!status) {
                         return;
                     }
 
                     field('mcVersion').textContent = status.Version ? 'v' + status.Version : '';
-
-                    var newest = lastComputed();
-                    var local = status.LocalTop || {};
-                    var global = status.GlobalTop || {};
-
-                    var activeRows = rowToggles.filter(function (id) { return field(id).checked; }).length;
-                    var globalEnabled = field('EnableGlobalTop').checked;
-                    var hasKey = field('GlobalTopApiKey').value.trim().length > 0;
-
-                    /* Le bilan d'exécution prime sur les dates : la tolérance aux pannes
-                       conserve les instantanés précédents, donc sans lui une clé expirée
-                       laisserait une tuile verte dont la date vieillit en silence. */
-                    var run = status.LastRun || {};
-                    var failures = run.Failures || [];
-
-                    var html;
-                    if (run.Running) {
-                        html = tile('pending', 'Dernier calcul', 'En cours…', 'recalcul en cours');
-                    } else if (failures.length) {
-                        var sections = failures.map(function (f) { return f.Section; }).join(', ');
-                        var firstMessage = failures[0].Message || '';
-                        if (firstMessage.length > 90) {
-                            firstMessage = firstMessage.substring(0, 90) + '…';
-                        }
-                        html = tile('warn', 'Dernier calcul',
-                            'Échec : ' + sections,
-                            firstMessage || 'voir le journal du serveur');
-                    } else {
-                        var duration = typeof run.DurationSeconds === 'number'
-                            ? ' · ' + (run.DurationSeconds < 1
-                                ? 'moins d’une seconde'
-                                : Math.round(run.DurationSeconds) + ' s')
-                            : '';
-                        html = tile(
-                            newest ? 'ok' : 'pending',
-                            'Dernier calcul',
-                            newest ? relativeDate(newest) : 'Jamais',
-                            newest ? formatDate(newest) + duration : 'en attente du premier calcul');
-                    }
-
-                    html += tile(
-                        field('EnableLocalTop').checked ? (local.Count ? 'ok' : 'pending') : 'off',
-                        'Top du serveur',
-                        field('EnableLocalTop').checked ? String(local.Count || 0) : '—',
-                        field('EnableLocalTop').checked ? 'titres classés' : 'désactivé');
-
-                    if (!globalEnabled) {
-                        html += tile('off', 'Top mondial', '—', 'désactivé');
-                    } else if (!hasKey) {
-                        var provider = field('GlobalTopProvider').value;
-                        html += tile('warn', 'Top mondial', 'Clé absente',
-                            (providerLabels[provider] || provider) + ' — à renseigner');
-                    } else {
-                        html += tile(global.Count ? 'ok' : 'pending', 'Top mondial',
-                            String(global.Count || 0),
-                            global.Count ? 'titres classés' : 'en attente du premier calcul');
-                    }
-
-                    html += tile(
-                        activeRows > 0 ? 'ok' : 'warn',
-                        'Rangées actives',
-                        activeRows + ' / ' + rowToggles.length,
-                        activeRows > 0 ? 'sur la page d\'accueil' : 'aucune rangée à afficher');
-
-                    field('mcStatus').innerHTML = html;
+                    renderHealth();
+                    field('mcStatus').innerHTML = activityTile() + globalTiles() + accountsTile();
+                    Array.prototype.forEach.call(field('mcStatus').children, function (tileButton, index) {
+                        tileButton.setAttribute('data-go', tileTargets[index]);
+                    });
+                    renderPrefsNote();
+                    renderRun();
                     renderSectionStates();
                 }
 
@@ -1160,11 +2066,10 @@
                             }
 
                             if (when) {
-                                parts.push(sectionLabels[keys[k]] + ' : ' + (data.Count || 0)
-                                    + ' entrée(s), calculé le ' + when
-                                    + (data.Source === 'PlaybackReporting' ? ' d’après les vraies lectures' : ''));
+                                parts.push(t('sectionComputed', { name: T.sections[keys[k]], count: data.Count || 0, when: when })
+                                    + (data.Source === 'PlaybackReporting' ? t('sectionPlayback') : ''));
                             } else {
-                                parts.push(sectionLabels[keys[k]] + ' : en attente du premier calcul');
+                                parts.push(t('sectionPending', { name: T.sections[keys[k]] }));
                             }
                         }
 
@@ -1179,7 +2084,7 @@
                         // La présence de Playback Reporting décide de ce que montre le pli.
                         applyVisibility();
                     }, function () {
-                        field('mcStatus').textContent = 'État indisponible.';
+                        field('mcStatus').textContent = t('statusUnavailable');
                     });
                 }
 
@@ -1203,10 +2108,12 @@
                         duplicatePairs.forEach(function (pair) {
                             var name = identity(field(pair.collection).value);
 
-                            if (field(pair.enable).checked && name.length > 0
-                                && name === identity(field(pair.row).value)) {
-                                clashes.push(pair.label + ' (« ' + field(pair.row).value + ' »)');
-                            }
+                            pair.rows().forEach(function (row) {
+                                if (field(pair.enable).checked && name.length > 0
+                                    && name === identity(field(row).value)) {
+                                    clashes.push(t(pair.label) + ' (' + t('quoteOpen') + field(row).value + t('quoteClose') + ')');
+                                }
+                            });
                         });
                     }
 
@@ -1214,11 +2121,8 @@
 
                     if (clashes.length > 0) {
                         alert.innerHTML = '<span aria-hidden="true">&#9888;</span><span>'
-                            + '<strong>' + (clashes.length > 1 ? 'Deux classements apparaîtront en double'
-                                : 'Ce classement apparaîtra deux fois') + '</strong>'
-                            + escapeHtml(clashes.join(', ')) + ' : la rangée et la collection portent le même nom, '
-                            + 'et les deux s\'affichent sur la page d\'accueil. Renommez l\'une des deux, '
-                            + 'ou décochez « Créer aussi une collection » dans les réglages avancés.'
+                            + '<strong>' + escapeHtml(t(clashes.length > 1 ? 'dupMany' : 'dupOne')) + '</strong>'
+                            + escapeHtml(t('dupText', { list: clashes.join(', ') }))
                             + '</span>';
                     }
                 }
@@ -1228,16 +2132,16 @@
                 // ----------------------------------------------------------
 
                 var seerrTestMessages = {
-                    invalid: 'Renseignez une adresse commençant par http:// ou https://, et la clé d\'API.',
-                    unauthorized: 'Seerr refuse cette clé d\'API.',
-                    forbidden: 'Seerr accepte la clé, mais elle n\'a pas les droits nécessaires.',
-                    offline: 'Seerr ne répond pas à cette adresse depuis le serveur Jellyfin.',
-                    error: 'Seerr a répondu de façon inattendue : est-ce bien son adresse ?'
+                    invalid: 'seerrInvalid',
+                    unauthorized: 'seerrUnauthorized',
+                    forbidden: 'seerrForbidden',
+                    offline: 'seerrOffline',
+                    error: 'seerrError'
                 };
 
                 function testSeerr() {
                     var result = field('seerrTestResult');
-                    result.textContent = 'Essai en cours…';
+                    result.textContent = t('seerrTesting');
 
                     // Les valeurs saisies, pas celles enregistrées : on vérifie avant d'enregistrer.
                     ApiClient.ajax({
@@ -1248,10 +2152,10 @@
                         dataType: 'json'
                     }).then(function (answer) {
                         result.textContent = answer && answer.Ok
-                            ? 'Connexion réussie. Enregistrez pour activer les demandes.'
-                            : seerrTestMessages[(answer && answer.Error) || 'error'] || seerrTestMessages.error;
+                            ? t('seerrOk')
+                            : t(seerrTestMessages[(answer && answer.Error) || 'error'] || 'seerrError');
                     }, function () {
-                        result.textContent = 'L\'essai n\'a pas pu être lancé.';
+                        result.textContent = t('seerrNotStarted');
                     });
                 }
 
@@ -1263,6 +2167,16 @@
                     Dashboard.showLoadingMsg();
                     say('');
 
+                    // La langue du compte a pu changer depuis le dernier affichage.
+                    var wanted = detectLanguage();
+                    if (wanted !== lang) {
+                        lang = wanted;
+                        T = strings[lang];
+                        applyTranslations();
+                        buildNav();
+                        applyHints(hintsShown());
+                    }
+
                     ApiClient.getPluginConfiguration(pluginId).then(function (config) {
                         checkboxes.forEach(function (id) { field(id).checked = !!config[id]; });
                         numbers.forEach(function (id) { field(id).value = config[id]; });
@@ -1270,6 +2184,7 @@
                         texts.forEach(function (id) {
                             field(id).value = config[id] == null ? '' : String(config[id]);
                         });
+                        field('HighlightColor').value = colorForInput(config.HighlightColor);
                         lists.forEach(function (id) { field(id).value = (config[id] || []).join('\n'); });
 
                         // `pageshow` revient à chaque retour sur la page : jellyfin-web réaffiche
@@ -1282,40 +2197,84 @@
                             wireRowOrder();
                             field('seerrTestButton').addEventListener('click', testSeerr);
                             field('ManageNativeSections').addEventListener('change', renderRowOrder);
+                            wirePicks();
+                            wireShortcuts();
+                            wireHints();
+                            wireResetAll();
+                            field('mcRowsOn').addEventListener('click', function () {
+                                field('EnableHomeRows').checked = true;
+                                field('EnableHomeRows').dispatchEvent(new Event('change', { bubbles: true }));
+                            });
+                            window.addEventListener('resize', function () {
+                                if (dirty) {
+                                    placeSaveBar();
+                                }
+                            }, { passive: true });
+                            // Tout ce qui se modifie dans le formulaire remonte ici, cases des
+                            // exclusions et flèches des rangées comprises.
+                            field('mediaCarouselConfigForm').addEventListener('input', function () { setDirty(true); });
+                            field('mediaCarouselConfigForm').addEventListener('change', function () { setDirty(true); });
+                            field('mcRowOrder').addEventListener('click', function (event) {
+                                if (event.target.closest('.mcCfg-order-up, .mcCfg-order-down')) {
+                                    setDirty(true);
+                                }
+                            });
                         }
 
                         applyVisibility();
                         renderRowOrder();
                         refreshDuplicateAlert();
+                        renderStatus();
+                        loadPicks();
+                        buildNav();
+                        setDirty(false);
+                        applyHints(hintsShown());
+                        resetArmed = false;
+                        field('mcResetAllResult').textContent = '';
+                        renderPrefsNote();
 
                         Dashboard.hideLoadingMsg();
                         loadStatus();
                     }, function () {
                         Dashboard.hideLoadingMsg();
-                        say('Impossible de charger la configuration du plugin.');
+                        say(t('loadFailed'));
                     });
                 });
 
                 /* Enregistre le formulaire. « Recalculer maintenant » passe aussi par là : une
                    case cochée puis ce bouton pressé, sans « Enregistrer », recalculait avec
                    l'ancien réglage, et le choix était perdu (constaté en prod le 2026-09-28). */
+                var changed = false;
+
                 function save() {
                     Dashboard.showLoadingMsg();
 
+                    var before;
+
                     return ApiClient.getPluginConfiguration(pluginId).then(function (config) {
+                        before = JSON.stringify(config);
                         checkboxes.forEach(function (id) { config[id] = field(id).checked; });
-                        numbers.forEach(function (id) { config[id] = parseInt(field(id).value, 10) || 0; });
-                        decimals.forEach(function (id) { config[id] = parseFloat(field(id).value) || 0; });
+                        // Un nombre vide — possible seulement dans un bloc masqué, hors validation —
+                        // garde sa valeur au lieu de tomber à zéro.
+                        numbers.forEach(function (id) {
+                            config[id] = field(id).value === '' ? config[id] : parseInt(field(id).value, 10) || 0;
+                        });
+                        decimals.forEach(function (id) {
+                            config[id] = field(id).value === '' ? config[id] : parseFloat(field(id).value) || 0;
+                        });
                         texts.forEach(function (id) { config[id] = field(id).value; });
                         lists.forEach(function (id) { config[id] = toList(field(id).value); });
 
+                        // Le serveur ne recalcule que si un réglage a changé : on ne promet rien d'autre.
+                        changed = JSON.stringify(config) !== before;
                         return ApiClient.updatePluginConfiguration(pluginId, config);
                     }).then(function (result) {
                         Dashboard.processPluginConfigurationUpdateResult(result);
+                        setDirty(false);
                         return true;
                     }, function () {
                         Dashboard.hideLoadingMsg();
-                        say('L\'enregistrement a échoué.');
+                        say(t('saveFailed'));
                         return false;
                     });
                 }
@@ -1327,9 +2286,11 @@
                     save().then(function (saved) {
                         if (saved) {
                             // Le serveur relance lui-même le recalcul dès qu'un réglage change.
-                            say('Réglages enregistrés. Les rangées se mettent à jour dans un instant.');
+                            say(t(changed ? 'saved' : 'savedSame'));
                             loadStatus();
-                            window.setTimeout(loadStatus, 10000);
+                            if (changed) {
+                                window.setTimeout(loadStatus, 10000);
+                            }
                         }
                     });
 
@@ -1346,7 +2307,7 @@
                         return;
                     }
 
-                    say('Recalcul lancé…');
+                    say(t('refreshStarting'));
 
                     save().then(function (saved) {
                         if (!saved) {
@@ -1357,12 +2318,12 @@
                             type: 'POST',
                             url: ApiClient.getUrl('MediaCarousel/Top/Refresh')
                         }).then(function () {
-                            say('Recalcul lancé en arrière-plan. L\'état ci-dessus se met à jour une fois terminé.');
+                            say(t('refreshStarted'));
                             // Le recalcul est asynchrone : on relit l'état un peu plus tard.
                             window.setTimeout(loadStatus, 5000);
                             window.setTimeout(loadStatus, 20000);
                         }, function () {
-                            say('Le recalcul n\'a pas pu être lancé.');
+                            say(t('refreshFailed'));
                         });
                     });
                 });

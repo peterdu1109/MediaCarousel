@@ -365,7 +365,7 @@ public class SeerrController : ControllerBase
 
     internal static bool IsConfigured(Configuration.PluginConfiguration? config)
         => config is not null
-            && config.EnableSeerrRequests
+            && SeerrRules.RequestsApply(config.EnableSeerrRequests, config.EnableGlobalTop, config.GlobalTopLibraryOnly)
             && SeerrRules.NormalizeBaseUrl(config.SeerrUrl) is not null
             && !string.IsNullOrWhiteSpace(config.SeerrApiKey);
 

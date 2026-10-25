@@ -1,6 +1,12 @@
+using System;
 using System.Linq;
+using Jellyfin.Data;
+using Jellyfin.Database.Implementations.Enums;
 using JellyfinCarouselPlugin.Models;
+using JellyfinCarouselPlugin.ScheduledTasks;
 using JellyfinCarouselPlugin.Services;
+using MediaBrowser.Controller.Library;
+using MediaBrowser.Model.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -21,6 +27,10 @@ public class StatusController : ControllerBase
     private readonly ICatalogStore _catalogStore;
     private readonly RefreshHealth _health;
     private readonly PlaybackReportingReader _playback;
+    private readonly ActivityStats _activity;
+    private readonly UserPreferenceStore _preferences;
+    private readonly ITaskManager _taskManager;
+    private readonly IUserManager _userManager;
 
     /// <summary>
     /// Initialise une nouvelle instance de la classe <see cref="StatusController"/>.
@@ -29,16 +39,28 @@ public class StatusController : ControllerBase
     /// <param name="catalogStore">Stockage des catalogues.</param>
     /// <param name="health">Bilan du dernier recalcul.</param>
     /// <param name="playback">Lecteur de l'historique de Playback Reporting.</param>
+    /// <param name="activity">Activité relevée par le dernier calcul du Top du serveur.</param>
+    /// <param name="preferences">Choix enregistrés par les comptes.</param>
+    /// <param name="userManager">Gestionnaire des comptes.</param>
+    /// <param name="taskManager">Gestionnaire des tâches planifiées, pour le prochain passage.</param>
     public StatusController(
         ITopListStore topListStore,
         ICatalogStore catalogStore,
         RefreshHealth health,
-        PlaybackReportingReader playback)
+        PlaybackReportingReader playback,
+        ActivityStats activity,
+        UserPreferenceStore preferences,
+        IUserManager userManager,
+        ITaskManager taskManager)
     {
         _topListStore = topListStore;
         _catalogStore = catalogStore;
         _health = health;
         _playback = playback;
+        _activity = activity;
+        _preferences = preferences;
+        _userManager = userManager;
+        _taskManager = taskManager;
     }
 
     /// <summary>
@@ -64,6 +86,14 @@ public class StatusController : ControllerBase
         var studios = _catalogStore.Get(CatalogKind.Studios);
         var genres = _catalogStore.Get(CatalogKind.Genres);
         var (report, running) = _health.Snapshot();
+        var coverage = GlobalTopCoverage.Measure(config?.IsGlobalTopSplit() ?? false, _topListStore.Get);
+        var activity = _playback.IsAvailable ? _activity.Get() : null;
+        var nextRun = NextRun(report.StartedUtc);
+
+        var accounts = _userManager.GetUsers()
+            .Where(u => !u.HasPermission(PermissionKind.IsDisabled))
+            .Select(u => u.Id)
+            .ToArray();
 
         return Ok(new PluginStatusDto
         {
@@ -126,7 +156,42 @@ public class StatusController : ControllerBase
                     .Select(f => new RefreshFailureDto { Section = f.Section, Message = f.Message })
                     .ToArray()
             },
-            PlaybackReporting = _playback.IsAvailable
+            PlaybackReporting = _playback.IsAvailable,
+            FileTransformation = ScriptInjectionTask.IsFileTransformationLoaded(),
+            Activity = activity is null ? null : new ActivityDto
+            {
+                Viewers = activity.Activity.Viewers,
+                Views = activity.Activity.Views,
+                Hours = Math.Round(activity.Activity.Seconds / 3600.0, 1),
+                WindowDays = activity.WindowDays
+            },
+            GlobalInLibrary = coverage.InLibrary,
+            GlobalTotal = coverage.Total,
+            CustomizedAccounts = _preferences.Count(accounts),
+            Accounts = accounts.Length,
+            NextRunUtc = nextRun
         });
+    }
+
+    /// <summary>
+    /// Estime le prochain recalcul d'après le déclencheur d'intervalle de la tâche planifiée.
+    /// </summary>
+    /// <remarks>
+    /// Le calendrier appartient à Jellyfin : on lit son déclencheur, sans le réécrire. Sans
+    /// déclencheur d'intervalle (quotidien seul, par exemple), rien n'est annoncé.
+    /// </remarks>
+    private DateTime? NextRun(DateTime? lastStartUtc)
+    {
+        var worker = _taskManager.ScheduledTasks.FirstOrDefault(t => t.ScheduledTask is TopListRefreshTask);
+        var interval = worker?.Triggers
+            .Where(t => t.Type == TaskTriggerInfoType.IntervalTrigger && t.IntervalTicks > 0)
+            .Select(t => t.IntervalTicks!.Value)
+            .DefaultIfEmpty(0)
+            .Min() ?? 0;
+
+        var last = worker?.LastExecutionResult?.EndTimeUtc ?? lastStartUtc;
+        return interval > 0 && last.HasValue && last.Value > DateTime.MinValue
+            ? last.Value.AddTicks(interval)
+            : null;
     }
 }

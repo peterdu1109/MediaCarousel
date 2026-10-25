@@ -67,6 +67,16 @@ public sealed class TopListRefreshService
     public bool IsRefreshing => _gate.CurrentCount == 0;
 
     /// <summary>
+    /// Survient au départ d'un recalcul, juste avant qu'il lise la configuration.
+    /// </summary>
+    /// <remarks>
+    /// Un recalcul qui part lit les derniers réglages : celui qu'un enregistrement avait mis
+    /// en attente devient inutile. Sans cet avis, « Recalculer maintenant » après un réglage
+    /// modifié faisait deux passages complets, appels TMDB et balayage compris.
+    /// </remarks>
+    public event EventHandler? RunStarting;
+
+    /// <summary>
     /// Recalcule les classements activés.
     /// </summary>
     /// <remarks>
@@ -96,6 +106,7 @@ public sealed class TopListRefreshService
         // Le bilan couvre tout le passage : chaque échec rattrapé plus bas y est consigné,
         // sans quoi la tolérance aux pannes rendrait les erreurs invisibles.
         _health.BeginRun();
+        RunStarting?.Invoke(this, EventArgs.Empty);
 
         try
         {
@@ -242,7 +253,7 @@ public sealed class TopListRefreshService
         {
             _store.Publish(build());
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             throw;
         }
@@ -279,7 +290,7 @@ public sealed class TopListRefreshService
                 _catalogStore.Publish(genres);
             }
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             throw;
         }
@@ -308,7 +319,7 @@ public sealed class TopListRefreshService
                 return NewCollectionId(id, config.LocalCollectionId);
             }
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             throw;
         }
@@ -367,7 +378,7 @@ public sealed class TopListRefreshService
                 return NewCollectionId(id, config.GlobalCollectionId);
             }
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             throw;
         }
