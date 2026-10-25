@@ -46,11 +46,12 @@ Media Carousel adds ranked rows under your libraries, like on streaming platform
 *   **Server Top 10**: what your users really watch. With the **Playback Reporting** plugin, a person counts after 5 minutes of viewing. Episodes count for their series.
 *   **Worldwide Top 10**: the trends from **TMDB** or **Trakt**, matched to your library. One row for movies and one for series if you like.
 *   **Seerr requests**: a **Request** button on the titles you don't have yet (Jellyseerr, Overseerr). The request goes out under each user's own Seerr account, as in Jellyfin Enhanced.
-*   **Rows from your library**: all-time most watched, back this week, never watched, because you watched, by studio, by genre.
+*   **Rows from your library**: all-time most watched, back this week, never watched, because you watched, by studio, by genre. Content from channel plugins, such as XFusion, stays out of them.
 *   **Rows per account**: everyone can choose their rows, their order, the color and the size of the numbers. The admin can turn this off.
 *   **Fits your theme**: real Jellyfin cards, same size, spacing and fonts as the native rows, ElegantFin included. Nothing native is removed.
 *   **Remote control**: on TV, one stop per card, a visible selection, Back closes the windows.
 *   **Permissions respected**: everyone only sees the libraries and ratings they are allowed.
+*   **Settings that show what matters**: the settings page opens on the key figures (who watched, Worldwide Top titles you already have, titles to request, accounts with their own choices), in English or French.
 
 ## 📦 Installation
 
@@ -78,22 +79,22 @@ Nothing else to install: the plugin adds its script to the web interface by itse
 
 ## ⚙️ Configuration
 
-Go to **Dashboard → Plugins → Media Carousel**. The settings page is in French; the names below are the ones it shows.
+Go to **Dashboard → Plugins → Media Carousel**. The page is in French or English, following the display language set in Jellyfin (otherwise the browser's). It opens on the key figures; click one to reach its setting.
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| **Afficher les rangées sur la page d'accueil** | `enabled` | Then one checkbox per row, and arrows to set their order. |
-| **Période (jours)** | `30` | Server Top period. `7` for the week, `0` for all time. |
-| **Nombre de titres** | `10` | Size of each ranking. |
-| **Top mondial** | `disabled` | Source (TMDB or Trakt), list and **Clé d'API**. The key is never sent to browsers. |
-| **Ne garder que les titres présents dans la bibliothèque** | `enabled` | Uncheck it to show missing titles, and their Seerr button. |
-| **Proposer les demandes à Seerr** | `disabled` | With the **Adresse de Seerr** (as seen from the Jellyfin server) and the **Clé d'API de Seerr**. |
-| **Couleur d'accentuation** | `#775BF4` | Color of the numbers on hover and of the selection. |
-| **Taille du chiffre (%)** | `100` | Below 100, the row gets narrower. The posters don't change. |
-| **Laisser chaque compte régler son accueil** | `enabled` | The **Personnaliser mes rangées** panel on the home page. |
-| **Recalcul toutes les (heures)** | `6` | How often the rankings are computed again. |
-| **Créer aussi une collection par classement** | `disabled` | For clients without the rows, such as Kodi. The rank order is kept. |
-| **Ignorer le contenu IPTV (XFusion et autres chaînes)** | `enabled` | Keeps IPTV catalogs out of the rows. |
+| **Home rows** | All but Worldwide Top and Most watched of all time | One checkbox per row, and arrows to set their order. |
+| **Period (days)** | `30` | Server Top period. `7` for the week, `0` for all time. |
+| **Number of titles** | `10` | Size of each ranking. |
+| **Worldwide Top** | `off` | Source (TMDB or Trakt), list and **API key**. The key stays on the server. |
+| **Keep only titles already in the library** | `on` | Untick it to show missing titles, and their Seerr button. |
+| **Offer requests to Seerr** | `off` | With the **Seerr address** (as seen from the Jellyfin server) and the **Seerr API key**. |
+| **Accent color** | `#775BF4` | Color of the numbers on hover and of the selection. |
+| **Number size (%)** | `100` | Below 100, the row gets narrower. The posters don't change. |
+| **Let each account set up its home page** | `on` | The **Personnaliser mes rangées** panel on the home page (its text is in French). **Reset every account to the server settings** erases the choices of every account. |
+| **Also create a collection per ranking** | `off` | For apps without the rows, such as Kodi. The rank order is kept. |
+
+The Worldwide Top uses Jellyfin's **Preferred Metadata Language**. By default, the rankings are computed at startup and every 6 hours: change this in **Dashboard → Scheduled Tasks → Recalcul des classements MediaCarousel** (the task name is in French).
 
 API keys are free: **TMDB** on [themoviedb.org → Settings → API](https://www.themoviedb.org/settings/api), **Trakt** on [trakt.tv → Applications](https://trakt.tv/oauth/applications) (the Client ID).
 
@@ -102,16 +103,16 @@ API keys are free: **TMDB** on [themoviedb.org → Settings → API](https://www
 *   **Samsung and LG TVs:** their apps carry their own copy of the web interface and never load the server's. No setting can change that.
 *   **Never watched** and **Because you watched** only cover movies: Jellyfin only marks a series as watched once all its episodes are.
 *   **Because you watched** is computed in the browser, so it differs from one account to another.
-*   **Other plugins:** Media Carousel adds its own script tag without touching the others, and **Les masquer** (Jellyfin sections) only hides sections built by Jellyfin, never the rows of other plugins.
+*   **Other plugins:** Media Carousel adds its own script tag without touching the others, and **Hide them** (Jellyfin sections) only hides sections built by Jellyfin, never the rows of other plugins.
 
 ## ❓ Troubleshooting
 
 | Issue | Solution |
 |-------|----------|
-| **No rows on the home page** | Restart Jellyfin, then `Ctrl+Shift+R`: the browser keeps the old page. |
+| **No rows on the home page** | If the settings page says the rows are hidden, click **Show them**, then **Save**. Otherwise restart Jellyfin, then `Ctrl+Shift+R`: the browser keeps the old page. |
 | **Every row fails on Jellyfin 12** | A 3.x version is installed. Update Media Carousel from the Catalog: 4.x is the Jellyfin 12 line. |
-| **The worldwide Top is empty** | Check the API key. With **Ne garder que les titres présents**, only the titles you have show. |
-| **No Request button** | Uncheck **Ne garder que les titres présents**, import your Jellyfin users into Seerr, then click **Save**. |
+| **The worldwide Top is empty** | Check the API key. With **Keep only titles already in the library**, only the titles you have show. |
+| **No Request button** | Untick **Keep only titles already in the library**, import your Jellyfin users into Seerr, then click **Save**. |
 | **The server Top counts titles marked as watched** | Install **Playback Reporting** to count real viewing. |
 | **No rows on a Samsung or LG TV** | Expected, see [Known Limits](#️-known-limits). |
 
@@ -155,11 +156,12 @@ Media Carousel ajoute sous tes bibliothèques des rangées classées, comme sur 
 *   **Top 10 du serveur** : ce que tes utilisateurs regardent vraiment. Avec le plugin **Playback Reporting**, une personne compte après 5 minutes de visionnage. Les épisodes comptent pour leur série.
 *   **Top 10 mondial** : les tendances de **TMDB** ou de **Trakt**, rapprochées de ta bibliothèque. Une rangée pour les films et une pour les séries si tu veux.
 *   **Demandes à Seerr** : un bouton **Demander** sur les titres que tu n'as pas encore (Jellyseerr, Overseerr). La demande part au nom du compte Seerr de chacun, comme dans Jellyfin Enhanced.
-*   **Rangées tirées de ta bibliothèque** : les plus regardés de tous les temps, de retour cette semaine, jamais vu, parce que tu as regardé, par studio, par genre.
+*   **Rangées tirées de ta bibliothèque** : les plus regardés de tous les temps, de retour cette semaine, jamais vu, parce que tu as regardé, par studio, par genre. Le contenu des plugins de chaînes, comme XFusion, en reste exclu.
 *   **Rangées par compte** : chacun choisit ses rangées, leur ordre, la couleur et la taille des chiffres. L'administrateur peut le désactiver.
 *   **S'accorde à ton thème** : de vraies cartes Jellyfin, avec la taille, les marges et la police des rangées natives, ElegantFin compris. Rien de natif n'est retiré.
 *   **À la télécommande** : sur la télé, un arrêt par carte, la sélection bien visible, Retour ferme les fenêtres.
 *   **Droits respectés** : chacun ne voit que les bibliothèques et les classifications qui lui sont permises.
+*   **Des réglages qui montrent l'essentiel** : la page de réglages s'ouvre sur les chiffres clés (qui a regardé, titres du Top mondial déjà présents, titres à demander, comptes qui ont fait leurs propres choix), en français ou en anglais.
 
 ## 📦 Installation
 
@@ -187,22 +189,22 @@ Rien d'autre à installer : le plugin ajoute lui-même son script à l'interface
 
 ## ⚙️ Réglages
 
-Va dans **Tableau de bord → Extensions → Media Carousel**.
+Va dans **Tableau de bord → Extensions → Media Carousel**. La page est en français ou en anglais, selon la langue d'affichage réglée dans Jellyfin (à défaut, celle du navigateur). Elle s'ouvre sur les chiffres clés ; un clic sur l'un d'eux mène à son réglage.
 
 | Réglage | Défaut | À quoi ça sert |
 |---------|--------|----------------|
-| **Afficher les rangées sur la page d'accueil** | `activé` | Ensuite, une case par rangée et des flèches pour les ranger. |
+| **Rangées de l'accueil** | Toutes sauf Top mondial et Les plus regardés de tous les temps | Une case par rangée, et des flèches pour les ranger. |
 | **Période (jours)** | `30` | Période du Top du serveur. `7` pour la semaine, `0` depuis toujours. |
 | **Nombre de titres** | `10` | Taille de chaque classement. |
-| **Top mondial** | `désactivé` | Source (TMDB ou Trakt), liste et **Clé d'API**. La clé n'est jamais envoyée aux navigateurs. |
+| **Top mondial** | `désactivé` | Source (TMDB ou Trakt), liste et **Clé d'API**. La clé reste sur le serveur. |
 | **Ne garder que les titres présents dans la bibliothèque** | `activé` | À décocher pour voir les titres absents, et leur bouton Seerr. |
 | **Proposer les demandes à Seerr** | `désactivé` | Avec l'**Adresse de Seerr** (vue depuis le serveur Jellyfin) et la **Clé d'API de Seerr**. |
 | **Couleur d'accentuation** | `#775BF4` | Couleur des chiffres au survol et de la sélection. |
 | **Taille du chiffre (%)** | `100` | En dessous de 100, la rangée se resserre. Les affiches ne changent pas. |
-| **Laisser chaque compte régler son accueil** | `activé` | Le panneau **Personnaliser mes rangées** sur l'accueil. |
-| **Recalcul toutes les (heures)** | `6` | Fréquence du recalcul des classements. |
-| **Créer aussi une collection par classement** | `désactivé` | Pour les clients sans les rangées, comme Kodi. L'ordre du classement est gardé. |
-| **Ignorer le contenu IPTV (XFusion et autres chaînes)** | `activé` | Écarte les catalogues IPTV des rangées. |
+| **Laisser chaque compte régler son accueil** | `activé` | Le panneau **Personnaliser mes rangées** sur l'accueil. **Remettre tous les comptes aux réglages du serveur** efface les choix de tous les comptes. |
+| **Créer aussi une collection par classement** | `désactivé` | Pour les applis sans les rangées, comme Kodi. L'ordre du classement est gardé. |
+
+Le Top mondial prend la **Langue de métadonnées préférée** de Jellyfin. Par défaut, les classements sont recalculés au démarrage et toutes les 6 heures : pour changer ce rythme, va dans **Tableau de bord → Tâches planifiées → Recalcul des classements MediaCarousel**.
 
 Les clés d'API sont gratuites : **TMDB** sur [themoviedb.org → Paramètres → API](https://www.themoviedb.org/settings/api), **Trakt** sur [trakt.tv → Applications](https://trakt.tv/oauth/applications) (le Client ID).
 
@@ -217,7 +219,7 @@ Les clés d'API sont gratuites : **TMDB** sur [themoviedb.org → Paramètres �
 
 | Problème | Solution |
 |----------|----------|
-| **Aucune rangée sur l'accueil** | Redémarre Jellyfin, puis `Ctrl+Maj+R` : le navigateur garde l'ancienne page. |
+| **Aucune rangée sur l'accueil** | Si la page de réglages indique que les rangées sont masquées, clique sur **Les afficher**, puis sur **Enregistrer**. Sinon, redémarre Jellyfin, puis `Ctrl+Maj+R` : le navigateur garde l'ancienne page. |
 | **Toutes les rangées échouent sur Jellyfin 12** | Une version 3.x est installée. Mets Media Carousel à jour depuis le catalogue : la 4.x est la ligne Jellyfin 12. |
 | **Le Top mondial est vide** | Vérifie la clé d'API. Avec **Ne garder que les titres présents**, seuls tes titres apparaissent. |
 | **Pas de bouton Demander** | Décoche **Ne garder que les titres présents**, importe tes utilisateurs Jellyfin dans Seerr, puis clique sur **Enregistrer**. |
