@@ -118,7 +118,7 @@ API keys are free: **TMDB** on [themoviedb.org → Settings → API](https://www
 
 ## 🎨 Recommended Theme
 
-Media Carousel fits naturally into [**ElegantFin Cinema Edition**](https://github.com/peterdu1109/ElegantFin). You can change its colors from Jellyfin's custom CSS:
+Media Carousel fits naturally into [**ElegantFin Cinema Edition**](https://github.com/ElieMFR/ElegantFin). You can change its colors from Jellyfin's custom CSS:
 
 ```css
 .mc-row { --mc-accent: #e50914; --mc-rank-stroke: rgba(255, 255, 255, .6); --mc-side-padding: 2%; }
@@ -228,7 +228,7 @@ Les clés d'API sont gratuites : **TMDB** sur [themoviedb.org → Paramètres �
 
 ## 🎨 Thème recommandé
 
-Media Carousel s'intègre naturellement à [**ElegantFin Cinema Edition**](https://github.com/peterdu1109/ElegantFin). Tu peux changer ses couleurs dans le CSS personnalisé de Jellyfin :
+Media Carousel s'intègre naturellement à [**ElegantFin Cinema Edition**](https://github.com/ElieMFR/ElegantFin). Tu peux changer ses couleurs dans le CSS personnalisé de Jellyfin :
 
 ```css
 .mc-row { --mc-accent: #e50914; --mc-rank-stroke: rgba(255, 255, 255, .6); --mc-side-padding: 2%; }
