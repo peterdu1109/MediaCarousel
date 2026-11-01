@@ -167,7 +167,7 @@ public sealed class RefreshOnSettingsChange : IHostedService, IDisposable
         try
         {
             _taskManager.QueueScheduledTask<ScriptInjectionTask>();
-            _logger.LogInformation("Rangées {State} : intégration à la page d'accueil relancée.", enabled ? "rallumées" : "coupées");
+            _logger.LogInformation("Rangées {State:l} : intégration à la page d'accueil relancée.", enabled ? "rallumées" : "coupées");
         }
         catch (Exception ex)
         {
