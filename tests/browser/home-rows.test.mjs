@@ -68,6 +68,7 @@ const stub = () => {
           AllowUserPreferences: window.__allowPrefs === true,
           RowOrder: window.__rowOrder,
           ManageNativeSections: window.__manageNatives === true,
+          LibraryIds: window.__libraryIds || [],
           HideNativeSections: window.__hideNative === true,
           LocalRowTitle: 'Top 10 sur ce serveur', GlobalRowTitle: 'Top 10 mondial',
           GlobalSplit: window.__globalSplit === true,
@@ -388,6 +389,24 @@ const accent = await injection.evaluate(() => {
   };
 });
 await injection.close();
+
+// AUDIT 2026-11 : bibliotheques exclues. Les rangees qui interrogent /Items elles-memes
+// (genres, « Parce que ») se restreignent alors aux bibliotheques publiees, une requete par
+// bibliotheque ; sans exclusion, elles gardent une seule requete.
+const scoped = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+scoped.on('pageerror', e => errors.push('pageerror(scoped): ' + e.message));
+await scoped.addInitScript(() => {
+  window.__libraryIds = ['libA', 'libB'];
+});
+await scoped.goto('file://' + path.join(here, 'home.html'));
+await scoped.evaluate(stub);
+await scoped.evaluate(script);
+await scoped.waitForFunction(() => document.querySelectorAll('.mc-row').length === 10, { timeout: 8000 });
+await scoped.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+await scoped.waitForTimeout(900);
+const scopedCalls = await scoped.evaluate(() => window.__calls.filter(c => c.startsWith('Items?')));
+await scoped.close();
+const unscopedCalls = await page.evaluate(() => window.__calls.filter(c => c.startsWith('Items?')));
 
 // Troisieme passage : un theme charge APRES nos styles, comme le Custom CSS de Jellyfin.
 const themed = await browser.newPage({ viewport: { width: 1280, height: 900 } });
@@ -2237,6 +2256,16 @@ await browser.close();
 let failed = 0;
 const check = (name, ok, got) => { console.log((ok ? 'OK    ' : 'ECHEC ') + name + (ok ? '' : '  -> ' + JSON.stringify(got))); if (!ok) failed++; };
 
+check('AUDIT: exclusions -> chaque requete Items porte une bibliotheque autorisee',
+  scopedCalls.length > 0 && scopedCalls.every(c => /ParentId=lib[AB]/.test(c)), scopedCalls);
+check('AUDIT: exclusions -> les deux bibliotheques sont interrogees pour les genres',
+  scopedCalls.some(c => c.includes('GenreIds=') && c.includes('ParentId=libA'))
+    && scopedCalls.some(c => c.includes('GenreIds=') && c.includes('ParentId=libB')), scopedCalls);
+check('AUDIT: exclusions -> « Parce que » et son film de depart restreints',
+  scopedCalls.some(c => c.includes('IsPlayed=true') && c.includes('ParentId=libA'))
+    && scopedCalls.some(c => c.includes('Genres=') && c.includes('ParentId=libB')), scopedCalls);
+check('AUDIT: sans exclusion, aucune restriction ajoutee',
+  unscopedCalls.length > 0 && unscopedCalls.every(c => !c.includes('ParentId=')), unscopedCalls);
 check('10 rangees sous les bibliotheques',
   JSON.stringify(result.order) === JSON.stringify(
     ['section0','mc-row','mc-row','mc-row','mc-row','mc-row','mc-row','mc-row','mc-row','mc-row','mc-row','section1','section2','section3']), result.order);

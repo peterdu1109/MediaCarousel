@@ -153,4 +153,15 @@ public sealed class ClientOptionsDto
     /// classement figé, parfois vieux de plusieurs mois.
     /// </remarks>
     public IReadOnlyList<string> ServerRows { get; set; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Obtient ou définit les bibliothèques auxquelles le script restreint ses propres requêtes
+    /// (genres, « Parce que tu as regardé »). Vide : aucune restriction.
+    /// </summary>
+    /// <remarks>
+    /// Rempli seulement quand l'administrateur exclut des bibliothèques : ces rangées
+    /// interrogent <c>/Items</c> directement et montraient sinon les titres exclus. Seules
+    /// figurent les bibliothèques que le compte appelant voit.
+    /// </remarks>
+    public IReadOnlyList<string> LibraryIds { get; set; } = Array.Empty<string>();
 }

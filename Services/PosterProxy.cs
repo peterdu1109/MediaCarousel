@@ -108,4 +108,17 @@ public static class PosterProxy
     /// <returns>L'adresse TMDB de l'affiche.</returns>
     public static string BuildRemoteUrl(string fileName)
         => TmdbPrefix + TmdbSize + "/" + fileName;
+
+    /// <summary>
+    /// Compare deux noms de fichier d'affiche publiés.
+    /// </summary>
+    /// <remarks>
+    /// Sensible à la casse, comme le cache disque sous Linux et le chemin TMDB : un nom
+    /// accepté dans une autre casse passait la liste blanche puis tombait en 404.
+    /// </remarks>
+    /// <param name="published">Le nom publié dans un instantané.</param>
+    /// <param name="requested">Le nom demandé par le client.</param>
+    /// <returns>Vrai si les deux noms désignent le même fichier.</returns>
+    public static bool IsSameFile(string? published, string? requested)
+        => string.Equals(published, requested, StringComparison.Ordinal);
 }

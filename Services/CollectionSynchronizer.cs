@@ -44,7 +44,7 @@ public sealed class CollectionSynchronizer
     /// Aligne le contenu d'une collection sur un classement.
     /// </summary>
     /// <param name="snapshot">Classement source.</param>
-    /// <param name="collectionName">Nom de la collection à créer si elle n'existe pas.</param>
+    /// <param name="collectionName">Nom de la collection ; une collection existante est renommée s'il a changé.</param>
     /// <param name="existingCollectionId">Identifiant mémorisé de la collection, ou <see cref="Guid.Empty"/>.</param>
     /// <param name="cancellationToken">Jeton d'annulation.</param>
     /// <returns>L'identifiant de la collection, éventuellement nouvellement créée.</returns>
@@ -84,6 +84,15 @@ public sealed class CollectionSynchronizer
 
             _logger.LogInformation("Collection « {Name} » créée avec {Count} titre(s).", collectionName, desired.Length);
             return created.Id;
+        }
+
+        if (CollectionNaming.NeedsRename(boxSet.Name, collectionName))
+        {
+            var previousName = boxSet.Name;
+            boxSet.Name = collectionName.Trim();
+            await _libraryManager.UpdateItemAsync(boxSet, boxSet.GetParent(), ItemUpdateType.MetadataEdit, cancellationToken)
+                .ConfigureAwait(false);
+            _logger.LogInformation("Collection « {Previous} » renommée « {Name} ».", previousName, boxSet.Name);
         }
 
         var current = boxSet.GetLinkedChildren().Select(i => i.Id).ToArray();

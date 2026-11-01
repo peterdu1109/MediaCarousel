@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using MediaBrowser.Controller.Entities;
+using MediaBrowser.Controller.Library;
 
 namespace JellyfinCarouselPlugin.Services;
 
@@ -53,6 +54,28 @@ public static class LibraryFilter
 
         var topParent = item.GetTopParent();
         return topParent is not null && excludedLibraries.Contains(topParent.Id);
+    }
+
+    /// <summary>
+    /// Donne les bibliothèques à passer en <c>AncestorIds</c> d'une requête de classement.
+    /// </summary>
+    /// <remarks>
+    /// Restreindre aux bibliothèques écarte aussi, dès la requête, le contenu des plugins de
+    /// chaîne : il ne descend d'aucune bibliothèque. <see cref="IsExcluded"/> reste appliqué
+    /// après coup, par sûreté.
+    /// </remarks>
+    /// <param name="libraryManager">Gestionnaire de bibliothèque.</param>
+    /// <param name="excludedLibraries">Les identifiants des bibliothèques exclues.</param>
+    /// <returns>Les bibliothèques autorisées ; vide si toutes sont exclues.</returns>
+    public static Guid[] AllowedLibraryIds(
+        ILibraryManager libraryManager,
+        IReadOnlyCollection<Guid> excludedLibraries)
+    {
+        ArgumentNullException.ThrowIfNull(libraryManager);
+
+        return LibraryScope.Allowed(
+            libraryManager.GetUserRootFolder().Children.Select(library => library.Id),
+            excludedLibraries);
     }
 
     /// <summary>

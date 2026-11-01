@@ -1,8 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Jellyfin.Data;
+using JellyfinCarouselPlugin.Configuration;
 using JellyfinCarouselPlugin.Models;
 using JellyfinCarouselPlugin.Services;
 using MediaBrowser.Controller.Dto;
@@ -212,6 +215,12 @@ public class TopListsController : ControllerBase
             SeerrAdvanced = SeerrController.IsAdvanced(config)
         };
 
+        var claim = User.Claims
+            .FirstOrDefault(c => string.Equals(c.Type, UserIdClaim, StringComparison.OrdinalIgnoreCase))?.Value;
+        var hasOwn = Guid.TryParse(claim, out var own);
+
+        options.LibraryIds = ScopedLibraryIds(config, ResolveUser(null));
+
         // Les réglages de l'administrateur ne sont qu'un défaut dès que la personnalisation
         // est ouverte : ce que ce compte a choisi passe par-dessus, le reste suit le serveur.
         // La fusion a lieu ici pour que le rendu n'ait rien à savoir de tout cela.
@@ -220,10 +229,7 @@ public class TopListsController : ControllerBase
             return Ok(options);
         }
 
-        var claim = User.Claims
-            .FirstOrDefault(c => string.Equals(c.Type, UserIdClaim, StringComparison.OrdinalIgnoreCase))?.Value;
-
-        return Guid.TryParse(claim, out var own)
+        return hasOwn
             ? Ok(UserPreferenceRules.Apply(options, _preferences.Get(own)))
             : Ok(options);
     }
@@ -268,6 +274,7 @@ public class TopListsController : ControllerBase
         var items = new List<TopListItemDto>(Math.Min(take, snapshot.Entries.Count));
         var libraryItems = new List<BaseItem>();
         var libraryTargets = new List<TopListItemDto>();
+        var showAbsent = GlobalTopFallback.ShowsAbsentEntries(user is not null && user.HasContentRestrictions());
 
         foreach (var entry in snapshot.Entries)
         {
@@ -277,6 +284,11 @@ public class TopListsController : ControllerBase
             }
 
             BaseItem? item = null;
+            if (!entry.IsInLibrary && !showAbsent)
+            {
+                continue;
+            }
+
             if (entry.IsInLibrary)
             {
                 item = _libraryManager.GetItemById(entry.ItemId);
@@ -343,6 +355,26 @@ public class TopListsController : ControllerBase
             GeneratedUtc = snapshot.GeneratedUtc,
             Items = items
         };
+    }
+
+    /// <summary>
+    /// Donne les bibliothèques auxquelles le script doit restreindre ses requêtes.
+    /// </summary>
+    /// <remarks>
+    /// Vide sans exclusion : le script garde alors une seule requête par rangée.
+    /// </remarks>
+    private string[] ScopedLibraryIds(PluginConfiguration config, Jellyfin.Database.Implementations.Entities.User? user)
+    {
+        var excluded = LibraryFilter.ParseGuids(config.ExcludedLibraryIds);
+        if (excluded.Count == 0)
+        {
+            return Array.Empty<string>();
+        }
+
+        return _libraryManager.GetUserRootFolder().Children
+            .Where(library => !excluded.Contains(library.Id) && (user is null || library.IsVisible(user)))
+            .Select(library => library.Id.ToString("N", CultureInfo.InvariantCulture))
+            .ToArray();
     }
 
     private Jellyfin.Database.Implementations.Entities.User? ResolveUser(Guid? userId)

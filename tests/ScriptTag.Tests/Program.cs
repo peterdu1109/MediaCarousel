@@ -984,6 +984,27 @@ Check("DESCRIPTION: l'anglais sans langue connue, ni pour un code qui commence s
     && PluginDescription.For("") == PluginDescription.English
     && PluginDescription.For("fri") == PluginDescription.English);
 
+// AUDIT 2026-11 : corrections relevees par l'audit de la 4.5.1.
+var bibA = Guid.NewGuid();
+var bibB = Guid.NewGuid();
+var portee = LibraryScope.Allowed(new[] { bibA, bibB, bibA, Guid.Empty }, new HashSet<Guid> { bibB });
+Check("AUDIT: la portee des requetes retire les bibliotheques exclues", portee.Length == 1 && portee[0] == bibA);
+Check("AUDIT: tout exclu donne une portee vide", LibraryScope.Allowed(new[] { bibA }, new HashSet<Guid> { bibA }).Length == 0);
+
+Check("AUDIT: rallumer les rangees relance l'integration", ScriptTag.NeedsReintegration(false, true));
+Check("AUDIT: couper les rangees relance l'integration", ScriptTag.NeedsReintegration(true, false));
+Check("AUDIT: sans changement, pas de relance", !ScriptTag.NeedsReintegration(true, true));
+
+Check("AUDIT: une collection renommee dans les reglages est renommee", CollectionNaming.NeedsRename("A", "B"));
+Check("AUDIT: meme nom, pas de renommage", !CollectionNaming.NeedsRename("Top 10", " Top 10 "));
+Check("AUDIT: nom vide, pas de renommage", !CollectionNaming.NeedsRename("Top 10", "  "));
+
+Check("AUDIT: un compte restreint ne recoit aucun titre absent", !GlobalTopFallback.ShowsAbsentEntries(true));
+Check("AUDIT: un compte sans restriction recoit les titres absents", GlobalTopFallback.ShowsAbsentEntries(false));
+
+Check("AUDIT: le nom d'affiche est compare avec sa casse", !PosterProxy.IsSameFile("abc.jpg", "ABC.jpg"));
+Check("AUDIT: le meme nom d'affiche est reconnu", PosterProxy.IsSameFile("abc.jpg", "abc.jpg"));
+
 Console.WriteLine(failed == 0 ? "\nTous les tests passent." : $"\n{failed} echec(s).");
 return failed;
 

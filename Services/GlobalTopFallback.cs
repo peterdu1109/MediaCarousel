@@ -59,4 +59,16 @@ public static class GlobalTopFallback
 
         return picked.Length == 0 ? own : new TopListSnapshot(kind, "Fallback", picked);
     }
+
+    /// <summary>
+    /// Indique si les titres absents de la bibliothèque peuvent être montrés à un compte.
+    /// </summary>
+    /// <remarks>
+    /// Un titre absent n'a ni classification ni étiquettes connues du serveur : rien ne permet
+    /// de vérifier qu'il respecte le contrôle parental. Un compte restreint ne voit donc que les
+    /// titres présents, qui passent par <c>IsVisible</c>.
+    /// </remarks>
+    /// <param name="hasContentRestrictions">Vrai si le compte a un plafond de classification ou des étiquettes filtrées.</param>
+    /// <returns>Vrai si les titres absents peuvent être montrés.</returns>
+    public static bool ShowsAbsentEntries(bool hasContentRestrictions) => !hasContentRestrictions;
 }

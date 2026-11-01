@@ -66,12 +66,15 @@ public sealed class GlobalTopListBuilder
     /// <param name="kind">Nature de la liste produite.</param>
     /// <param name="mediaKind">Types de médias demandés à la source.</param>
     /// <param name="cancellationToken">Jeton d'annulation.</param>
+    /// <param name="sharedIndex">Index de la bibliothèque partagé entre les deux moitiés d'un
+    /// classement séparé : il parcourt tous les films et séries, inutile de le bâtir deux fois.</param>
     /// <returns>Un instantané classé par rang croissant.</returns>
     public async Task<TopListSnapshot> BuildAsync(
         PluginConfiguration config,
         TopListKind kind,
         TopListMediaKind mediaKind,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Lazy<LibraryTitleIndex>? sharedIndex = null)
     {
         ArgumentNullException.ThrowIfNull(config);
 
@@ -111,7 +114,7 @@ public sealed class GlobalTopListBuilder
             return new TopListSnapshot(kind, provider.Kind.ToString(), Array.Empty<TopListEntry>());
         }
 
-        var index = BuildIndex(config);
+        var index = sharedIndex?.Value ?? BuildIndex(config);
         var entries = new List<TopListEntry>(size);
 
         // Dernier filet contre les doublons. La source en produit — une liste « tendances »
@@ -190,6 +193,18 @@ public sealed class GlobalTopListBuilder
         return snapshot => GlobalTopRematch.Apply(
             snapshot,
             title => index.TryResolve(title, out var itemId) ? itemId : Guid.Empty);
+    }
+
+    /// <summary>
+    /// Prépare un index de la bibliothèque bâti à la première demande, à partager entre
+    /// plusieurs appels de <see cref="BuildAsync(PluginConfiguration, TopListKind, TopListMediaKind, CancellationToken, Lazy{LibraryTitleIndex})"/>.
+    /// </summary>
+    /// <param name="config">Configuration courante du plugin.</param>
+    /// <returns>L'index, construit seulement s'il sert.</returns>
+    public Lazy<LibraryTitleIndex> CreateSharedIndex(PluginConfiguration config)
+    {
+        ArgumentNullException.ThrowIfNull(config);
+        return new Lazy<LibraryTitleIndex>(() => BuildIndex(config));
     }
 
     /// <summary>

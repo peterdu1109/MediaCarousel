@@ -146,6 +146,7 @@ public sealed class LocalTopListBuilder
         // Agrégats par titre. Pour un épisode, le score est reporté sur sa série.
         var accumulator = new TopListAccumulator(playCap);
         var usersCounted = 0;
+        var libraries = LibraryFilter.AllowedLibraryIds(_libraryManager, excludedLibraries);
 
         foreach (var user in _userManager.GetUsers())
         {
@@ -169,6 +170,7 @@ public sealed class LocalTopListBuilder
                     new[] { itemType },
                     candidates,
                     cutoffUtc,
+                    libraries,
                     excludedLibraries,
                     config.ExcludeChannelContent,
                     accumulator,
@@ -206,15 +208,24 @@ public sealed class LocalTopListBuilder
         BaseItemKind[] itemTypes,
         int candidates,
         DateTime? cutoffUtc,
+        Guid[] libraries,
         IReadOnlyCollection<Guid> excludedLibraries,
         bool excludeChannelContent,
         TopListAccumulator accumulator,
         Dictionary<Guid, BaseItem?> seriesCache)
     {
+        if (libraries.Length == 0)
+        {
+            return;
+        }
+
         // Le tri et la limite sont délégués à SQL ; seuls les meilleurs candidats remontent en mémoire.
+        // La restriction aux bibliothèques aussi : filtrées après la limite, les lectures IPTV
+        // d'un compte occupaient ses créneaux et ses titres locaux ne votaient plus.
         var query = new InternalItemsQuery(user)
         {
             IncludeItemTypes = itemTypes,
+            AncestorIds = libraries,
             IsPlayed = true,
             IsFolder = false,
             Recursive = true,

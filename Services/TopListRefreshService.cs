@@ -342,12 +342,13 @@ public sealed class TopListRefreshService
             {
                 // Chaque moitié a ses propres places : un Top 10 des films et un Top 10 des
                 // séries, et non les deux parts d'un classement mêlé.
+                var index = _globalBuilder.CreateSharedIndex(config);
                 var movies = await _globalBuilder.BuildAsync(
-                    config, TopListKind.GlobalMovies, TopListMediaKind.Movies, cancellationToken).ConfigureAwait(false);
+                    config, TopListKind.GlobalMovies, TopListMediaKind.Movies, cancellationToken, index).ConfigureAwait(false);
                 _store.Publish(movies);
 
                 var series = await _globalBuilder.BuildAsync(
-                    config, TopListKind.GlobalSeries, TopListMediaKind.Series, cancellationToken).ConfigureAwait(false);
+                    config, TopListKind.GlobalSeries, TopListMediaKind.Series, cancellationToken, index).ConfigureAwait(false);
                 _store.Publish(series);
 
                 // La liste mêlée ne sert plus : vidée, elle ne peut plus autoriser de demande.

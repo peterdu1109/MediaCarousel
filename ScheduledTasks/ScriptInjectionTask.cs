@@ -34,6 +34,10 @@ public sealed class ScriptInjectionTask : IScheduledTask
 {
     private const string PluginId = "191bd290-1054-4b55-a137-46c72181266b";
 
+    // File Transformation garde ses enregistrements en mémoire jusqu'au redémarrage : la tâche,
+    // relancée quand les rangées sont rallumées, ne doit pas s'y enregistrer une seconde fois.
+    private static bool _registeredWithFileTransformation;
+
     private readonly IApplicationPaths _applicationPaths;
     private readonly IServerConfigurationManager _configurationManager;
     private readonly ILogger<ScriptInjectionTask> _logger;
@@ -85,7 +89,16 @@ public sealed class ScriptInjectionTask : IScheduledTask
                 return Task.CompletedTask;
             }
 
-            if (!TryRegisterWithFileTransformation())
+            if (_registeredWithFileTransformation)
+            {
+                return Task.CompletedTask;
+            }
+
+            if (TryRegisterWithFileTransformation())
+            {
+                _registeredWithFileTransformation = true;
+            }
+            else
             {
                 InjectIntoDisk();
             }

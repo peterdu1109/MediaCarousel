@@ -140,7 +140,7 @@ public class PosterController : ControllerBase
             foreach (var entry in _store.Get(kind).Entries)
             {
                 if (PosterProxy.TryGetFileName(entry.PosterUrl, out var published)
-                    && string.Equals(published, fileName, StringComparison.OrdinalIgnoreCase))
+                    && PosterProxy.IsSameFile(published, fileName))
                 {
                     return true;
                 }

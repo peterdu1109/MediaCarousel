@@ -40,6 +40,8 @@
     <Compile Include="../../Services/PlaybackNames.cs" />
     <Compile Include="../../Configuration/ConfigurationFile.cs" />
     <Compile Include="../../Services/PluginDescription.cs" />
+    <Compile Include="../../Services/LibraryScope.cs" />
+    <Compile Include="../../Services/CollectionNaming.cs" />
   </ItemGroup>
 
 </Project>

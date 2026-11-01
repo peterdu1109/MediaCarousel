@@ -107,4 +107,17 @@ public static class ScriptTag
 
         return LegacyTagPattern.Replace(OwnTagPattern.Replace(html, string.Empty), string.Empty);
     }
+
+    /// <summary>
+    /// Indique si l'intégration doit être refaite après un enregistrement des réglages.
+    /// </summary>
+    /// <remarks>
+    /// La tâche d'intégration ne se déclenche qu'au démarrage. Un serveur démarré rangées
+    /// coupées ne s'est jamais enregistré : les rallumer restait sans effet jusqu'au
+    /// redémarrage suivant. Les couper doit aussi retirer la balise écrite sur le disque.
+    /// </remarks>
+    /// <param name="wasEnabled">Valeur de <c>EnableHomeRows</c> avant l'enregistrement.</param>
+    /// <param name="isEnabled">Valeur de <c>EnableHomeRows</c> après l'enregistrement.</param>
+    /// <returns>Vrai si la tâche d'intégration doit être relancée.</returns>
+    public static bool NeedsReintegration(bool wasEnabled, bool isEnabled) => wasEnabled != isEnabled;
 }

@@ -2586,11 +2586,63 @@
     }
 
     /**
+     * Interroge /Items en se restreignant aux bibliothèques publiées par le serveur.
+     *
+     * `LibraryIds` n'est rempli que si l'administrateur exclut des bibliothèques : sans
+     * restriction, une seule requête. Sinon une requête par bibliothèque (`ParentId`, seul
+     * filtre d'ancêtre de /Items), fusionnées : triées par `compare` s'il est fourni, sinon
+     * alternées pour que chaque bibliothèque soit représentée.
+     */
+    function loadScopedItems(params, compare) {
+        var libraries = (options && options.LibraryIds) || [];
+
+        if (!libraries.length) {
+            return loadCached('Items', params);
+        }
+
+        return Promise.all(libraries.map(function (id) {
+            var scoped = {};
+            Object.keys(params).forEach(function (key) {
+                scoped[key] = params[key];
+            });
+            scoped.ParentId = id;
+            return loadCached('Items', scoped);
+        })).then(function (lists) {
+            var merged = [];
+
+            if (compare) {
+                merged = Array.prototype.concat.apply([], lists).sort(compare);
+            } else {
+                for (var round = 0; merged.length < params.Limit; round++) {
+                    var added = false;
+                    for (var i = 0; i < lists.length; i++) {
+                        if (round < lists[i].length) {
+                            merged.push(lists[i][round]);
+                            added = true;
+                        }
+                    }
+                    if (!added) {
+                        break;
+                    }
+                }
+            }
+
+            return merged.slice(0, params.Limit);
+        });
+    }
+
+    function lastPlayedTime(item) {
+        var date = item && item.UserData && item.UserData.LastPlayedDate;
+        var time = date ? Date.parse(date) : NaN;
+        return isNaN(time) ? 0 : time;
+    }
+
+    /**
      * Charge les titres d'un genre depuis l'API native de Jellyfin : requête indexée,
      * paginée et déjà filtrée selon les droits de l'utilisateur courant.
      */
     function loadCachedGenreItems(genreId, limit) {
-        return loadCached('Items', {
+        return loadScopedItems({
             UserId: window.ApiClient.getCurrentUserId(),
             GenreIds: genreId,
             IncludeItemTypes: 'Movie,Series',
@@ -2611,7 +2663,9 @@
      * dernier titre regardé. Le tri par DatePlayed exige un utilisateur, qui est bien fourni.
      */
     function loadLastWatched() {
-        return loadCached('Items', {
+        // Les données utilisateur portent la date de lecture : sous restriction, c'est elle
+        // qui départage les bibliothèques.
+        return loadScopedItems({
             UserId: window.ApiClient.getCurrentUserId(),
             IncludeItemTypes: 'Movie',
             IsPlayed: true,
@@ -2621,8 +2675,10 @@
             SortOrder: 'Descending',
             Fields: 'Genres',
             EnableImages: false,
-            EnableUserData: false,
+            EnableUserData: true,
             EnableTotalRecordCount: false
+        }, function (a, b) {
+            return lastPlayedTime(b) - lastPlayedTime(a);
         }).then(function (items) {
             var item = items[0];
             return item && item.Genres && item.Genres.length ? item : null;
@@ -2636,7 +2692,7 @@
      * rien de particulier. Le film de départ est exclu de sa propre rangée.
      */
     function loadBecauseItems(seed, limit) {
-        return loadCached('Items', {
+        return loadScopedItems({
             UserId: window.ApiClient.getCurrentUserId(),
             Genres: seed.Genres.slice(0, 2).join('|'),
             ExcludeItemIds: seed.Id,
