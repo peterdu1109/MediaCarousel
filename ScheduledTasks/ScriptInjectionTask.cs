@@ -81,9 +81,9 @@ public sealed class ScriptInjectionTask : IScheduledTask
             // rangée n'apparaît, alors que l'API du plugin répond parfaitement par ailleurs.
             ScriptTag.BaseUrl = ResolveBaseUrl();
 
-            var enabled = Plugin.Instance?.Configuration.EnableHomeRows ?? true;
-
-            if (!enabled)
+            // Le même interrupteur que le rappel File Transformation : il suit les réglages, et
+            // répond non dès la désinstallation, où la balise ne doit plus revenir sur le disque.
+            if (!IndexHtmlTransformer.RowsEnabled())
             {
                 RemoveFromDisk();
                 return Task.CompletedTask;

@@ -1022,7 +1022,28 @@ try
     Check("DESINSTALLATION: le rappel File Transformation n'insere plus rien",
         !IndexHtmlTransformer.InjectScript(new FileTransformationPayload { Contents = html }).Contains("media-carousel.js", StringComparison.Ordinal));
     Check("DESINSTALLATION: un second passage ne reecrit rien",
-        IndexHtmlFile.Uninstall(webTemp.FullName, webTemp.FullName) is null && !File.Exists(indexPath + ".mediacarousel.tmp"));
+        IndexHtmlFile.Uninstall(webTemp.FullName, webTemp.FullName) is null && Directory.GetFiles(webTemp.FullName, "*.tmp").Length == 0);
+
+    // Regression : la tache et la desinstallation reecrivaient index.html sans verrou, par le
+    // meme fichier temporaire. Deux reecritures simultanees perdaient l'une des deux, ou
+    // echouaient sur le deplacement du temporaire deja deplace par l'autre.
+    File.WriteAllText(indexPath, string.Empty);
+    var echecsConcurrents = 0;
+    Parallel.For(0, 200, new ParallelOptions { MaxDegreeOfParallelism = 8 }, _ =>
+    {
+        try
+        {
+            IndexHtmlFile.Update(indexPath, contenu => contenu + "x");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Les deux exceptions que la tache et la desinstallation attrapent.
+            Interlocked.Increment(ref echecsConcurrents);
+        }
+    });
+    Check("CONCURRENCE: aucune reecriture simultanee n'echoue (" + echecsConcurrents + ")", echecsConcurrents == 0);
+    Check("CONCURRENCE: aucune reecriture simultanee n'est perdue", File.ReadAllText(indexPath).Length == 200);
+    Check("CONCURRENCE: aucun fichier temporaire ne reste", Directory.GetFiles(webTemp.FullName, "*.tmp").Length == 0);
 }
 finally
 {
@@ -1074,6 +1095,22 @@ if (racine is not null)
 Check("VISIBILITE: sources du plugin trouvees", racine is not null);
 Check("VISIBILITE: aucun IsVisible( (acces aux bibliotheques ignore) : " + string.Join(", ", appelsIsVisible), appelsIsVisible.Count == 0);
 
+// INTEGRATION : l'interrupteur lu par le rappel File Transformation et par la tache ne se
+// branche que dans le serveur. Sans la ligne de Plugin, la valeur par defaut (toujours vrai)
+// ramenait EXG-009 sans qu'aucun test ne bouge ; et la tache, qui relisait les reglages
+// elle-meme, remettait la balise sur le disque apres une desinstallation.
+string CodeSansCommentaires(string relatif) => racine is null
+    ? string.Empty
+    : string.Join('\n', File.ReadAllLines(Path.Combine(racine.FullName, relatif))
+        .Where(ligne => !ligne.TrimStart().StartsWith("//", StringComparison.Ordinal)));
+
+var codePlugin = CodeSansCommentaires("Plugin.cs");
+var codeTache = CodeSansCommentaires(Path.Combine("ScheduledTasks", "ScriptInjectionTask.cs"));
+Check("INTEGRATION: Plugin branche l'interrupteur sur ses reglages",
+    codePlugin.Contains("IndexHtmlTransformer.RowsEnabled = () => Configuration.EnableHomeRows;", StringComparison.Ordinal));
+Check("INTEGRATION: la tache lit le meme interrupteur que le rappel",
+    codeTache.Contains("IndexHtmlTransformer.RowsEnabled()", StringComparison.Ordinal)
+    && !codeTache.Contains("EnableHomeRows", StringComparison.Ordinal));
 Console.WriteLine(failed == 0 ? "\nTous les tests passent." : $"\n{failed} echec(s).");
 return failed;
 

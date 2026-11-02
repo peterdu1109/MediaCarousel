@@ -13,6 +13,10 @@ namespace JellyfinCarouselPlugin.Services;
 /// </remarks>
 public static class IndexHtmlFile
 {
+    // La tâche d'intégration et la désinstallation peuvent réécrire le fichier en même temps :
+    // sans verrou, l'une des deux réécritures était perdue.
+    private static readonly object WriteLock = new();
+
     /// <summary>
     /// Cherche <c>index.html</c> aux emplacements connus de l'interface web.
     /// </summary>
@@ -44,21 +48,33 @@ public static class IndexHtmlFile
     {
         ArgumentNullException.ThrowIfNull(transform);
 
-        var original = File.ReadAllText(path);
-        var updated = transform(original);
-
-        if (string.Equals(original, updated, StringComparison.Ordinal))
+        lock (WriteLock)
         {
-            return false;
-        }
+            var original = File.ReadAllText(path);
+            var updated = transform(original);
 
-        // index.html est le point d'entrée de toute l'interface web : une coupure pendant
-        // l'écriture le laisserait tronqué et Jellyfin ne chargerait plus du tout. Le fichier
-        // temporaire est créé dans le même répertoire pour que le remplacement soit atomique.
-        var temporary = path + ".mediacarousel.tmp";
-        File.WriteAllText(temporary, updated);
-        File.Move(temporary, path, overwrite: true);
-        return true;
+            if (string.Equals(original, updated, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            // index.html est le point d'entrée de toute l'interface web : une coupure pendant
+            // l'écriture le laisserait tronqué et Jellyfin ne chargerait plus du tout. Le fichier
+            // temporaire est créé dans le même répertoire pour que le remplacement soit atomique,
+            // sous un nom unique, et supprimé si l'écriture échoue.
+            var temporary = path + "." + Guid.NewGuid().ToString("N") + ".mediacarousel.tmp";
+            try
+            {
+                File.WriteAllText(temporary, updated);
+                File.Move(temporary, path, overwrite: true);
+            }
+            finally
+            {
+                File.Delete(temporary);
+            }
+
+            return true;
+        }
     }
 
     /// <summary>
