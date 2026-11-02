@@ -995,6 +995,41 @@ Check("AUDIT: rallumer les rangees relance l'integration", ScriptTag.NeedsReinte
 Check("AUDIT: couper les rangees relance l'integration", ScriptTag.NeedsReintegration(true, false));
 Check("AUDIT: sans changement, pas de relance", !ScriptTag.NeedsReintegration(true, true));
 
+// Regression EXG-009 : avec File Transformation, la transformation reste enregistree jusqu'au
+// redemarrage et seul le rappel decide. Il inserait la balise sans lire l'interrupteur :
+// couper les rangees ne retirait rien.
+ScriptTag.BaseUrl = string.Empty;
+var avecBalise = ScriptTag.Apply(html);
+IndexHtmlTransformer.RowsEnabled = () => false;
+Check("FT: rangees coupees, le rappel n'insere pas la balise",
+    !IndexHtmlTransformer.InjectScript(new FileTransformationPayload { Contents = html }).Contains("media-carousel.js", StringComparison.Ordinal));
+Check("FT: rangees coupees, le rappel retire une balise deja la",
+    !IndexHtmlTransformer.InjectScript(new FileTransformationPayload { Contents = avecBalise }).Contains("media-carousel.js", StringComparison.Ordinal));
+IndexHtmlTransformer.RowsEnabled = () => true;
+Check("FT: rangees rallumees, le rappel insere la balise",
+    IndexHtmlTransformer.InjectScript(new FileTransformationPayload { Contents = html }) == avecBalise);
+
+// Regression : desinstalle sans File Transformation, le plugin laissait sa balise dans
+// index.html, et chaque page demandait ensuite un script disparu (404).
+var webTemp = Directory.CreateTempSubdirectory("mc-web-");
+try
+{
+    var indexPath = Path.Combine(webTemp.FullName, "index.html");
+    File.WriteAllText(indexPath, avecBalise);
+    var reecrit = IndexHtmlFile.Uninstall(webTemp.FullName, webTemp.FullName);
+    Check("DESINSTALLATION: la balise est retiree du disque",
+        reecrit == indexPath && File.ReadAllText(indexPath) == html);
+    Check("DESINSTALLATION: le rappel File Transformation n'insere plus rien",
+        !IndexHtmlTransformer.InjectScript(new FileTransformationPayload { Contents = html }).Contains("media-carousel.js", StringComparison.Ordinal));
+    Check("DESINSTALLATION: un second passage ne reecrit rien",
+        IndexHtmlFile.Uninstall(webTemp.FullName, webTemp.FullName) is null && !File.Exists(indexPath + ".mediacarousel.tmp"));
+}
+finally
+{
+    webTemp.Delete(recursive: true);
+    IndexHtmlTransformer.RowsEnabled = () => true;
+}
+
 Check("AUDIT: une collection renommee dans les reglages est renommee", CollectionNaming.NeedsRename("A", "B"));
 Check("AUDIT: meme nom, pas de renommage", !CollectionNaming.NeedsRename("Top 10", " Top 10 "));
 Check("AUDIT: nom vide, pas de renommage", !CollectionNaming.NeedsRename("Top 10", "  "));

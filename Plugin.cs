@@ -56,6 +56,7 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
         }
 
         WarnIfAnotherVersionIsLoaded();
+        IndexHtmlTransformer.RowsEnabled = () => Configuration.EnableHomeRows;
         Instance = this;
     }
 
@@ -105,6 +106,30 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
         {
             ConfigurationFile.Write(ConfigurationFilePath, config);
         }
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Défait l'intégration à <c>index.html</c> : sans File Transformation, la balise écrite sur
+    /// le disque survivrait au plugin et chaque page demanderait un script disparu.
+    /// </remarks>
+    public override void OnUninstalling()
+    {
+        try
+        {
+            var path = IndexHtmlFile.Uninstall(ApplicationPaths.WebPath, ApplicationPaths.ProgramDataPath);
+            if (path is not null)
+            {
+                _logger.LogInformation("Script retiré de {Path} à la désinstallation.", path);
+            }
+        }
+        catch (Exception ex)
+        {
+            // La désinstallation ne doit pas échouer pour autant.
+            _logger.LogWarning(ex, "Script non retiré de index.html à la désinstallation.");
+        }
+
+        base.OnUninstalling();
     }
 
     /// <inheritdoc />

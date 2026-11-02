@@ -15,6 +15,8 @@
     <!-- Ces deux classes n'ont aucune dependance Jellyfin : les fichiers sont compiles
          directement, ce qui evite de referencer le plugin et ses paquets. -->
     <Compile Include="../../Services/ScriptTag.cs" />
+    <Compile Include="../../Services/IndexHtmlTransformer.cs" />
+    <Compile Include="../../Services/IndexHtmlFile.cs" />
     <Compile Include="../../Services/StudioNameNormalizer.cs" />
     <Compile Include="../../Services/CatalogCounter.cs" />
     <Compile Include="../../Services/CatalogRepresentative.cs" />

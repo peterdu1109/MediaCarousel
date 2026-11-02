@@ -1,3 +1,4 @@
+using System;
 using System.Text.Json.Serialization;
 
 namespace JellyfinCarouselPlugin.Services;
@@ -28,7 +29,19 @@ public class FileTransformationPayload
 public static class IndexHtmlTransformer
 {
     /// <summary>
-    /// Insère la balise script juste avant la fermeture du corps du document.
+    /// Obtient ou définit la fonction qui dit si les rangées sont allumées.
+    /// </summary>
+    /// <remarks>
+    /// File Transformation garde la transformation enregistrée jusqu'au redémarrage : couper
+    /// les rangées, ou désinstaller le plugin, ne la retire pas. Le rappel relit donc
+    /// l'interrupteur à chaque appel. <see cref="Plugin"/> branche ici ses réglages, et la
+    /// désinstallation la remplace par une fonction qui répond toujours non.
+    /// </remarks>
+    public static Func<bool> RowsEnabled { get; set; } = static () => true;
+
+    /// <summary>
+    /// Insère la balise script juste avant la fermeture du corps du document, ou la retire
+    /// quand les rangées sont coupées.
     /// </summary>
     /// <param name="payload">Charge utile fournie par FileTransformation.</param>
     /// <returns>Le HTML transformé.</returns>
@@ -41,6 +54,6 @@ public static class IndexHtmlTransformer
             return contents ?? string.Empty;
         }
 
-        return ScriptTag.Apply(contents);
+        return RowsEnabled() ? ScriptTag.Apply(contents) : ScriptTag.Remove(contents);
     }
 }
