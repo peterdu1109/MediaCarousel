@@ -269,6 +269,19 @@ public class TopListsController : ControllerBase
         // demandée est tirée de celle qui existe : la rangée ne disparaît plus.
         var snapshot = GlobalTopFallback.For(kind, _store.Get);
         var user = ResolveUser(userId);
+
+        // Un jeton dont le compte est introuvable ne vaut pas une clé d'API : sans utilisateur,
+        // rien ne serait filtré. Rien n'est publié.
+        if (user is null && HasUserClaim())
+        {
+            return new TopListResponseDto
+            {
+                Kind = snapshot.Kind.ToString(),
+                Source = snapshot.Source,
+                GeneratedUtc = snapshot.GeneratedUtc,
+                Items = Array.Empty<TopListItemDto>()
+            };
+        }
         var take = Math.Clamp(limit ?? snapshot.Entries.Count, 0, 100);
 
         var items = new List<TopListItemDto>(Math.Min(take, snapshot.Entries.Count));
@@ -312,8 +325,10 @@ public class TopListsController : ControllerBase
                 TmdbId = entry.TmdbId,
                 ImdbId = entry.ImdbId,
                 // Relayée par le plugin : sans cela, chaque navigateur irait chercher
-                // l'affiche chez TMDB et lui livrerait son adresse IP.
-                PosterUrl = PosterProxy.ToLocalUrl(entry.PosterUrl),
+                // l'affiche chez TMDB et lui livrerait son adresse IP. Absents seulement :
+                // un titre présent s'affiche avec les images de Jellyfin, et le relais ne
+                // sert plus son affiche (voir PosterProxy.IsRelayed).
+                PosterUrl = entry.IsInLibrary ? null : PosterProxy.ToLocalUrl(entry.PosterUrl),
                 MediaType = entry.MediaType
             };
 
@@ -384,6 +399,12 @@ public class TopListsController : ControllerBase
             .Where(library => !excluded.Contains(library.Id))
             .Select(library => library.Id.ToString("N", CultureInfo.InvariantCulture))
             .ToArray();
+    }
+
+    private bool HasUserClaim()
+    {
+        var claim = User.Claims.FirstOrDefault(c => string.Equals(c.Type, UserIdClaim, StringComparison.OrdinalIgnoreCase))?.Value;
+        return Guid.TryParse(claim, out var own) && own != Guid.Empty;
     }
 
     private Jellyfin.Database.Implementations.Entities.User? ResolveUser(Guid? userId)

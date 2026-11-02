@@ -4,8 +4,10 @@ using System.Globalization;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Jellyfin.Data;
 using JellyfinCarouselPlugin.Models;
 using JellyfinCarouselPlugin.Services;
+using MediaBrowser.Controller.Library;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -48,16 +50,19 @@ public class SeerrController : ControllerBase
 
     private readonly SeerrClient _seerr;
     private readonly ITopListStore _store;
+    private readonly IUserManager _userManager;
 
     /// <summary>
     /// Initialise une nouvelle instance de la classe <see cref="SeerrController"/>.
     /// </summary>
     /// <param name="seerr">Client Seerr.</param>
     /// <param name="store">Classements publiés, qui font office de liste blanche.</param>
-    public SeerrController(SeerrClient seerr, ITopListStore store)
+    /// <param name="userManager">Comptes, pour peser les restrictions de l'appelant.</param>
+    public SeerrController(SeerrClient seerr, ITopListStore store, IUserManager userManager)
     {
         _seerr = seerr;
         _store = store;
+        _userManager = userManager;
     }
 
     /// <summary>
@@ -78,6 +83,14 @@ public class SeerrController : ControllerBase
         if (!TryGetSettings(out var baseUrl, out var apiKey))
         {
             return StatusCode(StatusCodes.Status503ServiceUnavailable);
+        }
+
+        // Les titres absents ne sont pas montrés à un compte restreint ; il n'a donc rien à
+        // interroger. Seerr dirait sinon « disponible » d'un titre ajouté depuis le dernier
+        // recalcul, peut-être dans une bibliothèque qui lui est interdite.
+        if (!ShowsAbsentTitles())
+        {
+            return Ok(Array.Empty<SeerrStateDto>());
         }
 
         var published = PublishedTitles();
@@ -145,6 +158,12 @@ public class SeerrController : ControllerBase
         if (item is null || !IsPublished(PublishedTitles(), item))
         {
             return BadRequest();
+        }
+
+        // Même règle que le classement : un compte restreint ne voit aucun titre absent.
+        if (!ShowsAbsentTitles())
+        {
+            return StatusCode(StatusCodes.Status403Forbidden);
         }
 
         // Une série se demande saison par saison, un film jamais : le client ne peut pas
@@ -279,6 +298,7 @@ public class SeerrController : ControllerBase
     [HttpPost("Seasons")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status502BadGateway)]
     [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
     public async Task<ActionResult<SeerrSeasonsDto>> GetSeasons(
@@ -295,6 +315,11 @@ public class SeerrController : ControllerBase
             || !IsPublished(PublishedTitles(), item))
         {
             return BadRequest();
+        }
+
+        if (!ShowsAbsentTitles())
+        {
+            return StatusCode(StatusCodes.Status403Forbidden);
         }
 
         var (choice, failure) = await _seerr.GetSeasonsAsync(baseUrl, apiKey, item.TmdbId, cancellationToken)
@@ -426,6 +451,24 @@ public class SeerrController : ControllerBase
         SeerrFailure.Offline => "offline",
         _ => "error"
     };
+
+    /// <summary>
+    /// Indique si l'appelant peut voir les titres absents, comme le fait le classement.
+    /// </summary>
+    /// <remarks>
+    /// Une clé d'API vaut administrateur ; un jeton dont le compte est introuvable ne voit rien.
+    /// </remarks>
+    private bool ShowsAbsentTitles()
+    {
+        var userId = ResolveUserId();
+        if (userId == Guid.Empty)
+        {
+            return true;
+        }
+
+        var user = _userManager.GetUserById(userId);
+        return user is not null && GlobalTopFallback.ShowsAbsentEntries(user.HasContentRestrictions());
+    }
 
     private Guid ResolveUserId()
     {

@@ -121,4 +121,23 @@ public static class PosterProxy
     /// <returns>Vrai si les deux noms désignent le même fichier.</returns>
     public static bool IsSameFile(string? published, string? requested)
         => string.Equals(published, requested, StringComparison.Ordinal);
+
+    /// <summary>
+    /// Indique si l'affiche d'une entrée peut être relayée sous ce nom.
+    /// </summary>
+    /// <remarks>
+    /// Seuls les titres absents de la bibliothèque passent : le script affiche les autres
+    /// avec les images de Jellyfin. La route étant anonyme et le nom de fichier public chez
+    /// TMDB, relayer aussi les titres présents répondait 200 à quiconque demandait si un titre
+    /// en tendance est sur le serveur — <c>GlobalTopLibraryOnly</c>, actif par défaut, ne
+    /// garde que ceux-là dans l'instantané.
+    /// </remarks>
+    /// <param name="entry">L'entrée d'un instantané.</param>
+    /// <param name="fileName">Le nom demandé par le client.</param>
+    /// <returns>Vrai si l'affiche peut être servie.</returns>
+    public static bool IsRelayed(Models.TopListEntry entry, string? fileName)
+        => entry is not null
+            && !entry.IsInLibrary
+            && TryGetFileName(entry.PosterUrl, out var published)
+            && IsSameFile(published, fileName);
 }

@@ -44,6 +44,8 @@
     <Compile Include="../../Services/PluginDescription.cs" />
     <Compile Include="../../Services/LibraryScope.cs" />
     <Compile Include="../../Services/CollectionNaming.cs" />
+    <Compile Include="../../Services/CatalogVisibility.cs" />
+    <Compile Include="../../Models/CatalogEntry.cs" />
   </ItemGroup>
 
 </Project>

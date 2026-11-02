@@ -1111,6 +1111,41 @@ Check("INTEGRATION: Plugin branche l'interrupteur sur ses reglages",
 Check("INTEGRATION: la tache lit le meme interrupteur que le rappel",
     codeTache.Contains("IndexHtmlTransformer.RowsEnabled()", StringComparison.Ordinal)
     && !codeTache.Contains("EnableHomeRows", StringComparison.Ordinal));
+
+// DROITS : audit du 2026-11-02. Le relais d'affiches est anonyme et le nom de fichier public
+// chez TMDB : relayer un titre present repondait 200 a qui demandait si un titre en tendance
+// est sur le serveur (GlobalTopLibraryOnly, actif par defaut, ne garde que ceux-la).
+const string afficheTmdb = "https://image.tmdb.org/t/p/w500/abc123.jpg";
+Check("DROITS: l'affiche d'un titre absent est relayee",
+    PosterProxy.IsRelayed(new TopListEntry { PosterUrl = afficheTmdb }, "abc123.jpg"));
+Check("DROITS: l'affiche d'un titre present n'est pas relayee",
+    !PosterProxy.IsRelayed(new TopListEntry { ItemId = Guid.NewGuid(), PosterUrl = afficheTmdb }, "abc123.jpg"));
+Check("DROITS: un autre nom n'est pas relaye",
+    !PosterProxy.IsRelayed(new TopListEntry { PosterUrl = afficheTmdb }, "autre.jpg"));
+
+// Catalogue agrege avant la ventilation : le total du serveur etait publie a tout compte,
+// studio d'une bibliotheque interdite compris.
+var bibliothequeVue = Guid.NewGuid();
+var ancienneEntree = new CatalogEntry { Name = "Studio", ItemCount = 7 };
+var ventilee = new CatalogEntry
+{
+    Name = "Studio",
+    ItemCount = 7,
+    CountsByLibrary = new Dictionary<Guid, int> { [bibliothequeVue] = 2, [Guid.NewGuid()] = 5 }
+};
+Check("DROITS: entree sans ventilation, compte filtre : rien",
+    CatalogVisibility.Count(ancienneEntree, new[] { bibliothequeVue }) == 0);
+Check("DROITS: entree sans ventilation, sans filtrage : total",
+    CatalogVisibility.Count(ancienneEntree, null) == 7);
+Check("DROITS: entree ventilee, compte filtre : ses bibliotheques seules",
+    CatalogVisibility.Count(ventilee, new[] { bibliothequeVue }) == 2);
+
+// Les routes Seerr suivent la regle du classement : aucun titre absent pour un compte
+// restreint. Les droits ne se simulent pas hors serveur : le controle porte sur le code.
+var codeSeerr = CodeSansCommentaires(Path.Combine("Api", "SeerrController.cs"));
+Check("DROITS: Status, Seasons et Request refusent un compte restreint",
+    System.Text.RegularExpressions.Regex.Matches(codeSeerr, @"if \(!ShowsAbsentTitles\(\)\)").Count == 3);
+
 Console.WriteLine(failed == 0 ? "\nTous les tests passent." : $"\n{failed} echec(s).");
 return failed;
 

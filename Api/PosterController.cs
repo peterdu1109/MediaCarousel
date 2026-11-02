@@ -139,8 +139,7 @@ public class PosterController : ControllerBase
         {
             foreach (var entry in _store.Get(kind).Entries)
             {
-                if (PosterProxy.TryGetFileName(entry.PosterUrl, out var published)
-                    && PosterProxy.IsSameFile(published, fileName))
+                if (PosterProxy.IsRelayed(entry, fileName))
                 {
                     return true;
                 }
