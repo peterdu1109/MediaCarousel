@@ -66,7 +66,7 @@ public static class GlobalTopFallback
     /// <remarks>
     /// Un titre absent n'a ni classification ni étiquettes connues du serveur : rien ne permet
     /// de vérifier qu'il respecte le contrôle parental. Un compte restreint ne voit donc que les
-    /// titres présents, qui passent par <c>IsVisible</c>.
+    /// titres présents, qui passent par <c>IsVisibleStandalone</c>.
     /// </remarks>
     /// <param name="hasContentRestrictions">Vrai si le compte a un plafond de classification ou des étiquettes filtrées.</param>
     /// <returns>Vrai si les titres absents peuvent être montrés.</returns>

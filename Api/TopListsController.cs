@@ -293,9 +293,12 @@ public class TopListsController : ControllerBase
             {
                 item = _libraryManager.GetItemById(entry.ItemId);
 
-                // L'élément a pu être supprimé, ou être invisible pour cet utilisateur
-                // (contrôle parental, bibliothèque non autorisée) : on l'omet du classement.
-                if (item is null || (user is not null && !item.IsVisible(user)))
+                // L'élément a pu être supprimé, ou être invisible pour cet utilisateur : on
+                // l'omet du classement. `IsVisibleStandalone` et non `IsVisible` : ce dernier ne
+                // pèse que la classification et les étiquettes, pas l'accès à la bibliothèque.
+                // Un compte limité à « Films » recevait sinon les titres des autres
+                // bibliothèques (banc, suite `droits`, 2026-11-01).
+                if (item is null || (user is not null && !item.IsVisibleStandalone(user)))
                 {
                     continue;
                 }
@@ -371,8 +374,14 @@ public class TopListsController : ControllerBase
             return Array.Empty<string>();
         }
 
-        return _libraryManager.GetUserRootFolder().Children
-            .Where(library => !excluded.Contains(library.Id) && (user is null || library.IsVisible(user)))
+        // Les bibliothèques ouvertes à ce compte, comme `CatalogController` : `IsVisible` sur
+        // une bibliothèque ne pèse pas l'accès, et publierait celles qui lui sont interdites.
+        var libraries = user is null
+            ? _libraryManager.GetUserRootFolder().Children
+            : _libraryManager.GetUserRootFolder().GetChildren(user, includeLinkedChildren: true);
+
+        return libraries
+            .Where(library => !excluded.Contains(library.Id))
             .Select(library => library.Id.ToString("N", CultureInfo.InvariantCulture))
             .ToArray();
     }
