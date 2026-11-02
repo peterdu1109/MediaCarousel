@@ -1040,6 +1040,40 @@ Check("AUDIT: un compte sans restriction recoit les titres absents", GlobalTopFa
 Check("AUDIT: le nom d'affiche est compare avec sa casse", !PosterProxy.IsSameFile("abc.jpg", "ABC.jpg"));
 Check("AUDIT: le meme nom d'affiche est reconnu", PosterProxy.IsSameFile("abc.jpg", "abc.jpg"));
 
+// VISIBILITE : `IsVisible` ne pese que la classification et les etiquettes, pas l'acces a la
+// bibliotheque. Un compte limite a « Films » recevait les titres des autres bibliotheques
+// (banc, suite `droits`, 2026-11-01). Les droits de Jellyfin ne se simulent pas hors serveur :
+// ce controle porte sur le code, et refuse tout appel a `IsVisible(` hors commentaire.
+var racine = new DirectoryInfo(AppContext.BaseDirectory);
+while (racine is not null && !File.Exists(Path.Combine(racine.FullName, "JellyfinCarouselPlugin.csproj")))
+{
+    racine = racine.Parent;
+}
+
+var appelsIsVisible = new List<string>();
+if (racine is not null)
+{
+    foreach (var dossier in new[] { "Api", "Services", "ScheduledTasks" })
+    {
+        foreach (var fichier in Directory.GetFiles(Path.Combine(racine.FullName, dossier), "*.cs"))
+        {
+            var lignes = File.ReadAllLines(fichier);
+            for (var i = 0; i < lignes.Length; i++)
+            {
+                var code = lignes[i].TrimStart();
+                if (!code.StartsWith("//", StringComparison.Ordinal)
+                    && System.Text.RegularExpressions.Regex.IsMatch(code, @"\.IsVisible\("))
+                {
+                    appelsIsVisible.Add(Path.GetFileName(fichier) + ":" + (i + 1));
+                }
+            }
+        }
+    }
+}
+
+Check("VISIBILITE: sources du plugin trouvees", racine is not null);
+Check("VISIBILITE: aucun IsVisible( (acces aux bibliotheques ignore) : " + string.Join(", ", appelsIsVisible), appelsIsVisible.Count == 0);
+
 Console.WriteLine(failed == 0 ? "\nTous les tests passent." : $"\n{failed} echec(s).");
 return failed;
 
