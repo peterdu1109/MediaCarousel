@@ -404,26 +404,17 @@ public class TopListsController : ControllerBase
     private bool HasUserClaim()
     {
         var claim = User.Claims.FirstOrDefault(c => string.Equals(c.Type, UserIdClaim, StringComparison.OrdinalIgnoreCase))?.Value;
-        return Guid.TryParse(claim, out var own) && own != Guid.Empty;
+        return RequestUser.FromClaim(claim).HasValue;
     }
 
     private Jellyfin.Database.Implementations.Entities.User? ResolveUser(Guid? userId)
     {
         var claim = User.Claims.FirstOrDefault(c => string.Equals(c.Type, UserIdClaim, StringComparison.OrdinalIgnoreCase))?.Value;
 
-        // Le jeton prime TOUJOURS sur le paramètre. L'inverse laissait un compte standard
-        // demander le classement « pour » un administrateur : le filtrage de visibilité
-        // s'appliquait alors au compte nommé et non à l'appelant, qui recevait les titres,
-        // années et affiches des bibliothèques dont il est pourtant exclu.
-        if (Guid.TryParse(claim, out var own) && own != Guid.Empty)
-        {
-            return _userManager.GetUserById(own);
-        }
-
-        // Aucun utilisateur dans le jeton : c'est un appel par clé d'API, qui vaut déjà
-        // administrateur. Le paramètre lui sert alors à choisir le point de vue du filtrage.
-        return userId.HasValue && userId.Value != Guid.Empty
-            ? _userManager.GetUserById(userId.Value)
+        // Le jeton prime toujours sur le paramètre (EXG-057) : la règle et sa raison sont
+        // dans `RequestUser`, où les tests la tiennent.
+        return RequestUser.Choose(claim, userId) is { } id
+            ? _userManager.GetUserById(id)
             : null;
     }
 

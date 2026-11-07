@@ -1,0 +1,54 @@
+name: Verify
+
+# Verification de la ligne Jellyfin 12 a chaque push et pull request : compile sans
+# avertissement, paquets vulnerables, tests. Ne publie rien : ni commit, ni push, ni release.
+# Build & Release l'appelle aussi, et ne publie que si elle passe.
+on:
+  push:
+    branches: [jellyfin-12]
+  pull_request:
+    branches: [jellyfin-12]
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    # Build, installation de Chromium et trois suites de tests : quelques minutes.
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10.0
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Build sans avertissement
+        run: |
+          dotnet restore JellyfinCarouselPlugin.csproj --configfile nuget.config
+          dotnet build JellyfinCarouselPlugin.csproj -c Release --no-restore -warnaserror
+
+      - name: Paquets vulnerables
+        run: |
+          dotnet list JellyfinCarouselPlugin.csproj package --vulnerable --include-transitive 2>&1 | tee vuln.txt
+          if grep -q "has the following vulnerable packages" vuln.txt; then echo "Paquet vulnerable"; exit 1; fi
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Tests
+        run: |
+          dotnet run --project tests/ScriptTag.Tests -c Release
+          cd tests/browser
+          npm install --no-audit --no-fund
+          npx playwright install --with-deps chromium
+          node home-rows.test.mjs
+          node config-page.test.mjs

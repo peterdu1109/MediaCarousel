@@ -59,8 +59,15 @@ jobs:
             echo "release=false" >> $GITHUB_OUTPUT
           fi
 
-  build:
+  # La verification complete (Verify) passe avant toute publication : sans elle, un
+  # avertissement ou un paquet vulnerable partait dans la release.
+  verify:
     needs: check
+    if: needs.check.outputs.release == 'true'
+    uses: ./.github/workflows/verify.yml
+
+  build:
+    needs: [check, verify]
     if: needs.check.outputs.release == 'true'
     runs-on: ubuntu-latest
     # Build, installation de Chromium et trois suites de tests : quelques minutes.

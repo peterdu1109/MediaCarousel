@@ -1146,6 +1146,32 @@ var codeSeerr = CodeSansCommentaires(Path.Combine("Api", "SeerrController.cs"));
 Check("DROITS: Status, Seasons et Request refusent un compte restreint",
     System.Text.RegularExpressions.Regex.Matches(codeSeerr, @"if \(!ShowsAbsentTitles\(\)\)").Count == 3);
 
+// EXG-057 : le jeton prime sur le parametre `userId`. L'inverse laissait un compte standard
+// demander le classement d'un administrateur et recevoir ses bibliotheques.
+var compteJeton = Guid.NewGuid();
+var compteDemande = Guid.NewGuid();
+Check("DROITS: le jeton prime sur userId",
+    RequestUser.Choose(compteJeton.ToString(), compteDemande) == compteJeton);
+Check("DROITS: sans jeton de compte (cle d'API), userId choisit le point de vue",
+    RequestUser.Choose(null, compteDemande) == compteDemande);
+Check("DROITS: un jeton au compte vide ne vaut pas un compte",
+    RequestUser.Choose(Guid.Empty.ToString(), compteDemande) == compteDemande);
+Check("DROITS: ni jeton ni userId : aucun compte",
+    RequestUser.Choose(null, Guid.Empty) is null && RequestUser.Choose(null, null) is null);
+var codeTop = CodeSansCommentaires(Path.Combine("Api", "TopListsController.cs"));
+Check("DROITS: le classement passe par RequestUser.Choose",
+    codeTop.Contains("RequestUser.Choose(claim, userId)", StringComparison.Ordinal));
+
+// EXG-056 : l'etat du plugin et le recalcul sont reserves aux administrateurs. Le controle
+// d'acces vit dans le serveur : le test porte sur les attributs du code.
+var codeStatus = CodeSansCommentaires(Path.Combine("Api", "StatusController.cs"));
+Check("DROITS: StatusController reserve aux administrateurs",
+    System.Text.RegularExpressions.Regex.IsMatch(codeStatus,
+        @"\[Authorize\(Policy = ""RequiresElevation""\)\]\s*(\[[^\]]*\]\s*)*public class StatusController"));
+Check("DROITS: Top/Refresh reserve aux administrateurs",
+    System.Text.RegularExpressions.Regex.IsMatch(codeTop,
+        @"\[HttpPost\(""Top/Refresh""\)\]\s*\[Authorize\(Policy = ""RequiresElevation""\)\]"));
+
 Console.WriteLine(failed == 0 ? "\nTous les tests passent." : $"\n{failed} echec(s).");
 return failed;
 
