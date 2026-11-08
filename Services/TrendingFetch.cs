@@ -1,4 +1,5 @@
 using System;
+using System.Net;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
@@ -13,6 +14,54 @@ namespace JellyfinCarouselPlugin.Services;
 /// </remarks>
 public static class TrendingFetch
 {
+    /// <summary>Plafond de l'attente demandée par la source : le recalcul ne s'endort pas plus.</summary>
+    public static readonly TimeSpan MaxRetryAfter = TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    /// Équivaut à <c>EnsureSuccessStatusCode</c>, en gardant le code et le <c>Retry-After</c>.
+    /// </summary>
+    /// <param name="response">La réponse de la source.</param>
+    public static void EnsureSuccess(HttpResponseMessage response)
+    {
+        ArgumentNullException.ThrowIfNull(response);
+
+        if (response.IsSuccessStatusCode)
+        {
+            return;
+        }
+
+        var retryAfter = response.Headers.RetryAfter;
+        var wait = retryAfter?.Delta
+            ?? (retryAfter?.Date is { } date ? date - DateTimeOffset.UtcNow : (TimeSpan?)null);
+        throw new TrendingHttpException(response.StatusCode, wait);
+    }
+
+    /// <summary>
+    /// Dit si une seconde tentative peut aboutir : une clé refusée ou une ressource absente
+    /// donneront la même réponse trois secondes plus tard.
+    /// </summary>
+    /// <param name="exception">L'échec du premier essai.</param>
+    /// <returns><see langword="true"/> si la relance a un sens.</returns>
+    public static bool IsRetryable(Exception exception)
+        => exception is not HttpRequestException { StatusCode: HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden or HttpStatusCode.NotFound };
+
+    /// <summary>
+    /// Attente avant la seconde tentative : celle que la source demande si elle est plus longue,
+    /// plafonnée.
+    /// </summary>
+    /// <param name="exception">L'échec du premier essai.</param>
+    /// <param name="retryDelay">L'attente par défaut.</param>
+    /// <returns>L'attente à respecter.</returns>
+    public static TimeSpan DelayFor(Exception exception, TimeSpan retryDelay)
+    {
+        if (exception is TrendingHttpException { RetryAfter: { } asked } && asked > retryDelay)
+        {
+            return asked < MaxRetryAfter ? asked : MaxRetryAfter;
+        }
+
+        return retryDelay;
+    }
+
     /// <summary>
     /// Appelle la source avec un délai maximal, et une seule nouvelle tentative sur une erreur
     /// réseau ou un délai dépassé.
@@ -53,10 +102,10 @@ public static class TrendingFetch
             {
                 throw;
             }
-            catch (Exception ex) when (attempt == 1 && ex is HttpRequestException or OperationCanceledException)
+            catch (Exception ex) when (attempt == 1 && ex is HttpRequestException or OperationCanceledException && IsRetryable(ex))
             {
                 onRetry?.Invoke(ex);
-                await Task.Delay(retryDelay, cancellationToken).ConfigureAwait(false);
+                await Task.Delay(DelayFor(ex, retryDelay), cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException ex)
             {
@@ -80,4 +129,24 @@ public static class TrendingFetch
     /// <returns><see langword="true"/> si le vide est attendu.</returns>
     public static bool EmptyIsExpected(bool tmdb, bool upcoming, bool seriesOnly)
         => tmdb && upcoming && seriesOnly;
+}
+
+/// <summary>
+/// Réponse d'erreur d'une source de tendances, avec l'attente que la source demande.
+/// </summary>
+public sealed class TrendingHttpException : HttpRequestException
+{
+    /// <summary>
+    /// Initialise une nouvelle instance de la classe <see cref="TrendingHttpException"/>.
+    /// </summary>
+    /// <param name="statusCode">Le code HTTP reçu.</param>
+    /// <param name="retryAfter">L'attente demandée par <c>Retry-After</c>, ou <see langword="null"/>.</param>
+    public TrendingHttpException(HttpStatusCode statusCode, TimeSpan? retryAfter)
+        : base($"La source a répondu {(int)statusCode} ({statusCode}).", null, statusCode)
+    {
+        RetryAfter = retryAfter;
+    }
+
+    /// <summary>Obtient l'attente demandée par la source, ou <see langword="null"/>.</summary>
+    public TimeSpan? RetryAfter { get; }
 }
