@@ -4,10 +4,9 @@ Lit les sujets de commit sur stdin (un par ligne), ecrit sur stdout.
 L'objectif est qu'un utilisateur non developpeur comprenne ce qui change,
 sans jargon de commit ni prefixe technique.
 
-Deux formats :
-  (defaut)  Markdown avec titres de niveau 2, pour les notes de release GitHub.
-  --flat    Liste compacte sans titre Markdown, pour le champ changelog de
-            manifest.json que Jellyfin affiche tel quel dans son catalogue.
+Format : Markdown avec titres de niveau 2, pour les notes de release GitHub. Sur cette
+ligne, le champ changelog du catalogue est un lien vers la release, ecrit par la CI :
+l'ancien mode --flat (liste compacte) n'y servait plus et a ete retire.
 """
 import re
 import sys
@@ -81,7 +80,6 @@ def classify(line):
 
 
 def main():
-    flat = "--flat" in sys.argv[1:]
     buckets = {key: [] for key, _ in SECTIONS}
 
     for line in sys.stdin.read().splitlines():
@@ -104,17 +102,12 @@ def main():
             continue
 
         items = "\n".join("- " + item for item in buckets[key])
-        if flat:
-            # Jellyfin affiche ce texte brut : ni titre Markdown, ni gras.
-            blocks.append(heading + " :\n" + items.replace("**", ""))
-        else:
-            blocks.append("## " + heading + "\n\n" + items)
+        blocks.append("## " + heading + "\n\n" + items)
 
     if not blocks:
-        fallback = "- Corrections et ajustements divers"
-        blocks.append(fallback if flat else "## Autres ameliorations\n\n" + fallback)
+        blocks.append("## Autres ameliorations\n\n- Corrections et ajustements divers")
 
-    print(("\n\n" if not flat else "\n").join(blocks))
+    print("\n\n".join(blocks))
 
 
 if __name__ == "__main__":

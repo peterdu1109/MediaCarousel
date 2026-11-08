@@ -6,9 +6,10 @@ overview: "Classements dynamiques cote serveur : Top local et Top mondial"
 category: General
 owner: "ElieM & Peterdu1109"
 versions:
-  # Source de verite des versions publiees : manifest.json, que la CI met a jour a chaque
-  # release. Ce fichier ne decrit que les metadonnees du registre, et n'etait plus tenu :
-  # il s'arretait a la 2.0.1 et annoncait encore targetAbi 10.11.0.0.
+  # Ce fichier ne decrit que les metadonnees du registre (nom, GUID, description) et n'est pas
+  # mis a jour par la CI. La liste des versions publiees vit dans repository-12.json (ligne 12,
+  # ecrit par la CI) et main/manifest.json (catalogue du README) ; l'entree ci-dessous est un
+  # reste, volontairement laisse tel quel, et ne dit rien de la version courante.
   - version: 3.10.0
     changelog: |
       Voir les notes de release GitHub.

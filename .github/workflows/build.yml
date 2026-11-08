@@ -9,6 +9,12 @@ on:
 permissions:
   contents: write
 
+# Deux passages rapproches se disputeraient le bump de version et le catalogue : le second attend
+# la fin du premier, sans l'annuler.
+concurrency:
+  group: build-release
+  cancel-in-progress: false
+
 # Ligne Jellyfin 12, au format de NotifySync : son propre catalogue, ses tags (suffixes jusqu'a la
 # 4.5.2, nus ensuite : voir TAG_SUFFIX),
 # et le PLANCHER 12.0 comme targetAbi — compile contre 12.0.0, le build se charge sur
