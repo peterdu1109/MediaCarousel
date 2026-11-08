@@ -9,12 +9,16 @@ on:
 permissions:
   contents: write
 
-# Ligne Jellyfin 12, au format de NotifySync : son propre catalogue, ses tags suffixes,
+# Ligne Jellyfin 12, au format de NotifySync : son propre catalogue, ses tags (suffixes jusqu'a la
+# 4.5.2, nus ensuite : voir TAG_SUFFIX),
 # et le PLANCHER 12.0 comme targetAbi — compile contre 12.0.0, le build se charge sur
 # 12.0 comme sur 12.1, alors qu'une DLL compilee contre 12.1 ne se charge pas sur 12.0.
 env:
   CATALOG: repository-12.json
-  TAG_SUFFIX: -jf12
+  # Vide depuis la 4.6.0 : les tags a venir sont X.Y.Z. Les tags X.Y.Z-jf12 existants restent, et le
+  # `git describe --match "*"` ci-dessous les retrouve comme tag precedent (le plus proche dans
+  # l'ascendance de HEAD). Les URL du catalogue deja publiees gardent leur suffixe.
+  TAG_SUFFIX: ""
   TARGET_ABI: 12.0.0.0
 
 jobs:
