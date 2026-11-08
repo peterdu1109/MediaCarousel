@@ -112,9 +112,37 @@ public sealed class CollectionSynchronizer
             await _collectionManager.RemoveFromCollectionAsync(boxSet.Id, current).ConfigureAwait(false);
         }
 
-        await _collectionManager.AddToCollectionAsync(boxSet.Id, desired).ConfigureAwait(false);
+        try
+        {
+            await _collectionManager.AddToCollectionAsync(boxSet.Id, desired).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            // Retirer puis ajouter n'est pas atomique : un échec ici laisserait la collection
+            // vide jusqu'au recalcul suivant. On remet l'ancien contenu avant de relayer l'erreur.
+            _logger.LogError(ex, "Ajout à la collection « {Name} » en échec : l'ancien contenu est remis.", collectionName);
+            await RestoreAsync(boxSet.Id, current).ConfigureAwait(false);
+            throw;
+        }
 
         _logger.LogInformation("Collection « {Name} » synchronisée : {Count} titre(s).", collectionName, desired.Length);
         return boxSet.Id;
+    }
+
+    private async Task RestoreAsync(Guid collectionId, Guid[] previous)
+    {
+        if (previous.Length == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            await _collectionManager.AddToCollectionAsync(collectionId, previous).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "L'ancien contenu de la collection {Id} n'a pas pu être remis ; le prochain recalcul la reconstruira.", collectionId);
+        }
     }
 }
