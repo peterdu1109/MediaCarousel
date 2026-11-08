@@ -597,6 +597,11 @@
                                     <div class="fieldDescription" id="hintSeerrUrl" data-i18n="hintSeerrUrl"></div>
                                 </div>
                                 <div class="inputContainer">
+                                    <input is="emby-input" type="url" id="SeerrPublicUrl" autocomplete="off"
+                                           data-i18n-label="seerrPublicUrl" aria-describedby="hintSeerrPublicUrl" />
+                                    <div class="fieldDescription" id="hintSeerrPublicUrl" data-i18n="hintSeerrPublicUrl"></div>
+                                </div>
+                                <div class="inputContainer">
                                     <input is="emby-input" type="password" id="SeerrApiKey" autocomplete="off"
                                            data-i18n-label="seerrKey" aria-describedby="hintSeerrKey" />
                                     <div class="fieldDescription" id="hintSeerrKey" data-i18n="hintSeerrKey"></div>
@@ -780,7 +785,7 @@
                     'BecauseRowTitle', 'AllTimeRowTitle', 'RowOrder',
                     'LocalRowTitle', 'GlobalRowTitle', 'GlobalMoviesRowTitle', 'GlobalSeriesRowTitle',
                     'HighlightColor', 'LocalCollectionName', 'GlobalCollectionName',
-                    'SeerrUrl', 'SeerrApiKey'
+                    'SeerrUrl', 'SeerrPublicUrl', 'SeerrApiKey'
                 ];
                 var lists = ['ExcludedUserIds', 'ExcludedLibraryIds'];
 
@@ -868,6 +873,8 @@
                         seerrAlertTitle: 'Aucun bouton ne s\'affichera',
                         seerrAlertText: 'Le Top mondial ne garde que les titres présents : il n\'y a rien à demander.',
                         seerrUrl: 'Adresse de Seerr',
+                        seerrPublicUrl: 'Adresse publique de Seerr (facultatif)',
+                        hintSeerrPublicUrl: 'L\'adresse que vos utilisateurs ouvrent dans leur navigateur. Vide : pas de lien vers Seerr sur la fiche d\'un titre.',
                         hintSeerrUrl: 'L\'adresse vue depuis le serveur Jellyfin, par exemple http://192.168.1.10:5055.',
                         seerrKey: 'Clé d\'API de Seerr',
                         hintSeerrKey: 'Dans Seerr : Paramètres, Général.',
@@ -1069,6 +1076,8 @@
                         seerrAlertTitle: 'No button will show',
                         seerrAlertText: 'The Worldwide Top keeps only titles you have: there is nothing to request.',
                         seerrUrl: 'Seerr address',
+                        seerrPublicUrl: 'Public Seerr address (optional)',
+                        hintSeerrPublicUrl: 'The address your users open in their browser. Empty: no Seerr link on a title card.',
                         hintSeerrUrl: 'The address as seen from the Jellyfin server, for example http://192.168.1.10:5055.',
                         seerrKey: 'Seerr API key',
                         hintSeerrKey: 'In Seerr: Settings, General.',

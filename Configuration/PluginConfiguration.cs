@@ -426,6 +426,15 @@ public class PluginConfiguration : BasePluginConfiguration
     public string SeerrUrl { get; set; } = string.Empty;
 
     /// <summary>
+    /// Obtient ou définit l'adresse de Seerr telle que les navigateurs l'atteignent.
+    /// </summary>
+    /// <remarks>
+    /// Distincte de <see cref="SeerrUrl"/>, qui est souvent une adresse interne. Vide : aucun
+    /// lien vers Seerr n'est proposé. Elle n'est transmise qu'avec la fiche d'un titre absent.
+    /// </remarks>
+    public string SeerrPublicUrl { get; set; } = string.Empty;
+
+    /// <summary>
     /// Obtient ou définit la clé d'API de Seerr. Elle n'est jamais transmise aux navigateurs.
     /// </summary>
     public string SeerrApiKey { get; set; } = string.Empty;

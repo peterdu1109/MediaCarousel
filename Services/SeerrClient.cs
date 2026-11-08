@@ -84,6 +84,7 @@ public sealed class SeerrClient
     private static readonly TimeSpan UserHit = TimeSpan.FromMinutes(10);
     private static readonly TimeSpan UserMiss = TimeSpan.FromMinutes(1);
     private static readonly TimeSpan StateLifetime = TimeSpan.FromMinutes(1);
+    private static readonly TimeSpan OverviewLifetime = TimeSpan.FromHours(1);
     private static readonly TimeSpan SettingsLifetime = TimeSpan.FromMinutes(10);
     private static readonly TimeSpan ServersLifetime = TimeSpan.FromMinutes(5);
 
@@ -91,6 +92,7 @@ public sealed class SeerrClient
     private readonly ILogger<SeerrClient> _logger;
     private readonly ConcurrentDictionary<Guid, (int? Id, DateTime At)> _users = new();
     private readonly ConcurrentDictionary<string, (string State, DateTime At)> _states = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, (string? Overview, DateTime At)> _overviews = new(StringComparer.Ordinal);
     private (string BaseUrl, bool PartialRequests, bool SpecialEpisodes, DateTime At)? _settings;
     private readonly ConcurrentDictionary<string, (IReadOnlyList<SeerrServer> Servers, DateTime At)> _servers = new(StringComparer.Ordinal);
 
@@ -160,6 +162,60 @@ public sealed class SeerrClient
 
         _states[key] = (state, DateTime.UtcNow);
         return SeerrOutcome.Ok(state);
+    }
+
+    /// <summary>
+    /// Lit le synopsis d'un titre dans Seerr.
+    /// </summary>
+    /// <remarks>
+    /// Seerr renvoie le texte dans la langue demandée, celle du navigateur ; sans elle, dans la
+    /// sienne. Gardé une heure : un synopsis ne change pas, et chaque ouverture de fiche
+    /// ne doit pas coûter un appel à TMDB via Seerr.
+    /// </remarks>
+    /// <param name="baseUrl">Adresse de Seerr.</param>
+    /// <param name="apiKey">Clé d'API.</param>
+    /// <param name="mediaType"><c>movie</c> ou <c>tv</c>.</param>
+    /// <param name="tmdbId">Identifiant TMDB.</param>
+    /// <param name="language">Langue souhaitée, déjà validée, ou <see langword="null"/>.</param>
+    /// <param name="cancellationToken">Jeton d'annulation.</param>
+    /// <returns>Le synopsis (absent s'il est vide), ou la raison de l'échec.</returns>
+    public async Task<(string? Overview, SeerrFailure Failure)> GetOverviewAsync(
+        string baseUrl,
+        string apiKey,
+        string mediaType,
+        int tmdbId,
+        string? language,
+        CancellationToken cancellationToken)
+    {
+        var key = StateKey(mediaType, tmdbId) + "|" + (language ?? string.Empty);
+
+        if (_overviews.TryGetValue(key, out var cached) && DateTime.UtcNow - cached.At < OverviewLifetime)
+        {
+            return (cached.Overview, SeerrFailure.None);
+        }
+
+        var url = baseUrl + "/api/v1/" + mediaType + "/" + tmdbId.ToString(CultureInfo.InvariantCulture)
+            + (language is null ? string.Empty : "?language=" + Uri.EscapeDataString(language));
+
+        var (status, body) = await SendAsync(HttpMethod.Get, url, apiKey, null, null, cancellationToken)
+            .ConfigureAwait(false);
+
+        var failure = Classify(status, body);
+        if (failure != SeerrFailure.None)
+        {
+            return (null, failure);
+        }
+
+        try
+        {
+            var overview = SeerrRules.ReadOverview(body!);
+            _overviews[key] = (overview, DateTime.UtcNow);
+            return (overview, SeerrFailure.None);
+        }
+        catch (JsonException)
+        {
+            return (null, SeerrFailure.Error);
+        }
     }
 
     /// <summary>

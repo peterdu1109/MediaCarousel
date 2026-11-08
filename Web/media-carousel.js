@@ -508,6 +508,13 @@
             '.layout-tv .mc-row .card:focus .mc-seerr{box-shadow:0 0 0 3px #fff;}',
             '.mc-row .mc-seerr:focus:not(:focus-visible){box-shadow:none;}',
             /* Les couleurs de Jellyfin Enhanced, état par état. */
+            /* Bouton « fiche » : en haut à droite de l'affiche, dans le même voile que « Demander ». */
+            '.mc-row .mc-info{position:absolute;top:6%;right:6%;pointer-events:auto;box-sizing:border-box;',
+            'width:2.6em;height:2.6em;margin:0;padding:0;border:0;border-radius:50%;font:inherit;font-size:.8em;',
+            'font-weight:700;line-height:2.6em;text-align:center;color:#fff;background:rgba(0,0,0,.62);cursor:pointer;}',
+            '.mc-row .mc-info:hover{background:rgba(0,0,0,.88);}',
+            '.mc-row .mc-info:focus{outline:none;box-shadow:0 0 0 2px #fff,0 0 0 4px rgba(0,0,0,.7);}',
+            '.mc-row .mc-info:focus:not(:focus-visible){box-shadow:none;}',
             '.mc-row .mc-seerr[data-tone="request"]{background:#5a3fb8;}',
             '.mc-row .mc-seerr[data-tone="pending"]{background:#b45309;}',
             '.mc-row .mc-seerr[data-tone="processing"]{background:#581c87;}',
@@ -588,6 +595,16 @@
             'color:#4ade80;background:rgba(34,197,94,.15);border-color:rgba(34,197,94,.3);}',
             '.mc-seerr-season-state[data-state="blocked"]{color:#f87171;background:rgba(239,68,68,.15);',
             'border-color:rgba(239,68,68,.3);}',
+            '.mc-seerr-overview{margin:0 0 1em;line-height:1.5;white-space:pre-line;color:#e2e8f0;}',
+            '.mc-seerr-overview[hidden]{display:none;}',
+            /* Pas de `gap` : les liens se séparent par des marges. */
+            '.mc-seerr-links{margin:0 0 .4em;}',
+            '.mc-seerr-link{display:inline-block;margin:0 12px 8px 0;padding:10px 18px;border-radius:8px;',
+            'color:#fff;background:rgba(71,85,105,.8);border:1px solid rgba(148,163,184,.2);text-decoration:none;',
+            'font-size:.875rem;font-weight:600;}',
+            '.mc-seerr-link:hover{background:rgba(71,85,105,1);}',
+            '.mc-seerr-link:focus{outline:2px solid var(--mc-accent);outline-offset:2px;}',
+            '.mc-seerr-link:focus:not(:focus-visible){outline:none;}',
             '.mc-seerr-dialog .mc-seerr-note{margin:.6em 0;font-size:.9em;color:#94a3b8;}',
             '.mc-seerr-advanced{margin-top:1em;padding-top:1em;border-top:1px solid rgba(148,163,184,.1);}',
             '.mc-seerr-advanced[hidden]{display:none;}',
@@ -1160,7 +1177,15 @@
         // À la télécommande, le bouton n'est pas un arrêt à part : c'est sa carte qui l'est.
         var tvOnly = layoutCardClass() === ' show-focus' ? ' tabindex="-1"' : '';
 
-        return '<div class="mc-seerr-zone" data-state="loading">'
+        // La fiche n'a pas de place à la télécommande, où la carte entière est le bouton :
+        // la fenêtre d'une série (et celle des options avancées) montre le synopsis elle aussi.
+        var info = tvOnly
+            ? ''
+            : '<button type="button" class="mc-info" aria-haspopup="dialog" aria-label="Fiche : '
+                + escapeHtml(entry.Name || '') + '" title="Fiche" data-media="' + entry.MediaType
+                + '" data-tmdb="' + tmdbId + '" data-name="' + escapeHtml(entry.Name || '') + '">i</button>';
+
+        return '<div class="mc-seerr-zone" data-state="loading">' + info
             + '<button type="button" class="mc-seerr" data-state="loading" data-tone="request"' + tvOnly
             + ' aria-disabled="true" data-media="' + entry.MediaType + '" data-tmdb="' + tmdbId + '"'
             + ' data-name="' + escapeHtml(entry.Name || '') + '"></button></div>';
@@ -1227,10 +1252,10 @@
         });
     }
 
-    function seerrPost(action, body) {
+    function seerrPost(action, body, params) {
         return window.ApiClient.ajax({
             type: 'POST',
-            url: window.ApiClient.getUrl('MediaCarousel/Seerr/' + action),
+            url: window.ApiClient.getUrl('MediaCarousel/Seerr/' + action, params),
             data: JSON.stringify(body),
             contentType: 'application/json',
             dataType: 'json'
@@ -1466,6 +1491,7 @@
             + (isTv ? 'Demander une série' : 'Demander un film') + '</h2>'
             + '<p class="mc-seerr-subtitle">' + escapeHtml(name) + '</p></div>'
             + '<div class="mc-seerr-body">'
+            + '<p class="mc-seerr-overview" hidden></p>'
             + (isTv ? '<div class="mc-seerr-seasons" aria-busy="true">'
                 + '<p class="mc-seerr-note">Chargement des saisons…</p></div>' : '')
             + (seerrAdvanced ? '<div class="mc-seerr-advanced" hidden><h3>Options avancées</h3>'
@@ -1493,6 +1519,9 @@
         wireRequestDialog(backdrop, button, mediaType, tmdbId, name);
         backdrop.querySelector('.mc-seerr-dialog').focus();
 
+        // Le synopsis ne retarde rien : il s'écrit quand il arrive, ou jamais.
+        loadDetails(backdrop, mediaType, tmdbId, false);
+
         if (isTv) {
             loads.push(loadSeasons(backdrop, tmdbId));
         }
@@ -1508,10 +1537,125 @@
         });
     }
 
+    /** Langue d'affichage du compte, au format que le serveur accepte (« fr », « pt-BR »). */
+    function displayLanguage() {
+        var raw = '';
+
+        try {
+            raw = window.localStorage.getItem(window.ApiClient.getCurrentUserId() + '-language') || '';
+        } catch (error) {
+            raw = '';
+        }
+
+        raw = raw || navigator.language || '';
+        var parts = String(raw).split('-');
+        var language = parts[0].toLowerCase();
+
+        if (!/^[a-z]{2}$/.test(language)) {
+            return undefined;
+        }
+
+        return /^[A-Za-z]{2}$/.test(parts[1] || '') ? language + '-' + parts[1].toUpperCase() : language;
+    }
+
+    /** Un lien n'est posé que s'il est une adresse http(s) : le serveur le garantit, le client le vérifie. */
+    function safeLink(url, label) {
+        if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) {
+            return '';
+        }
+
+        return '<a class="mc-seerr-link" href="' + escapeHtml(url) + '" target="_blank"'
+            + ' rel="noopener noreferrer">' + escapeHtml(label) + '</a>';
+    }
+
+    /**
+     * Écrit le synopsis (et, dans la fiche seule, les liens) d'un titre absent.
+     *
+     * Une panne de Seerr ne coûte que le texte : la fenêtre sert d'abord à demander.
+     */
+    function loadDetails(backdrop, mediaType, tmdbId, withLinks) {
+        var language = displayLanguage();
+
+        return seerrPost('Details', { MediaType: mediaType, TmdbId: tmdbId },
+            language ? { language: language } : undefined).then(function (details) {
+            if (!backdrop.parentNode || !details) {
+                return;
+            }
+
+            var overview = backdrop.querySelector('.mc-seerr-overview');
+            var links = backdrop.querySelector('.mc-seerr-links');
+
+            if (overview) {
+                overview.textContent = details.Overview || (withLinks ? 'Pas de résumé disponible.' : '');
+                overview.hidden = !overview.textContent;
+            }
+
+            if (links && withLinks) {
+                links.innerHTML = safeLink(details.SeerrUrl, 'Voir sur Seerr') + safeLink(details.TmdbUrl, 'Voir sur TMDB');
+            }
+        }, function () {
+            var overview = backdrop.querySelector('.mc-seerr-overview');
+
+            if (withLinks && overview && backdrop.parentNode) {
+                overview.textContent = 'Le résumé n\'a pas pu être chargé.';
+                overview.hidden = false;
+            }
+        });
+    }
+
+    /** Fenêtre « fiche » d'un titre absent : affiche, résumé, liens. Ne demande rien. */
+    function openDetailsDialog(info) {
+        closeSeasonDialog(true);
+        closePreferences(true);
+
+        var mediaType = info.getAttribute('data-media');
+        var name = info.getAttribute('data-name') || '';
+        var tmdbId = parseInt(info.getAttribute('data-tmdb'), 10);
+        var id = 'mc-seerr-' + (++sequence);
+        var poster = info.closest('.cardScalable').querySelector('.cardImageContainer');
+        var backdrop = document.createElement('div');
+
+        backdrop.className = 'mc-seerr-backdrop';
+        backdrop.mcOrigin = info;
+        backdrop.innerHTML = '<div class="mc-seerr-dialog focuscontainer" role="dialog" aria-modal="true"'
+            + ' aria-labelledby="' + id + '-title" tabindex="-1">'
+            + '<div class="mc-seerr-head">'
+            + '<h2 id="' + id + '-title" class="mc-seerr-title">' + escapeHtml(name) + '</h2>'
+            + '<p class="mc-seerr-subtitle">' + (mediaType === 'tv' ? 'Série' : 'Film') + '</p></div>'
+            + '<div class="mc-seerr-body">'
+            + '<p class="mc-seerr-overview" aria-busy="true">Chargement…</p>'
+            + '<p class="mc-seerr-links"></p>'
+            + '</div>'
+            + '<div class="mc-seerr-foot">'
+            + '<button type="button" class="mc-seerr-cancel">Fermer</button>'
+            + '</div></div>';
+
+        if (poster && poster.style.backgroundImage) {
+            backdrop.querySelector('.mc-seerr-head').style.backgroundImage = poster.style.backgroundImage;
+        }
+
+        document.body.appendChild(backdrop);
+        markDialogInHistory(backdrop);
+        wireRequestDialog(backdrop, info, mediaType, tmdbId, name);
+        backdrop.querySelector('.mc-seerr-dialog').focus();
+
+        loadDetails(backdrop, mediaType, tmdbId, true).then(function () {
+            var overview = backdrop.querySelector('.mc-seerr-overview');
+
+            if (overview) {
+                overview.removeAttribute('aria-busy');
+            }
+
+            if (backdrop.parentNode) {
+                focusFirst(backdrop);
+            }
+        });
+    }
+
     /** Premier contrôle visible et actif de la fenêtre, pour le clavier et la télécommande. */
     function focusFirst(backdrop) {
         var candidates = backdrop.querySelectorAll('.mc-seerr-body input:not([disabled]),'
-            + ' .mc-seerr-body select, .mc-seerr-send:not([disabled]), .mc-seerr-cancel');
+            + ' .mc-seerr-body select, .mc-seerr-link, .mc-seerr-send:not([disabled]), .mc-seerr-cancel');
 
         for (var i = 0; i < candidates.length; i++) {
             if (candidates[i].offsetParent !== null) {
@@ -1857,6 +2001,15 @@
 
     function wireSeerr(section) {
         section.addEventListener('click', function (event) {
+            var info = event.target.closest ? event.target.closest('.mc-info') : null;
+
+            if (info) {
+                event.preventDefault();
+                event.stopPropagation();
+                openDetailsDialog(info);
+                return;
+            }
+
             var button = event.target.closest ? event.target.closest('.mc-seerr') : null;
 
             if (!button) {

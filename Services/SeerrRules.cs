@@ -538,6 +538,81 @@ public static class SeerrRules
                 : null;
     }
 
+    /// <summary>Longueur maximale du synopsis transmis au navigateur.</summary>
+    public const int MaxOverviewLength = 1200;
+
+    /// <summary>
+    /// Lit le synopsis dans la fiche d'un titre renvoyée par Seerr.
+    /// </summary>
+    /// <param name="mediaJson">La réponse de <c>/api/v1/movie/{id}</c> ou <c>/api/v1/tv/{id}</c>.</param>
+    /// <returns>Le synopsis, borné, ou <see langword="null"/> s'il est absent ou vide.</returns>
+    public static string? ReadOverview(string mediaJson)
+    {
+        using var document = JsonDocument.Parse(mediaJson);
+
+        if (document.RootElement.ValueKind != JsonValueKind.Object
+            || !document.RootElement.TryGetProperty("overview", out var element)
+            || element.ValueKind != JsonValueKind.String)
+        {
+            return null;
+        }
+
+        var text = element.GetString()?.Trim();
+        if (string.IsNullOrEmpty(text))
+        {
+            return null;
+        }
+
+        return text.Length <= MaxOverviewLength ? text : text[..MaxOverviewLength].TrimEnd() + "…";
+    }
+
+    /// <summary>
+    /// Ne garde d'une langue demandée que ce que Seerr peut recevoir sans danger.
+    /// </summary>
+    /// <param name="language">La langue envoyée par le navigateur, par exemple <c>fr</c> ou <c>pt-BR</c>.</param>
+    /// <returns>La langue, ou <see langword="null"/> si elle n'a pas la forme d'un code de langue.</returns>
+    public static string? NormalizeLanguage(string? language)
+    {
+        var value = (language ?? string.Empty).Trim();
+
+        if (value.Length is not (2 or 5)
+            || !char.IsAsciiLetterLower(value[0]) || !char.IsAsciiLetterLower(value[1]))
+        {
+            return null;
+        }
+
+        return value.Length == 2
+            ? value
+            : value[2] == '-' && char.IsAsciiLetterUpper(value[3]) && char.IsAsciiLetterUpper(value[4]) ? value : null;
+    }
+
+    /// <summary>
+    /// Adresse de la fiche d'un titre dans Seerr, vue du navigateur.
+    /// </summary>
+    /// <param name="publicUrl">Le réglage « adresse publique de Seerr ».</param>
+    /// <param name="mediaType"><c>movie</c> ou <c>tv</c>.</param>
+    /// <param name="tmdbId">Identifiant TMDB.</param>
+    /// <returns>L'adresse, ou <see langword="null"/> si le réglage est vide ou invalide.</returns>
+    public static string? PublicTitleUrl(string? publicUrl, string mediaType, int tmdbId)
+    {
+        var baseUrl = NormalizeBaseUrl(publicUrl);
+
+        return baseUrl is null || tmdbId <= 0 || !IsMediaType(mediaType)
+            ? null
+            : baseUrl + "/" + mediaType + "/" + tmdbId.ToString(CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>
+    /// Adresse de la fiche d'un titre sur TMDB.
+    /// </summary>
+    /// <param name="mediaType"><c>movie</c> ou <c>tv</c>.</param>
+    /// <param name="tmdbId">Identifiant TMDB.</param>
+    /// <returns>L'adresse, ou <see langword="null"/> si le type ou l'identifiant est invalide.</returns>
+    public static string? TmdbTitleUrl(string mediaType, int tmdbId)
+        => tmdbId <= 0 || !IsMediaType(mediaType)
+            ? null
+            : "https://www.themoviedb.org/" + mediaType + "/" + tmdbId.ToString(CultureInfo.InvariantCulture);
+
     // Une saison se demande tant que Seerr ne la connaît pas, ou qu'elle a été supprimée.
     private static bool IsRequestable(int status) => status == Unknown || status == Deleted;
 

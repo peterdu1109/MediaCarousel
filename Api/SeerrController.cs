@@ -351,6 +351,60 @@ public class SeerrController : ControllerBase
     }
 
     /// <summary>
+    /// Fiche d'un titre absent : synopsis et liens, pour décider avant de demander.
+    /// </summary>
+    /// <param name="item">Le titre, désigné par son type et son identifiant TMDB.</param>
+    /// <param name="language">Langue du navigateur, par exemple <c>fr</c> ; ignorée si invalide.</param>
+    /// <param name="cancellationToken">Jeton d'annulation.</param>
+    /// <returns>Le synopsis (s'il existe) et les liens.</returns>
+    [HttpPost("Details")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
+    public async Task<ActionResult<SeerrDetailsDto>> GetDetails(
+        [FromBody] SeerrItemDto? item,
+        [FromQuery] string? language,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetSettings(out var baseUrl, out var apiKey))
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable);
+        }
+
+        // Le refus des comptes restreints passe avant l'examen du titre : sinon un 400 ou un 403
+        // leur apprendrait quels titres figurent dans le Top publié.
+        if (!ShowsAbsentTitles())
+        {
+            return StatusCode(StatusCodes.Status403Forbidden);
+        }
+
+        if (item is null || !IsPublished(PublishedTitles(), item))
+        {
+            return BadRequest();
+        }
+
+        var mediaType = item.MediaType!;
+        var (overview, _) = await _seerr.GetOverviewAsync(
+            baseUrl,
+            apiKey,
+            mediaType,
+            item.TmdbId,
+            SeerrRules.NormalizeLanguage(language),
+            cancellationToken).ConfigureAwait(false);
+
+        // Un synopsis introuvable ne prive pas des liens : la fiche s'ouvre quand même.
+        return Ok(new SeerrDetailsDto
+        {
+            MediaType = mediaType,
+            TmdbId = item.TmdbId,
+            Overview = overview,
+            SeerrUrl = SeerrRules.PublicTitleUrl(Plugin.Instance?.Configuration.SeerrPublicUrl, mediaType, item.TmdbId),
+            TmdbUrl = SeerrRules.TmdbTitleUrl(mediaType, item.TmdbId)
+        });
+    }
+
+    /// <summary>
     /// Vérifie une adresse et une clé Seerr, avant même qu'elles soient enregistrées.
     /// </summary>
     /// <param name="request">L'adresse et la clé saisies dans la page de configuration.</param>
@@ -566,6 +620,27 @@ public sealed class SeerrFolderDto
 
     /// <summary>Obtient ou définit l'espace libre, en octets.</summary>
     public long? FreeSpace { get; set; }
+}
+
+/// <summary>
+/// La fiche d'un titre absent.
+/// </summary>
+public sealed class SeerrDetailsDto
+{
+    /// <summary>Obtient ou définit le type de média.</summary>
+    public string MediaType { get; set; } = string.Empty;
+
+    /// <summary>Obtient ou définit l'identifiant TMDB.</summary>
+    public int TmdbId { get; set; }
+
+    /// <summary>Obtient ou définit le synopsis, ou <see langword="null"/> s'il est inconnu.</summary>
+    public string? Overview { get; set; }
+
+    /// <summary>Obtient ou définit le lien vers Seerr, ou <see langword="null"/> sans adresse publique.</summary>
+    public string? SeerrUrl { get; set; }
+
+    /// <summary>Obtient ou définit le lien vers TMDB.</summary>
+    public string? TmdbUrl { get; set; }
 }
 
 /// <summary>
