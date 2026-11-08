@@ -1233,6 +1233,77 @@ var codeSeerr = CodeSansCommentaires(Path.Combine("Api", "SeerrController.cs"));
 Check("DROITS: Status, Seasons, Details et Request refusent un compte restreint",
     System.Text.RegularExpressions.Regex.Matches(codeSeerr, @"if \(!ShowsAbsentTitles\(\)\)").Count == 4);
 
+// R3 : un Seerr muet n'est pas reinterroge a chaque titre pendant OfflineMemory.
+var memoire = new OfflineMemory(TimeSpan.FromSeconds(45));
+var t0 = new DateTime(2026, 11, 8, 12, 0, 0, DateTimeKind.Utc);
+Check("HORS-LIGNE: rien de retenu au depart", !memoire.IsOffline("http://seerr", t0));
+memoire.RecordFailure("http://seerr", t0);
+Check("HORS-LIGNE: apres un echec, les lectures suivantes echouent aussitot", memoire.IsOffline("http://seerr", t0.AddSeconds(1)));
+Check("HORS-LIGNE: le souvenir expire", !memoire.IsOffline("http://seerr", t0.AddSeconds(45)));
+Check("HORS-LIGNE: une autre adresse repart de zero", !memoire.IsOffline("http://autre", t0.AddSeconds(1)));
+memoire.Clear();
+Check("HORS-LIGNE: une reponse efface le souvenir", !memoire.IsOffline("http://seerr", t0.AddSeconds(1)));
+var codeClientSeerr = CodeSansCommentaires(Path.Combine("Services", "SeerrClient.cs"));
+Check("HORS-LIGNE: la lecture d'etat et celle du synopsis consultent la memoire et la nourrissent",
+    System.Text.RegularExpressions.Regex.Matches(codeClientSeerr, @"_offline\.IsOffline\(baseUrl").Count == 2
+    && System.Text.RegularExpressions.Regex.Matches(codeClientSeerr, @"NoteReachability\(baseUrl, failure\)").Count == 2);
+
+// Accessibilite du script (audit F3 a F7). Le script ne se charge pas hors navigateur : le
+// controle porte sur son texte. Les comportements sont aussi eprouves dans home-rows.test.mjs.
+var scriptAccueil = File.ReadAllText(Path.Combine("Web", "media-carousel.js"));
+var corpsDefilement = CorpsEntre(scriptAccueil, "function scrollBy(direction)", "previous.addEventListener");
+Check("A11Y: le defilement par fleche respecte prefers-reduced-motion",
+    corpsDefilement.Contains("!prefersReducedMotion()", StringComparison.Ordinal)
+    && scriptAccueil.Contains("(prefers-reduced-motion: reduce)", StringComparison.Ordinal));
+Check("A11Y: une rangee nommee par aria-labelledby a le role group",
+    scriptAccueil.Contains("section.setAttribute('role', 'group');", StringComparison.Ordinal));
+var corpsToast = CorpsEntre(scriptAccueil, "function showToast(text)", "function closeSeasonDialog");
+Check("A11Y: la region vive du message est remplie apres son insertion",
+    corpsToast.Contains("window.setTimeout(write, 60)", StringComparison.Ordinal));
+Check("A11Y: une panne de liste ne se lit pas comme « aucun titre »",
+    scriptAccueil.Contains("empty.failed = true;", StringComparison.Ordinal)
+    && scriptAccueil.Contains("items.failed", StringComparison.Ordinal));
+Check("A11Y: le bouton de personnalisation a une zone tactile elargie",
+    scriptAccueil.Contains(".mc-prefs-open::after{content:\"\";position:absolute;left:-12px", StringComparison.Ordinal));
+
+// EXG-071 : la fiche n'est servie que pour un titre du Top publie, et un compte restreint est
+// refuse AVANT l'examen du titre (sinon le 400 lui apprendrait le contenu du Top).
+var publies = new HashSet<string> { SeerrRules.TitleKey("movie", 603), SeerrRules.TitleKey("tv", 1399) };
+Check("FICHE-PUBLIE: un film du Top est publie", SeerrRules.IsPublished(publies, "movie", 603));
+Check("FICHE-PUBLIE: une serie du Top est publiee", SeerrRules.IsPublished(publies, "tv", 1399));
+Check("FICHE-PUBLIE: un titre hors Top est rejete", !SeerrRules.IsPublished(publies, "movie", 604));
+Check("FICHE-PUBLIE: le type compte (movie:1399 n'est pas tv:1399)", !SeerrRules.IsPublished(publies, "movie", 1399));
+Check("FICHE-PUBLIE: un type inconnu est rejete", !SeerrRules.IsPublished(publies, "person", 603));
+Check("FICHE-PUBLIE: un type absent est rejete", !SeerrRules.IsPublished(publies, null, 603));
+Check("FICHE-PUBLIE: un identifiant nul ou negatif est rejete",
+    !SeerrRules.IsPublished(publies, "movie", 0) && !SeerrRules.IsPublished(publies, "movie", -603));
+string CorpsEntre(string code, string depuis, string jusqua)
+{
+    var a = code.IndexOf(depuis, StringComparison.Ordinal);
+    var b = a < 0 ? -1 : code.IndexOf(jusqua, a + depuis.Length, StringComparison.Ordinal);
+    return b < 0 ? string.Empty : code[a..b];
+}
+
+var corpsFiche = CorpsEntre(codeSeerr, "GetDetails(", "[HttpPost(\"Test\")]");
+var iRestreint = corpsFiche.IndexOf("if (!ShowsAbsentTitles())", StringComparison.Ordinal);
+var iNonPublie = corpsFiche.IndexOf("!IsPublished(PublishedTitles(), item)", StringComparison.Ordinal);
+Check("FICHE-PUBLIE: Details refuse un titre non publie (400)",
+    iNonPublie >= 0 && corpsFiche.IndexOf("BadRequest()", iNonPublie, StringComparison.Ordinal) > iNonPublie);
+Check("FICHE-PUBLIE: Details refuse le compte restreint (403) avant d'examiner le titre",
+    iRestreint >= 0 && iNonPublie > iRestreint);
+
+// EXG-073 : Top/Refresh repond 409 quand un recalcul tourne, avant de lancer quoi que ce soit.
+// Le controleur ne se simule pas hors serveur : le controle porte sur le code, comme DROITS.
+var codeRecalcul = CodeSansCommentaires(Path.Combine("Api", "TopListsController.cs"));
+var corpsRecalcul = CorpsEntre(codeRecalcul, "ActionResult RefreshTopLists()", "private TopListResponseDto BuildResponse");
+var iOccupe = corpsRecalcul.IndexOf("_refreshService.IsRefreshing", StringComparison.Ordinal);
+var iConflit = corpsRecalcul.IndexOf("return Conflict();", StringComparison.Ordinal);
+var iLancement = corpsRecalcul.IndexOf("Task.Run(", StringComparison.Ordinal);
+Check("REFRESH: un recalcul en cours donne 409 avant tout lancement",
+    iOccupe >= 0 && iConflit > iOccupe && iLancement > iConflit);
+Check("REFRESH: le 409 est annonce au contrat de la route",
+    codeRecalcul.Contains("StatusCodes.Status409Conflict", StringComparison.Ordinal));
+
 // EXG-057 : le jeton prime sur le parametre `userId`. L'inverse laissait un compte standard
 // demander le classement d'un administrateur et recevoir ses bibliotheques.
 var compteJeton = Guid.NewGuid();

@@ -24,6 +24,7 @@
     <Compile Include="../../Services/PosterProxy.cs" />
     <Compile Include="../../Services/PosterCacheFile.cs" />
     <Compile Include="../../Services/RefreshHealth.cs" />
+    <Compile Include="../../Services/OfflineMemory.cs" />
     <Compile Include="../../Services/PlaybackDate.cs" />
     <Compile Include="../../Services/TrendingKey.cs" />
     <Compile Include="../../Services/SeerrRules.cs" />

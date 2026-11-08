@@ -1723,6 +1723,7 @@ async function pageSeerr(reglages = {}) {
   vue.on('pageerror', e => errors.push('pageerror(seerr): ' + e.message));
   await vue.goto('file://' + path.join(here, 'home.html'));
   await vue.evaluate((r) => { Object.assign(window, r); }, reglages);
+  if (reglages.__lang) await vue.evaluate((l) => { document.documentElement.lang = l; }, reglages.__lang);
   await vue.evaluate(serveurSeerr);
   await vue.evaluate(script);
   await vue.waitForSelector('.mc-ranked');
@@ -1901,6 +1902,8 @@ const toutCoche = await saisons.evaluate(() =>
   Array.from(document.querySelectorAll('.mc-seerr-pick:checked')).map(b => b.value).join(','));
 await saisons.click('.mc-seerr-send');
 await saisons.waitForFunction(() => !document.querySelector('.mc-seerr-backdrop'));
+// La region vive du message est remplie 60 ms apres son insertion (lecteurs d'ecran) : on l'attend.
+await saisons.waitForFunction(() => ((document.querySelector('.mc-toast') || {}).textContent || '').length > 0);
 const apresSaisons = await saisons.evaluate(() => {
   const demande = window.__appels.filter(a => a.route === 'MediaCarousel/Seerr/Request').pop();
   const b = document.querySelector('.mc-seerr[data-tmdb="66732"]');
@@ -2080,6 +2083,26 @@ await fichePanne.waitForFunction(() => (document.querySelector('.mc-seerr-overvi
   === 'Le résumé n\'a pas pu être chargé.');
 const fichePanneVue = await fichePanne.evaluate(() => ({
   fermer: !!document.querySelector('.mc-seerr-cancel'), liens: document.querySelectorAll('.mc-seerr-link').length }));
+// Contraste : le texte blanc de chaque etat du bouton atteint le seuil AA (4,5:1).
+const contrastes = await fichePanne.evaluate(() => {
+  const luminance = (rgb) => {
+    const [r, g, b] = rgb.match(/\d+/g).slice(0, 3).map(Number).map((v) => {
+      const c = v / 255;
+      return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+    });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  const ligne = document.querySelector('.mc-row');
+  return ['request', 'pending', 'processing', 'partial', 'available', 'blocked', 'error'].map((ton) => {
+    const bouton = document.createElement('button');
+    bouton.className = 'mc-seerr';
+    bouton.setAttribute('data-tone', ton);
+    ligne.appendChild(bouton);
+    const fond = getComputedStyle(bouton).backgroundColor;
+    ligne.removeChild(bouton);
+    return { ton, rapport: Math.round(1.05 / (luminance(fond) + 0.05) * 100) / 100 };
+  });
+});
 await fichePanne.close();
 
 // Options illisibles : la section reste cachee, et la demande part sans elles.
@@ -2301,6 +2324,83 @@ const apresRetourSeerr = await tvSeerr.evaluate(() => ({
   focus: document.activeElement === document.querySelector('.mc-seerr[data-tmdb="66732"]').closest('.card'),
   demandes: window.__appels.filter(a => a.route === 'MediaCarousel/Seerr/Request').length
 }));
+
+// LANGUE — `lang` de <html> : anglais pour toute langue autre que le francais, francais si
+// l'attribut est absent ou en `fr` (avec region). Meme fixture, memes gestes que plus haut.
+const enSeerr = await pageSeerr({ __lang: 'en' });
+await enSeerr.waitForFunction(etatSeerr('27205', 'request'));
+const enBouton = await enSeerr.evaluate(() => {
+  const b = document.querySelector('.mc-seerr[data-tmdb="27205"]');
+  const i = document.querySelector('.mc-info[data-tmdb="27205"]');
+  return {
+    texte: b.textContent, nom: b.getAttribute('aria-label'),
+    absent: document.querySelector('.mc-unavailable .cardText-secondary').textContent,
+    fiche: i && i.getAttribute('title'), ficheNom: i && i.getAttribute('aria-label')
+  };
+});
+await enSeerr.waitForFunction(etatSeerr('66732', 'request'));
+await enSeerr.click('.mc-seerr[data-tmdb="66732"]');
+await enSeerr.waitForSelector('.mc-seerr-dialog .mc-seerr-pick');
+await enSeerr.click('.mc-seerr-send');
+const enFenetre = await enSeerr.evaluate(() => {
+  const d = document.querySelector('.mc-seerr-dialog');
+  return {
+    titre: d.querySelector('h2').textContent, envoyer: d.querySelector('.mc-seerr-send').textContent,
+    annuler: d.querySelector('.mc-seerr-cancel').textContent,
+    message: d.querySelector('.mc-seerr-message').textContent,
+    etats: Array.from(d.querySelectorAll('.mc-seerr-season-state')).map(e => e.textContent),
+    noms: Array.from(d.querySelectorAll('.mc-seerr-season-name')).map(e => e.textContent),
+    episodes: Array.from(d.querySelectorAll('.mc-seerr-season-episodes')).map(e => e.textContent)
+  };
+});
+await enSeerr.close();
+
+const enRefus = await pageSeerr({ __lang: 'en-GB', __refus: 404 });
+await enRefus.waitForFunction(etatSeerr('27205', 'request'));
+await enRefus.click('.mc-seerr[data-tmdb="27205"]');
+await enRefus.waitForFunction(etatSeerr('27205', 'user-not-found'));
+const enErreur = await enRefus.evaluate(() => {
+  const b = document.querySelector('.mc-seerr[data-tmdb="27205"]');
+  return { texte: b.textContent, titre: b.getAttribute('title') };
+});
+await enRefus.close();
+
+const autreLangue = await pageSeerr({ __lang: 'de-DE' });
+await autreLangue.waitForFunction(etatSeerr('27205', 'request'));
+const deTexte = await autreLangue.evaluate(() => document.querySelector('.mc-seerr[data-tmdb="27205"]').textContent);
+await autreLangue.close();
+const frRegion = await pageSeerr({ __lang: 'fr-CA' });
+await frRegion.waitForFunction(etatSeerr('27205', 'request'));
+const frTexte = await frRegion.evaluate(() => document.querySelector('.mc-seerr[data-tmdb="27205"]').textContent);
+await frRegion.close();
+
+const enPrefs = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+enPrefs.on('pageerror', e => errors.push('pageerror(prefs en): ' + e.message));
+await enPrefs.addInitScript(() => { window.__allowPrefs = true; });
+await enPrefs.goto('file://' + path.join(here, 'home.html'));
+await enPrefs.evaluate(() => { document.documentElement.lang = 'en'; });
+await enPrefs.evaluate(stub);
+await enPrefs.evaluate(script);
+await enPrefs.waitForFunction(() => document.querySelectorAll('.mc-row').length === 10, { timeout: 8000 });
+const enOuverture = await enPrefs.evaluate(() => {
+  const o = document.querySelector('.mc-prefs-open');
+  return { titre: o.title, nom: o.getAttribute('aria-label') };
+});
+await enPrefs.click('.mc-prefs-open');
+const enPanneau = await enPrefs.evaluate(() => {
+  const p = document.querySelector('.mc-prefs');
+  const premiere = p.querySelector('li');
+  return {
+    titre: p.querySelector('h2').textContent,
+    boutons: ['.mc-prefs-save', '.mc-prefs-reset', '.mc-prefs-close'].map(s => p.querySelector(s).textContent),
+    etiquettes: Array.from(p.querySelectorAll('.mc-prefs-field label')).map(l => l.textContent),
+    indice: p.querySelector('.mc-prefs-hint').textContent,
+    rangee: premiere.querySelector('span').textContent,
+    afficher: premiere.querySelector('input').getAttribute('aria-label'),
+    monter: premiere.querySelector('.mc-prefs-up').getAttribute('aria-label')
+  };
+});
+await enPrefs.close();
 
 await browser.close();
 
@@ -2678,7 +2778,7 @@ check('SEERR: un film en attente l attend, en ambre, sans action',
     && seerrVu.filmEnAttente.fond === 'rgb(180, 83, 9)', seerrVu.filmEnAttente);
 check('SEERR: une serie partiellement disponible propose « Demander manquant », en vert, cliquable',
   seerrVu.serieManquante.texte === 'Demander manquant' && seerrVu.serieManquante.inerte === 'false'
-    && seerrVu.serieManquante.popup === 'dialog' && seerrVu.serieManquante.fond === 'rgb(76, 164, 108)',
+    && seerrVu.serieManquante.popup === 'dialog' && seerrVu.serieManquante.fond === 'rgb(53, 122, 80)',
   seerrVu.serieManquante);
 check('SEERR: une serie dont tout est demande attend, sans action — plus de « Demander » trompeur',
   seerrVu.serieEnAttente.texte === 'En attente d\'approbation' && seerrVu.serieEnAttente.inerte === 'true'
@@ -2686,7 +2786,7 @@ check('SEERR: une serie dont tout est demande attend, sans action — plus de «
 check('SEERR: une serie annonce le choix des saisons, pas un film',
   seerrVu.serieADemander.popup === 'dialog' && seerrVu.demander.popup === null, [seerrVu.serieADemander, seerrVu.demander]);
 check('SEERR: un titre disponible le dit, en vert',
-  seerrVu.disponible.texte === 'Disponible' && seerrVu.disponible.fond === 'rgb(22, 163, 74)'
+  seerrVu.disponible.texte === 'Disponible' && seerrVu.disponible.fond === 'rgb(21, 128, 61)'
     && seerrVu.disponible.inerte === 'true', seerrVu.disponible);
 check('SEERR: un etat illisible masque le bouton plutot que d afficher une erreur',
   seerrVu.illisible.etat === 'loading' && seerrVu.illisible.visible === 'hidden', seerrVu.illisible);
@@ -2781,6 +2881,8 @@ check('FICHE: titre, resume, deux liens ouverts hors de la page, rien demande',
   ficheVue.titre === 'Inception' && ficheVue.resume === 'Un voleur entre dans les reves.' && !ficheVue.envoyer
     && ficheVue.demandes === 0 && ficheVue.liens.length === 2
     && ficheVue.liens.every(l => l.cible === '_blank' && l.rel === 'noopener noreferrer'), ficheVue);
+check('CONTRASTE: chaque etat du bouton Seerr atteint 4,5:1 en blanc',
+  contrastes.length === 7 && contrastes.every(c => c.rapport >= 4.5), contrastes);
 check('FICHE: les liens sont Seerr puis TMDB',
   ficheVue.liens[0].href === 'https://seer.example.org/movie/27205'
     && ficheVue.liens[1].href === 'https://www.themoviedb.org/movie/27205', ficheVue.liens);
@@ -2844,6 +2946,50 @@ check('AUDIT: le panneau ne propose que les rangees affichees par le serveur',
 check('AUDIT: enregistrer sans rien masquer n ecrit aucune rangee', enregistreSansRangee.length === 0, enregistreSansRangee);
 check('AUDIT: les reglages du serveur se relisent apres le delai du cache',
   /Nouveau titre du serveur/.test(titreApresDelai), titreApresDelai);
+// LANGUE — assertions.
+check('LANGUE: lang="en", le bouton Seerr, son nom accessible, la fiche et la carte absente',
+  enBouton.texte === 'Request' && /^Request: \S/.test(enBouton.nom)
+    && enBouton.absent === 'Not in library' && enBouton.fiche === 'Details'
+    && /^Details: /.test(enBouton.ficheNom), enBouton);
+check('LANGUE: lang="en", la fenetre de demande et son message de saison manquante',
+  enFenetre.titre === 'Request a series' && enFenetre.envoyer === 'Request' && enFenetre.annuler === 'Cancel'
+    && enFenetre.message === 'Please select at least one season'
+    && enFenetre.noms.some(n => /^Season \d+$/.test(n)) && enFenetre.etats.length > 0
+    && enFenetre.etats.every(e => ['Not requested', 'Requested', 'Processing', 'Partial', 'Available', 'Blocked'].includes(e))
+    && enFenetre.episodes.every(e => / ep\.$/.test(e)), enFenetre);
+check('LANGUE: lang="en-GB", l erreur Seerr et son infobulle en anglais',
+  enErreur.texte === 'User not found' && /^This account does not exist in Seerr/.test(enErreur.titre), enErreur);
+check('LANGUE: une autre langue (de) donne l anglais, fr-CA garde le francais',
+  deTexte === 'Request' && frTexte === 'Demander', { deTexte, frTexte });
+check('LANGUE: lang="en", le panneau Mes rangees',
+  enOuverture.titre === 'Customize my rows' && enOuverture.nom === 'Customize my rows'
+    && enPanneau.titre === 'My rows' && enPanneau.boutons.join('|') === 'Save|Reset|Close'
+    && enPanneau.etiquettes.join('|') === 'Accent color|Number size|Hide Jellyfin sections'
+    && /^These choices only apply to this account\./.test(enPanneau.indice)
+    && enPanneau.rangee === 'Server top' && enPanneau.afficher === 'Show: Server top'
+    && enPanneau.monter === 'Move up: Server top', { enOuverture, enPanneau });
+
+// Chaque cle de L10N existe dans les deux langues, et chaque cle employee par le script
+// (t('...'), label/hint des etats, etats de saison, ligne du panneau) est definie.
+{
+  const source = fs.readFileSync(path.join(repo, 'Web', 'media-carousel.js'), 'utf8');
+  const debut = source.indexOf('var L10N = {');
+  const fin = source.indexOf('\n    };\n', debut) + 7;
+  const table = new Function(source.slice(debut, fin) + '; return L10N;')();
+  const fr = Object.keys(table.fr), en = Object.keys(table.en);
+  const manquantes = fr.filter(k => !(k in table.en)).concat(en.filter(k => !(k in table.fr)));
+  const vides = fr.concat(en).filter(k => !table.fr[k] && !table.en[k]);
+  const utilisees = new Set();
+  for (const m of source.matchAll(/\bt\('([^']+)'/g)) utilisees.add(m[1]);
+  for (const m of source.matchAll(/\b(?:label|hint): '((?:state|season)\.[^']+)'/g)) utilisees.add(m[1]);
+  for (const m of source.matchAll(/^\s+(?:'[a-z-]+'|[a-z]+): 'season\.([a-z-]+)',?$/gm)) utilisees.add('season.' + m[1]);
+  const indefinies = [...utilisees].filter(k => !(k in table.fr) && !/^row\.$/.test(k));
+  const placeholders = fr.filter(k => (table.fr[k].match(/\{\d+\}/g) || []).sort().join() !== (table.en[k].match(/\{\d+\}/g) || []).sort().join());
+  check('LANGUE: chaque cle existe en francais et en anglais, memes arguments',
+    manquantes.length === 0 && vides.length === 0 && placeholders.length === 0 && fr.length > 90, { manquantes, vides, placeholders });
+  check('LANGUE: toute cle employee par le script est definie', utilisees.size > 60 && indefinies.length === 0, indefinies);
+}
+
 check('aucune erreur js', errors.length === 0, errors);
 
 console.log(failed === 0 ? '\nTous les tests passent.' : '\n' + failed + ' echec(s).');
