@@ -37,6 +37,7 @@ public sealed class LocalTopListBuilder
     private readonly IUserDataManager _userDataManager;
     private readonly PlaybackReportingReader _playback;
     private readonly ActivityStats _activity;
+    private readonly RefreshHealth _health;
     private readonly ILogger<LocalTopListBuilder> _logger;
 
     /// <summary>
@@ -47,6 +48,7 @@ public sealed class LocalTopListBuilder
     /// <param name="userDataManager">Gestionnaire des données utilisateur.</param>
     /// <param name="playback">Historique de Playback Reporting, s'il est installé.</param>
     /// <param name="activity">Activité relevée pour la page de réglages.</param>
+    /// <param name="health">Bilan du recalcul, où l'échec d'un compte est consigné.</param>
     /// <param name="logger">Journal.</param>
     public LocalTopListBuilder(
         ILibraryManager libraryManager,
@@ -54,8 +56,10 @@ public sealed class LocalTopListBuilder
         IUserDataManager userDataManager,
         PlaybackReportingReader playback,
         ActivityStats activity,
+        RefreshHealth health,
         ILogger<LocalTopListBuilder> logger)
     {
+        _health = health;
         _libraryManager = libraryManager;
         _userManager = userManager;
         _userDataManager = userDataManager;
@@ -255,6 +259,7 @@ public sealed class LocalTopListBuilder
         catch (Exception ex)
         {
             // Un utilisateur en erreur ne doit pas invalider tout le classement.
+            _health.RecordFailure("Top du serveur", ex);
             _logger.LogError(ex, "Échec de la lecture des statistiques de l'utilisateur {UserId}.", user.Id);
             return;
         }
