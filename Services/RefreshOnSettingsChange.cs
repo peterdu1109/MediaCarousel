@@ -31,6 +31,7 @@ public sealed class RefreshOnSettingsChange : IHostedService, IDisposable
     private readonly ITaskManager _taskManager;
     private readonly ILogger<RefreshOnSettingsChange> _logger;
     private readonly Timer _timer;
+    private readonly CancellationTokenSource _stopping = new();
     private readonly object _lock = new();
     private EventHandler<BasePluginConfiguration>? _handler;
     private string? _signature;
@@ -99,6 +100,10 @@ public sealed class RefreshOnSettingsChange : IHostedService, IDisposable
 
         _refreshService.RunStarting -= OnRunStarting;
         _timer.Change(Timeout.Infinite, Timeout.Infinite);
+
+        // Un recalcul lancé par un enregistrement s'interrompt à l'arrêt du serveur
+        // au lieu de tenir le processus jusqu'au bout des appels externes.
+        _stopping.Cancel();
         return Task.CompletedTask;
     }
 
@@ -114,6 +119,7 @@ public sealed class RefreshOnSettingsChange : IHostedService, IDisposable
     public void Dispose()
     {
         _timer.Dispose();
+        _stopping.Dispose();
     }
 
     private static string Signature(PluginConfiguration configuration)
@@ -190,7 +196,11 @@ public sealed class RefreshOnSettingsChange : IHostedService, IDisposable
     {
         try
         {
-            await _refreshService.RefreshAsync(null, CancellationToken.None).ConfigureAwait(false);
+            await _refreshService.RefreshAsync(null, _stopping.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (_stopping.IsCancellationRequested)
+        {
+            _logger.LogInformation("Recalcul lancé par l'enregistrement des réglages interrompu par l'arrêt du serveur.");
         }
         catch (Exception ex)
         {
