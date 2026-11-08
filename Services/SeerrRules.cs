@@ -538,6 +538,28 @@ public static class SeerrRules
                 : null;
     }
 
+    /// <summary>
+    /// Clé d'un titre dans l'ensemble des titres publiés : le type ET l'identifiant, car films et
+    /// séries sont numérotés séparément.
+    /// </summary>
+    /// <param name="mediaType"><c>movie</c> ou <c>tv</c>.</param>
+    /// <param name="tmdbId">Identifiant TMDB.</param>
+    /// <returns>La clé, par exemple <c>movie:603</c>.</returns>
+    public static string TitleKey(string mediaType, int tmdbId)
+        => mediaType + ":" + tmdbId.ToString(CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// Dit si un titre désigné par le navigateur figure dans le Top publié. Les routes Seerr
+    /// refusent (400) tout autre titre : elles ne servent pas de passerelle vers n'importe quelle
+    /// fiche de Seerr.
+    /// </summary>
+    /// <param name="published">Les clés des titres publiés (voir <see cref="TitleKey"/>).</param>
+    /// <param name="mediaType">Le type reçu.</param>
+    /// <param name="tmdbId">L'identifiant reçu.</param>
+    /// <returns><see langword="true"/> si le titre est publié.</returns>
+    public static bool IsPublished(HashSet<string> published, string? mediaType, int tmdbId)
+        => IsMediaType(mediaType) && tmdbId > 0 && published.Contains(TitleKey(mediaType!, tmdbId));
+
     /// <summary>Longueur maximale du synopsis transmis au navigateur.</summary>
     public const int MaxOverviewLength = 1200;
 

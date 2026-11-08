@@ -489,12 +489,9 @@ public class SeerrController : ControllerBase
     }
 
     private static bool IsPublished(HashSet<string> published, SeerrItemDto item)
-        => SeerrRules.IsMediaType(item.MediaType)
-            && item.TmdbId > 0
-            && published.Contains(Key(item.MediaType!, item.TmdbId));
+        => SeerrRules.IsPublished(published, item.MediaType, item.TmdbId);
 
-    private static string Key(string mediaType, int tmdbId)
-        => mediaType + ":" + tmdbId.ToString(CultureInfo.InvariantCulture);
+    private static string Key(string mediaType, int tmdbId) => SeerrRules.TitleKey(mediaType, tmdbId);
 
     private static string? ErrorCode(SeerrFailure failure) => failure switch
     {
