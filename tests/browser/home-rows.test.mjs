@@ -1690,6 +1690,16 @@ const serveurSeerr = () => {
           ]
         }), 60));
       }
+      if (route === 'MediaCarousel/Seerr/Details') {
+        if (window.__refusFiche) {
+          return Promise.reject({ status: 502, json: () => Promise.resolve({ Error: 'offline' }) });
+        }
+        return Promise.resolve({
+          MediaType: corps.MediaType, TmdbId: corps.TmdbId, Overview: 'Un voleur entre dans les reves.',
+          SeerrUrl: window.__sansLienSeerr ? null : 'https://seer.example.org/' + corps.MediaType + '/' + corps.TmdbId,
+          TmdbUrl: 'https://www.themoviedb.org/' + corps.MediaType + '/' + corps.TmdbId
+        });
+      }
       if (route === 'MediaCarousel/Seerr/Request') {
         return new Promise((resolve, reject) => setTimeout(() => {
           if (window.__refus === 404) { reject({ status: 404 }); return; }
@@ -2030,6 +2040,47 @@ const demandeFilm = await avancee.evaluate(() => ({
   etat: document.querySelector('.mc-seerr[data-tmdb="27205"]').getAttribute('data-state')
 }));
 await avancee.close();
+
+// FICHE — le bouton « i » d'un titre absent ouvre le synopsis et les liens, sans rien demander.
+const fiche = await pageSeerr();
+await fiche.waitForFunction(etatSeerr('27205', 'request'));
+await fiche.click('.mc-info[data-tmdb="27205"]');
+await fiche.waitForSelector('.mc-seerr-link');
+const ficheVue = await fiche.evaluate(() => {
+  const d = document.querySelector('.mc-seerr-dialog');
+  return {
+    titre: d.querySelector('h2').textContent, resume: d.querySelector('.mc-seerr-overview').textContent,
+    liens: Array.from(d.querySelectorAll('.mc-seerr-link')).map(a => ({
+      href: a.getAttribute('href'), cible: a.getAttribute('target'), rel: a.getAttribute('rel') })),
+    demandes: window.__appels.filter(a => a.route === 'MediaCarousel/Seerr/Request').length,
+    envoyer: !!d.querySelector('.mc-seerr-send'), bouton: document.querySelector('.mc-info[data-tmdb="27205"]').getAttribute('aria-label')
+  };
+});
+await fiche.click('.mc-seerr-cancel');
+await fiche.waitForFunction(() => !document.querySelector('.mc-seerr-backdrop'));
+// La fenetre des saisons d'une serie montre aussi le synopsis.
+await fiche.click('.mc-seerr[data-tmdb="66732"]');
+await fiche.waitForSelector('.mc-seerr-dialog .mc-seerr-pick');
+const resumeSerie = await fiche.evaluate(() => {
+  const o = document.querySelector('.mc-seerr-dialog .mc-seerr-overview');
+  return { texte: o.textContent, cache: o.hidden };
+});
+await fiche.close();
+const sansLien = await pageSeerr({ __sansLienSeerr: true });
+await sansLien.waitForFunction(etatSeerr('27205', 'request'));
+await sansLien.click('.mc-info[data-tmdb="27205"]');
+await sansLien.waitForSelector('.mc-seerr-link');
+const liensSansSeerr = await sansLien.evaluate(() =>
+  Array.from(document.querySelectorAll('.mc-seerr-link')).map(a => a.textContent));
+await sansLien.close();
+const fichePanne = await pageSeerr({ __refusFiche: true });
+await fichePanne.waitForFunction(etatSeerr('27205', 'request'));
+await fichePanne.click('.mc-info[data-tmdb="27205"]');
+await fichePanne.waitForFunction(() => (document.querySelector('.mc-seerr-overview') || {}).textContent
+  === 'Le résumé n\'a pas pu être chargé.');
+const fichePanneVue = await fichePanne.evaluate(() => ({
+  fermer: !!document.querySelector('.mc-seerr-cancel'), liens: document.querySelectorAll('.mc-seerr-link').length }));
+await fichePanne.close();
 
 // Options illisibles : la section reste cachee, et la demande part sans elles.
 const sansOptions = await pageSeerr({ __avance: true, __refusOptions: true });
@@ -2726,6 +2777,20 @@ check('AVANCEES: changer de serveur propose ses propres profils et dossiers',
 check('AVANCEES: la demande porte le serveur, le profil et le dossier choisis',
   demandeAvancee.ServerId === 0 && demandeAvancee.ProfileId === 6 && demandeAvancee.RootFolder === '/series2'
     && demandeAvancee.Seasons.join(',') === '3,4', demandeAvancee);
+check('FICHE: titre, resume, deux liens ouverts hors de la page, rien demande',
+  ficheVue.titre === 'Inception' && ficheVue.resume === 'Un voleur entre dans les reves.' && !ficheVue.envoyer
+    && ficheVue.demandes === 0 && ficheVue.liens.length === 2
+    && ficheVue.liens.every(l => l.cible === '_blank' && l.rel === 'noopener noreferrer'), ficheVue);
+check('FICHE: les liens sont Seerr puis TMDB',
+  ficheVue.liens[0].href === 'https://seer.example.org/movie/27205'
+    && ficheVue.liens[1].href === 'https://www.themoviedb.org/movie/27205', ficheVue.liens);
+check('FICHE: le bouton i porte le nom du titre', /Inception/.test(ficheVue.bouton), ficheVue.bouton);
+check('FICHE: la fenetre de la serie montre le synopsis',
+  resumeSerie.texte === 'Un voleur entre dans les reves.' && !resumeSerie.cache, resumeSerie);
+check('FICHE: sans adresse publique, seul le lien TMDB reste',
+  liensSansSeerr.length === 1 && liensSansSeerr[0] === 'Voir sur TMDB', liensSansSeerr);
+check('FICHE: une panne de Seerr laisse la fenetre fermable, sans lien',
+  fichePanneVue.fermer && fichePanneVue.liens === 0, fichePanneVue);
 check('AVANCEES: un film ouvre sa fenetre, sans saisons, pret a partir',
   fenetreFilm.titre === 'Demander un film' && fenetreFilm.saisons === 0 && fenetreFilm.envoiActif
     && fenetreFilm.dossier === '/films (1 TB)', fenetreFilm);

@@ -558,6 +558,93 @@ catch (Exception ex)
 }
 Check("DELAI: un arret demande reste un arret", echecArret is OperationCanceledException);
 
+// Un 401/403/404 donne la meme reponse trois secondes plus tard ; un 429 annonce son attente.
+var essais401 = 0;
+Exception? echec401 = null;
+try
+{
+    await TrendingFetch.WithRetryAsync<int>(
+        _ => { essais401++; throw new TrendingHttpException(System.Net.HttpStatusCode.Unauthorized, null); },
+        TimeSpan.FromSeconds(5), TimeSpan.FromMilliseconds(1), null, CancellationToken.None);
+}
+catch (Exception ex)
+{
+    echec401 = ex;
+}
+Check("RETRY: un 401 n'est pas relance", essais401 == 1 && echec401 is TrendingHttpException);
+foreach (var code in new[] { System.Net.HttpStatusCode.Forbidden, System.Net.HttpStatusCode.NotFound })
+{
+    var essaisCode = 0;
+    try
+    {
+        await TrendingFetch.WithRetryAsync<int>(
+            _ => { essaisCode++; throw new TrendingHttpException(code, null); },
+            TimeSpan.FromSeconds(5), TimeSpan.FromMilliseconds(1), null, CancellationToken.None);
+    }
+    catch (TrendingHttpException)
+    {
+    }
+
+    Check("RETRY: un " + (int)code + " n'est pas relance", essaisCode == 1);
+}
+
+var essais500 = 0;
+try
+{
+    await TrendingFetch.WithRetryAsync<int>(
+        _ => { essais500++; throw new TrendingHttpException(System.Net.HttpStatusCode.BadGateway, null); },
+        TimeSpan.FromSeconds(5), TimeSpan.FromMilliseconds(1), null, CancellationToken.None);
+}
+catch (TrendingHttpException)
+{
+}
+
+Check("RETRY: un 502 est relance une fois", essais500 == 2);
+var quota = new TrendingHttpException(System.Net.HttpStatusCode.TooManyRequests, TimeSpan.FromSeconds(10));
+Check("RETRY: Retry-After plus long que le delai par defaut est respecte",
+    TrendingFetch.DelayFor(quota, TimeSpan.FromSeconds(3)) == TimeSpan.FromSeconds(10));
+Check("RETRY: Retry-After plus court laisse le delai par defaut",
+    TrendingFetch.DelayFor(quota, TimeSpan.FromSeconds(20)) == TimeSpan.FromSeconds(20));
+Check("RETRY: Retry-After est plafonne",
+    TrendingFetch.DelayFor(new TrendingHttpException(System.Net.HttpStatusCode.TooManyRequests, TimeSpan.FromHours(1)), TimeSpan.FromSeconds(3)) == TrendingFetch.MaxRetryAfter);
+using (var reponse429 = new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.TooManyRequests))
+{
+    reponse429.Headers.RetryAfter = new System.Net.Http.Headers.RetryConditionHeaderValue(TimeSpan.FromSeconds(7));
+    TrendingHttpException? lue = null;
+    try
+    {
+        TrendingFetch.EnsureSuccess(reponse429);
+    }
+    catch (TrendingHttpException ex)
+    {
+        lue = ex;
+    }
+
+    Check("RETRY: EnsureSuccess lit le Retry-After d'un 429", lue?.RetryAfter == TimeSpan.FromSeconds(7));
+}
+
+// Fiche d'un titre absent : synopsis, langue, liens.
+Check("FICHE: le synopsis est lu", SeerrRules.ReadOverview("{\"overview\":\"  Un film.  \"}") == "Un film.");
+Check("FICHE: un synopsis vide est absent", SeerrRules.ReadOverview("{\"overview\":\"  \"}") is null);
+Check("FICHE: un synopsis absent est absent", SeerrRules.ReadOverview("{\"title\":\"x\"}") is null);
+Check("FICHE: un synopsis qui n'est pas du texte est absent", SeerrRules.ReadOverview("{\"overview\":12}") is null);
+var longSynopsis = SeerrRules.ReadOverview("{\"overview\":\"" + new string('a', 5000) + "\"}");
+Check("FICHE: le synopsis est borne", longSynopsis is not null && longSynopsis.Length <= SeerrRules.MaxOverviewLength + 1 && longSynopsis.EndsWith('…'));
+Check("FICHE: langue fr acceptee", SeerrRules.NormalizeLanguage("fr") == "fr");
+Check("FICHE: langue pt-BR acceptee", SeerrRules.NormalizeLanguage("pt-BR") == "pt-BR");
+Check("FICHE: langue avec injection refusee", SeerrRules.NormalizeLanguage("fr&x=1") is null);
+Check("FICHE: langue vide refusee", SeerrRules.NormalizeLanguage("") is null && SeerrRules.NormalizeLanguage(null) is null);
+Check("FICHE: langue en majuscules refusee", SeerrRules.NormalizeLanguage("FR") is null);
+Check("FICHE: lien Seerr d'un film", SeerrRules.PublicTitleUrl("https://seer.bmeouchi.fr/", "movie", 603) == "https://seer.bmeouchi.fr/movie/603");
+Check("FICHE: lien Seerr d'une serie", SeerrRules.PublicTitleUrl("https://seer.bmeouchi.fr", "tv", 1399) == "https://seer.bmeouchi.fr/tv/1399");
+Check("FICHE: sans adresse publique, pas de lien Seerr", SeerrRules.PublicTitleUrl("", "movie", 603) is null);
+Check("FICHE: adresse publique non http, pas de lien Seerr", SeerrRules.PublicTitleUrl("javascript:alert(1)", "movie", 603) is null);
+Check("FICHE: type inconnu, pas de lien Seerr", SeerrRules.PublicTitleUrl("https://seer.bmeouchi.fr", "person", 603) is null);
+Check("FICHE: lien TMDB d'un film", SeerrRules.TmdbTitleUrl("movie", 603) == "https://www.themoviedb.org/movie/603");
+Check("FICHE: identifiant invalide, pas de lien TMDB", SeerrRules.TmdbTitleUrl("tv", 0) is null);
+
+
+
 Check("VIDE: TMDB sans prochaines sorties de series, le vide est normal", TrendingFetch.EmptyIsExpected(true, true, true));
 Check("VIDE: une liste de tendances vide est une panne", !TrendingFetch.EmptyIsExpected(true, false, true));
 Check("VIDE: des films a venir absents est une panne", !TrendingFetch.EmptyIsExpected(true, true, false));
@@ -1143,8 +1230,8 @@ Check("DROITS: entree ventilee, compte filtre : ses bibliotheques seules",
 // Les routes Seerr suivent la regle du classement : aucun titre absent pour un compte
 // restreint. Les droits ne se simulent pas hors serveur : le controle porte sur le code.
 var codeSeerr = CodeSansCommentaires(Path.Combine("Api", "SeerrController.cs"));
-Check("DROITS: Status, Seasons et Request refusent un compte restreint",
-    System.Text.RegularExpressions.Regex.Matches(codeSeerr, @"if \(!ShowsAbsentTitles\(\)\)").Count == 3);
+Check("DROITS: Status, Seasons, Details et Request refusent un compte restreint",
+    System.Text.RegularExpressions.Regex.Matches(codeSeerr, @"if \(!ShowsAbsentTitles\(\)\)").Count == 4);
 
 // EXG-057 : le jeton prime sur le parametre `userId`. L'inverse laissait un compte standard
 // demander le classement d'un administrateur et recevoir ses bibliotheques.
@@ -1171,6 +1258,31 @@ Check("DROITS: StatusController reserve aux administrateurs",
 Check("DROITS: Top/Refresh reserve aux administrateurs",
     System.Text.RegularExpressions.Regex.IsMatch(codeTop,
         @"\[HttpPost\(""Top/Refresh""\)\]\s*\[Authorize\(Policy = ""RequiresElevation""\)\]"));
+
+// R1 : l'horodatage de date d'acces ne doit jamais priver l'appelant de l'image.
+Check("ROBUSTESSE: TryTouch absorbe UnauthorizedAccessException",
+    PosterCacheFile.TryTouch("x", (_, _) => throw new UnauthorizedAccessException()) == false);
+Check("ROBUSTESSE: TryTouch absorbe IOException",
+    PosterCacheFile.TryTouch("x", (_, _) => throw new IOException()) == false);
+Check("ROBUSTESSE: TryTouch rend vrai quand l'horodatage est pose",
+    PosterCacheFile.TryTouch("x", (_, _) => { }));
+
+{
+    // Le catch par compte de LocalTopListBuilder appelle RecordFailure pendant le passage :
+    // l'echec doit figurer dans le bilan fige, et BeginRun doit repartir d'un bilan vide.
+    var health = new RefreshHealth();
+    health.BeginRun();
+    health.RecordFailure("Top du serveur", new InvalidOperationException("compte en erreur"));
+    health.EndRun();
+    var report = health.Snapshot().Report;
+    Check("ROBUSTESSE: un echec par compte figure dans le bilan",
+        report.Failures.Count == 1 && report.Failures[0].Section == "Top du serveur"
+        && report.Failures[0].Message == "compte en erreur");
+    health.BeginRun();
+    health.EndRun();
+    Check("ROBUSTESSE: le passage suivant repart sans echec",
+        health.Snapshot().Report.Failures.Count == 0);
+}
 
 Console.WriteLine(failed == 0 ? "\nTous les tests passent." : $"\n{failed} echec(s).");
 return failed;
