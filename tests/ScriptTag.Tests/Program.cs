@@ -1263,6 +1263,8 @@ Check("A11Y: la region vive du message est remplie apres son insertion",
 Check("A11Y: une panne de liste ne se lit pas comme « aucun titre »",
     scriptAccueil.Contains("empty.failed = true;", StringComparison.Ordinal)
     && scriptAccueil.Contains("items.failed", StringComparison.Ordinal));
+Check("A11Y: le bouton i a une zone tactile elargie",
+    scriptAccueil.Contains(".mc-row .mc-info::after{content:\"\";position:absolute;left:-7px", StringComparison.Ordinal));
 Check("A11Y: le bouton de personnalisation a une zone tactile elargie",
     scriptAccueil.Contains(".mc-prefs-open::after{content:\"\";position:absolute;left:-12px", StringComparison.Ordinal));
 

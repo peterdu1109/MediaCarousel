@@ -514,6 +514,8 @@
             '.mc-row .mc-info{position:absolute;top:6%;right:6%;pointer-events:auto;box-sizing:border-box;',
             'width:2.6em;height:2.6em;margin:0;padding:0;border:0;border-radius:50%;font:inherit;font-size:.8em;',
             'font-weight:700;line-height:2.6em;text-align:center;color:#fff;background:rgba(0,0,0,.62);cursor:pointer;}',
+            /* Zone tactile d'environ 45 px (le bouton en fait 31) : un cadre invisible déborde. */
+            '.mc-row .mc-info::after{content:"";position:absolute;left:-7px;right:-7px;top:-7px;bottom:-7px;}',
             '.mc-row .mc-info:hover{background:rgba(0,0,0,.88);}',
             '.mc-row .mc-info:focus{outline:none;box-shadow:0 0 0 2px #fff,0 0 0 4px rgba(0,0,0,.7);}',
             '.mc-row .mc-info:focus:not(:focus-visible){box-shadow:none;}',
