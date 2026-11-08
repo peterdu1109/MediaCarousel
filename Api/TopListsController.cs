@@ -242,12 +242,21 @@ public class TopListsController : ControllerBase
     /// bibliothèque et ne doit pas maintenir la requête HTTP ouverte.
     /// </remarks>
     /// <response code="204">Le recalcul a été lancé.</response>
-    /// <returns>Un statut sans contenu.</returns>
+    /// <response code="409">Un recalcul est déjà en cours : cet appel n'en lance pas un second.</response>
+    /// <returns>Un statut sans contenu, ou un conflit.</returns>
     [HttpPost("Top/Refresh")]
     [Authorize(Policy = "RequiresElevation")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public ActionResult RefreshTopLists()
     {
+        // RefreshAsync ignore l'appel quand un recalcul tourne : sans ce refus, la page
+        // annonçait « lancé » pour un passage qui n'avait pas eu lieu.
+        if (_refreshService.IsRefreshing)
+        {
+            return Conflict();
+        }
+
         _ = Task.Run(async () =>
         {
             try

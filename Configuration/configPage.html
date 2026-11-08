@@ -1005,7 +1005,8 @@
                         savedSame: 'Réglages enregistrés, sans changement.',
                         refreshStarting: 'Recalcul lancé…',
                         refreshStarted: 'Recalcul lancé en arrière-plan. Les chiffres ci-dessus se mettent à jour une fois terminé.',
-                        refreshFailed: 'Le recalcul n\'a pas pu être lancé.'
+                        refreshFailed: 'Le recalcul n\'a pas pu être lancé.',
+                        refreshBusy: 'Un recalcul est déjà en cours ; celui-ci n\'a pas été relancé.'
                     },
                     en: {
                         intro: 'Netflix-style rows on the home page. Tick them and order them below: they refresh on their own.',
@@ -1201,7 +1202,8 @@
                         savedSame: 'Settings saved, nothing changed.',
                         refreshStarting: 'Refresh started…',
                         refreshStarted: 'Refresh running in the background. The figures above update when it is done.',
-                        refreshFailed: 'The refresh could not start.'
+                        refreshFailed: 'The refresh could not start.',
+                        refreshBusy: 'A refresh is already running; none was started.'
                     }
                 };
 
@@ -2331,8 +2333,8 @@
                             // Le recalcul est asynchrone : on relit l'état un peu plus tard.
                             window.setTimeout(loadStatus, 5000);
                             window.setTimeout(loadStatus, 20000);
-                        }, function () {
-                            say(t('refreshFailed'));
+                        }, function (response) {
+                            say(t(response && response.status === 409 ? 'refreshBusy' : 'refreshFailed'));
                         });
                     });
                 });
