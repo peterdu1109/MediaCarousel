@@ -2972,7 +2972,8 @@ check('LANGUE: lang="en", le panneau Mes rangees',
 // Chaque cle de L10N existe dans les deux langues, et chaque cle employee par le script
 // (t('...'), label/hint des etats, etats de saison, ligne du panneau) est definie.
 {
-  const source = fs.readFileSync(path.join(repo, 'Web', 'media-carousel.js'), 'utf8');
+  // Les fins de ligne dependent du poste (git autocrlf) : le test ne doit pas en dependre.
+  const source = fs.readFileSync(path.join(repo, 'Web', 'media-carousel.js'), 'utf8').split('\r\n').join('\n');
   const debut = source.indexOf('var L10N = {');
   const fin = source.indexOf('\n    };\n', debut) + 7;
   const table = new Function(source.slice(debut, fin) + '; return L10N;')();
