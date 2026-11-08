@@ -507,7 +507,9 @@
             '.layout-tv .mc-row .card:focus .mc-seerr-zone{opacity:1;}',
             '.layout-tv .mc-row .card:focus .mc-seerr{box-shadow:0 0 0 3px #fff;}',
             '.mc-row .mc-seerr:focus:not(:focus-visible){box-shadow:none;}',
-            /* Les couleurs de Jellyfin Enhanced, état par état. */
+            /* Les teintes de Jellyfin Enhanced, état par état ; les deux verts sont assombris (blanc
+               dessus : 5,2:1 et 5,0:1, contre 3,1:1 et 3,3:1 à l'origine) pour atteindre le seuil
+               AA de 4,5:1 d'un texte de cette taille. */
             /* Bouton « fiche » : en haut à droite de l'affiche, dans le même voile que « Demander ». */
             '.mc-row .mc-info{position:absolute;top:6%;right:6%;pointer-events:auto;box-sizing:border-box;',
             'width:2.6em;height:2.6em;margin:0;padding:0;border:0;border-radius:50%;font:inherit;font-size:.8em;',
@@ -518,8 +520,8 @@
             '.mc-row .mc-seerr[data-tone="request"]{background:#5a3fb8;}',
             '.mc-row .mc-seerr[data-tone="pending"]{background:#b45309;}',
             '.mc-row .mc-seerr[data-tone="processing"]{background:#581c87;}',
-            '.mc-row .mc-seerr[data-tone="partial"]{background:#4ca46c;}',
-            '.mc-row .mc-seerr[data-tone="available"]{background:#16a34a;}',
+            '.mc-row .mc-seerr[data-tone="partial"]{background:#357a50;}',
+            '.mc-row .mc-seerr[data-tone="available"]{background:#15803d;}',
             '.mc-row .mc-seerr[data-tone="blocked"]{background:#78350f;}',
             '.mc-row .mc-seerr[data-tone="error"]{background:#dc3545;}',
 
@@ -667,9 +669,11 @@
                `emby-checkbox` attendent d'être enregistrés par le client, ce qui n'est
                garanti sur aucune page. Tout est donc en HTML nu, stylé ici.
                ------------------------------------------------------------------ */
-            '.mc-prefs-open{margin-left:auto;border:0;background:transparent;color:inherit;',
+            /* Zone tactile d'au moins 44 px sans changer la mise en page : un cadre invisible déborde. */
+            '.mc-prefs-open{position:relative;margin-left:auto;border:0;background:transparent;color:inherit;',
             'cursor:pointer;font-size:1.1em;line-height:1;padding:.2em .4em;border-radius:4px;',
             'opacity:.55;transition:opacity var(--mc-dur) var(--mc-ease);}',
+            '.mc-prefs-open::after{content:"";position:absolute;left:-12px;right:-12px;top:-12px;bottom:-12px;}',
             '.mc-prefs-open:hover,.mc-prefs-open:focus{opacity:1;}',
             '.mc-row.mc-prefs-only .sectionTitle{opacity:.6;font-size:1em;}',
             '.mc-prefs-open:focus{outline:2px solid var(--mc-accent);outline-offset:2px;}',
@@ -1021,15 +1025,15 @@
             name: name,
             // Un titre que la source externe classe mais que le serveur n'a pas : la
             // seconde ligne le dit, plutôt qu'un lien mort ou une carte muette.
-            secondary: inLibrary ? (year ? String(year) : '') : 'Absent de la bibliothèque',
+            secondary: inLibrary ? (year ? String(year) : '') : t('rank.absent'),
             imageUrl: inLibrary ? imageUrl(item, 'Primary', 400) : posterUrl(entry.PosterUrl),
             href: inLibrary ? routeUrl(item) : null,
             itemId: inLibrary ? item.Id : null,
             serverId: inLibrary ? (item.ServerId || serverId()) : null,
             itemType: inLibrary ? item.Type : null,
             isFolder: inLibrary && item.IsFolder,
-            ariaLabel: 'Numéro ' + entry.Rank + ' : ' + name + (year ? ' (' + year + ')' : '')
-                + (inLibrary ? '' : ' — absent de la bibliothèque'),
+            ariaLabel: t('rank.aria', [entry.Rank, name]) + (year ? ' (' + year + ')' : '')
+                + (inLibrary ? '' : t('rank.absentSuffix')),
             cardClass: 'mc-ranked' + (inLibrary ? '' : ' mc-unavailable'),
             overlay: inLibrary ? '' : seerrButton(entry),
             tvAction: !inLibrary && !!seerrButton(entry),
@@ -1110,41 +1114,259 @@
      */
     var SEERR_STATES = {
         loading: { label: '', tone: 'request' },
-        request: { label: 'Demander', tone: 'request', icon: 'file_download', acts: 'movie tv' },
-        'request-more': { label: 'Demander plus', tone: 'request', icon: 'file_download', acts: 'tv' },
-        'request-missing': { label: 'Demander manquant', tone: 'partial', icon: 'file_download', acts: 'tv' },
-        sending: { label: 'Demande en cours', tone: 'request', spinner: true },
-        pending: { label: 'En attente d\'approbation', tone: 'pending', icon: 'pending' },
-        requested: { label: 'Demandé', tone: 'pending', icon: 'schedule' },
-        processing: { label: 'Traitement', tone: 'processing', spinner: true },
-        partial: { label: 'Partiellement disponible', tone: 'partial', icon: 'task_alt' },
-        available: { label: 'Disponible', tone: 'available', icon: 'download_done' },
-        blocked: { label: 'Bloqué', tone: 'blocked', icon: 'cancel' },
-        offline: { label: 'Seerr hors ligne', tone: 'error', icon: 'cloud_off', retry: true },
-        error: { label: 'Erreur', tone: 'error', icon: 'error', retry: true },
+        request: { label: 'state.request', tone: 'request', icon: 'file_download', acts: 'movie tv' },
+        'request-more': { label: 'state.request-more', tone: 'request', icon: 'file_download', acts: 'tv' },
+        'request-missing': { label: 'state.request-missing', tone: 'partial', icon: 'file_download', acts: 'tv' },
+        sending: { label: 'state.sending', tone: 'request', spinner: true },
+        pending: { label: 'state.pending', tone: 'pending', icon: 'pending' },
+        requested: { label: 'state.requested', tone: 'pending', icon: 'schedule' },
+        processing: { label: 'state.processing', tone: 'processing', spinner: true },
+        partial: { label: 'state.partial', tone: 'partial', icon: 'task_alt' },
+        available: { label: 'state.available', tone: 'available', icon: 'download_done' },
+        blocked: { label: 'state.blocked', tone: 'blocked', icon: 'cancel' },
+        offline: { label: 'state.offline', tone: 'error', icon: 'cloud_off', retry: true },
+        error: { label: 'state.error', tone: 'error', icon: 'error', retry: true },
         'user-not-found': {
-            label: 'Utilisateur non trouvé',
+            label: 'state.user-not-found',
             tone: 'error',
             icon: 'person_off',
-            hint: 'Ce compte n\'existe pas dans Seerr : l\'administrateur doit l\'importer depuis Jellyfin.'
+            hint: 'state.user-not-found.hint'
         },
         forbidden: {
-            label: 'Pas de permission pour faire des demandes',
+            label: 'state.forbidden',
             tone: 'error',
             icon: 'error',
-            hint: 'Ce compte Seerr n\'a pas le droit de faire des demandes, ou son quota est atteint.'
+            hint: 'state.forbidden.hint'
         }
     };
 
     // État d'une saison dans le choix des saisons, avec les libellés de Jellyfin Enhanced.
     var SEASON_STATES = {
-        'not-requested': 'Non demandé',
-        requested: 'Demandé',
-        processing: 'Traitement',
-        partial: 'Partiel',
-        available: 'Disponible',
-        blocked: 'Bloqué'
+        'not-requested': 'season.not-requested',
+        requested: 'season.requested',
+        processing: 'season.processing',
+        partial: 'season.partial',
+        available: 'season.available',
+        blocked: 'season.blocked'
     };
+
+    /*
+     * Textes visibles du script, en français et en anglais. La langue vient de l'attribut
+     * `lang` de <html>, où jellyfin-web met la culture effective : `fr` (avec ou sans région)
+     * ou attribut absent = français, comportement d'origine ; toute autre langue = anglais.
+     * Chaque clé doit exister dans les deux tables, un test le vérifie. Les arguments se
+     * glissent dans {0}, {1}… Les titres de rangées par défaut viennent du serveur
+     * (PluginConfiguration) ; les clés `fb.*` ne servent que s'il n'en envoie pas.
+     */
+    var L10N = {
+        fr: {
+            'rank.absent': 'Absent de la bibliothèque',
+            'rank.aria': 'Numéro {0} : {1}',
+            'rank.absentSuffix': ' — absent de la bibliothèque',
+            'seerr.aria': '{0} : {1}',
+            'state.request': 'Demander',
+            'state.request-more': 'Demander plus',
+            'state.request-missing': 'Demander manquant',
+            'state.sending': 'Demande en cours',
+            'state.pending': 'En attente d\'approbation',
+            'state.requested': 'Demandé',
+            'state.processing': 'Traitement',
+            'state.partial': 'Partiellement disponible',
+            'state.available': 'Disponible',
+            'state.blocked': 'Bloqué',
+            'state.offline': 'Seerr hors ligne',
+            'state.error': 'Erreur',
+            'state.user-not-found': 'Utilisateur non trouvé',
+            'state.user-not-found.hint': 'Ce compte n\'existe pas dans Seerr : l\'administrateur doit l\'importer depuis Jellyfin.',
+            'state.forbidden': 'Pas de permission pour faire des demandes',
+            'state.forbidden.hint': 'Ce compte Seerr n\'a pas le droit de faire des demandes, ou son quota est atteint.',
+            'season.not-requested': 'Non demandé',
+            'season.requested': 'Demandé',
+            'season.processing': 'Traitement',
+            'season.partial': 'Partiel',
+            'season.available': 'Disponible',
+            'season.blocked': 'Bloqué',
+            'season.special': 'Épisodes spéciaux',
+            'season.n': 'Saison {0}',
+            'info.aria': 'Fiche : {0}',
+            'info.title': 'Fiche',
+            'dialog.tv': 'Demander une série',
+            'dialog.movie': 'Demander un film',
+            'dialog.send': 'Demander',
+            'seasons.loading': 'Chargement des saisons…',
+            'seasons.failed': 'Impossible de charger les informations de saison',
+            'seasons.all': 'Sélectionner toutes les saisons',
+            'seasons.episodes': '{0} ép.',
+            'seasons.none': 'Toutes les saisons sont déjà demandées ou disponibles.',
+            'seasons.pick': 'Veuillez sélectionner au moins une saison',
+            'advanced': 'Options avancées',
+            'field.server': 'Serveur de destination',
+            'field.profile': 'Profil de qualité',
+            'field.folder': 'Dossier racine',
+            'cancel': 'Annuler',
+            'close': 'Fermer',
+            'loading': 'Chargement…',
+            'sending': 'Demande en cours…',
+            'toast.seasons': 'Demandé {0} saison(s) de « {1} »',
+            'request.failedSeasons': 'Échec de la demande de saisons',
+            'details.none': 'Pas de résumé disponible.',
+            'details.failed': 'Le résumé n\'a pas pu être chargé.',
+            'link.seerr': 'Voir sur Seerr',
+            'link.tmdb': 'Voir sur TMDB',
+            'type.tv': 'Série',
+            'type.movie': 'Film',
+            'genre.failed': 'Les titres n\'ont pas pu être chargés.',
+            'genre.empty': 'Aucun titre dans ce genre.',
+            'fb.because': 'Parce que tu as regardé {0}',
+            'fb.local': 'Top 10 sur ce serveur',
+            'fb.alltime': 'Les plus regardés de tous les temps',
+            'fb.movies': 'Top 10 des films',
+            'fb.series': 'Top 10 des séries',
+            'fb.global': 'Top 10 mondial',
+            'fb.returning': 'De retour cette semaine',
+            'fb.never': 'Jamais vu',
+            'fb.studio': 'Par studio',
+            'prefs.open': 'Personnaliser mes rangées',
+            'prefs.title': 'Mes rangées',
+            'prefs.hint': 'Ces choix ne valent que pour ce compte. « Réinitialiser » les efface et vous rend aux réglages du serveur.',
+            'prefs.show': 'Afficher : {0}',
+            'prefs.up': 'Monter : {0}',
+            'prefs.down': 'Descendre : {0}',
+            'prefs.color': 'Couleur d’accentuation',
+            'prefs.scale': 'Taille du chiffre',
+            'prefs.hide': 'Masquer les sections de Jellyfin',
+            'prefs.save': 'Enregistrer',
+            'prefs.reset': 'Réinitialiser',
+            'row.local': 'Top du serveur',
+            'row.alltime': 'Les plus regardés de tous les temps',
+            'row.global': 'Top mondial',
+            'row.returning': 'De retour cette semaine',
+            'row.neverplayed': 'Jamais vu',
+            'row.because': 'Parce que tu as regardé…',
+            'row.studios': 'Par studio',
+            'row.genres': 'Par genre',
+            'row.native:smalllibrarytiles': 'Jellyfin — Mes médias',
+            'row.native:librarybuttons': 'Jellyfin — Mes médias (petit)',
+            'row.native:activerecordings': 'Jellyfin — Enregistrements actifs',
+            'row.native:resume': 'Jellyfin — Continuer de regarder',
+            'row.native:resumeaudio': 'Jellyfin — Reprendre l’écoute',
+            'row.native:resumebook': 'Jellyfin — Reprendre la lecture',
+            'row.native:livetv': 'Jellyfin — TV en direct',
+            'row.native:nextup': 'Jellyfin — À suivre',
+            'row.native:latestmedia': 'Jellyfin — Médias récemment ajoutés'
+        },
+        en: {
+            'rank.absent': 'Not in library',
+            'rank.aria': 'Number {0}: {1}',
+            'rank.absentSuffix': ' — not in library',
+            'seerr.aria': '{0}: {1}',
+            'state.request': 'Request',
+            'state.request-more': 'Request more',
+            'state.request-missing': 'Request missing',
+            'state.sending': 'Requesting',
+            'state.pending': 'Pending approval',
+            'state.requested': 'Requested',
+            'state.processing': 'Processing',
+            'state.partial': 'Partially available',
+            'state.available': 'Available',
+            'state.blocked': 'Blocked',
+            'state.offline': 'Seerr offline',
+            'state.error': 'Error',
+            'state.user-not-found': 'User not found',
+            'state.user-not-found.hint': 'This account does not exist in Seerr: the administrator must import it from Jellyfin.',
+            'state.forbidden': 'No permission to make requests',
+            'state.forbidden.hint': 'This Seerr account is not allowed to make requests, or its quota is reached.',
+            'season.not-requested': 'Not requested',
+            'season.requested': 'Requested',
+            'season.processing': 'Processing',
+            'season.partial': 'Partial',
+            'season.available': 'Available',
+            'season.blocked': 'Blocked',
+            'season.special': 'Specials',
+            'season.n': 'Season {0}',
+            'info.aria': 'Details: {0}',
+            'info.title': 'Details',
+            'dialog.tv': 'Request a series',
+            'dialog.movie': 'Request a movie',
+            'dialog.send': 'Request',
+            'seasons.loading': 'Loading seasons…',
+            'seasons.failed': 'Could not load season information',
+            'seasons.all': 'Select all seasons',
+            'seasons.episodes': '{0} ep.',
+            'seasons.none': 'All seasons are already requested or available.',
+            'seasons.pick': 'Please select at least one season',
+            'advanced': 'Advanced options',
+            'field.server': 'Destination server',
+            'field.profile': 'Quality profile',
+            'field.folder': 'Root folder',
+            'cancel': 'Cancel',
+            'close': 'Close',
+            'loading': 'Loading…',
+            'sending': 'Requesting…',
+            'toast.seasons': 'Requested {0} season(s) of "{1}"',
+            'request.failedSeasons': 'Season request failed',
+            'details.none': 'No overview available.',
+            'details.failed': 'The overview could not be loaded.',
+            'link.seerr': 'View on Seerr',
+            'link.tmdb': 'View on TMDB',
+            'type.tv': 'Series',
+            'type.movie': 'Movie',
+            'genre.failed': 'The titles could not be loaded.',
+            'genre.empty': 'No titles in this genre.',
+            'fb.because': 'Because you watched {0}',
+            'fb.local': 'Top 10 on this server',
+            'fb.alltime': 'Most watched of all time',
+            'fb.movies': 'Top 10 movies',
+            'fb.series': 'Top 10 series',
+            'fb.global': 'Global top 10',
+            'fb.returning': 'Back this week',
+            'fb.never': 'Never watched',
+            'fb.studio': 'By studio',
+            'prefs.open': 'Customize my rows',
+            'prefs.title': 'My rows',
+            'prefs.hint': 'These choices only apply to this account. "Reset" clears them and returns you to the server settings.',
+            'prefs.show': 'Show: {0}',
+            'prefs.up': 'Move up: {0}',
+            'prefs.down': 'Move down: {0}',
+            'prefs.color': 'Accent color',
+            'prefs.scale': 'Number size',
+            'prefs.hide': 'Hide Jellyfin sections',
+            'prefs.save': 'Save',
+            'prefs.reset': 'Reset',
+            'row.local': 'Server top',
+            'row.alltime': 'Most watched of all time',
+            'row.global': 'Global top',
+            'row.returning': 'Back this week',
+            'row.neverplayed': 'Never watched',
+            'row.because': 'Because you watched…',
+            'row.studios': 'By studio',
+            'row.genres': 'By genre',
+            'row.native:smalllibrarytiles': 'Jellyfin — My Media',
+            'row.native:librarybuttons': 'Jellyfin — My Media (small)',
+            'row.native:activerecordings': 'Jellyfin — Active Recordings',
+            'row.native:resume': 'Jellyfin — Continue Watching',
+            'row.native:resumeaudio': 'Jellyfin — Continue Listening',
+            'row.native:resumebook': 'Jellyfin — Continue Reading',
+            'row.native:livetv': 'Jellyfin — Live TV',
+            'row.native:nextup': 'Jellyfin — Next Up',
+            'row.native:latestmedia': 'Jellyfin — Recently Added Media'
+        }
+    };
+
+    function uiLanguage() {
+        var tag = (document.documentElement.getAttribute('lang') || '').toLowerCase();
+        return !tag || tag.split(/[-_]/)[0] === 'fr' ? 'fr' : 'en';
+    }
+
+    /** Texte d'interface dans la langue du client ; `args` remplace {0}, {1}… */
+    function t(key, args) {
+        var table = L10N[uiLanguage()];
+        var text = has(table, key) ? table[key] : (has(L10N.fr, key) ? L10N.fr[key] : key);
+
+        return args ? text.replace(/\{(\d+)\}/g, function (match, index) {
+            return args[index] === undefined ? match : String(args[index]);
+        }) : text;
+    }
 
     // Taille maximale d'un lot côté serveur : au-delà, les titres sont répartis en plusieurs.
     var SEERR_BATCH = 20;
@@ -1181,8 +1403,8 @@
         // la fenêtre d'une série (et celle des options avancées) montre le synopsis elle aussi.
         var info = tvOnly
             ? ''
-            : '<button type="button" class="mc-info" aria-haspopup="dialog" aria-label="Fiche : '
-                + escapeHtml(entry.Name || '') + '" title="Fiche" data-media="' + entry.MediaType
+            : '<button type="button" class="mc-info" aria-haspopup="dialog" aria-label="' + escapeHtml(t('info.aria', [entry.Name || '']))
+                + '" title="' + escapeHtml(t('info.title')) + '" data-media="' + entry.MediaType
                 + '" data-tmdb="' + tmdbId + '" data-name="' + escapeHtml(entry.Name || '') + '">i</button>';
 
         return '<div class="mc-seerr-zone" data-state="loading">' + info
@@ -1214,13 +1436,13 @@
 
         // L'icône vient de la police Material de jellyfin-web, comme dans tout le client.
         button.innerHTML = (spec.icon ? '<span class="material-icons ' + spec.icon + '" aria-hidden="true"></span>' : '')
-            + '<span class="mc-seerr-label">' + escapeHtml(spec.label) + '</span>'
+            + '<span class="mc-seerr-label">' + escapeHtml(spec.label ? t(spec.label) : '') + '</span>'
             + (spec.spinner ? '<span class="mc-seerr-spinner" aria-hidden="true"></span>' : '');
 
         // `aria-disabled` et non `disabled` : un bouton désactivé perd le focus, et la
         // télécommande qui venait de le presser ne serait plus nulle part.
         button.setAttribute('aria-disabled', acts ? 'false' : 'true');
-        button.setAttribute('aria-label', spec.label ? spec.label + ' : ' + name : name);
+        button.setAttribute('aria-label', spec.label ? t('seerr.aria', [t(spec.label), name]) : name);
 
         // Une série ouvre le choix des saisons : le bouton l'annonce, et le montre par un ▼,
         // comme chez Jellyfin Enhanced.
@@ -1231,7 +1453,7 @@
         }
 
         if (spec.hint) {
-            button.setAttribute('title', spec.hint);
+            button.setAttribute('title', t(spec.hint));
         } else {
             button.removeAttribute('title');
         }
@@ -1385,11 +1607,21 @@
         });
     }
 
+    /** Vrai si le compte a demandé à réduire les animations. */
+    function prefersReducedMotion() {
+        try {
+            return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+        } catch (error) {
+            return false;
+        }
+    }
+
     /** Message bref en bas de l'écran, comme les confirmations de Jellyfin Enhanced. */
     function showToast(text) {
         var toast = document.querySelector('.mc-toast');
+        var fresh = !toast;
 
-        if (!toast) {
+        if (fresh) {
             toast = document.createElement('div');
             toast.className = 'mc-toast';
             toast.setAttribute('role', 'status');
@@ -1397,12 +1629,23 @@
             document.body.appendChild(toast);
         }
 
-        toast.textContent = text;
-        toast.classList.add('mc-toast-visible');
+        // Une région vive annonce ce qui change APRÈS son insertion : créée et remplie dans le
+        // même tour, elle restait muette pour les lecteurs d'écran.
+        var write = function () {
+            toast.textContent = text;
+            toast.classList.add('mc-toast-visible');
+        };
+
+        if (fresh) {
+            window.setTimeout(write, 60);
+        } else {
+            write();
+        }
+
         window.clearTimeout(toastTimer);
         toastTimer = window.setTimeout(function () {
             toast.classList.remove('mc-toast-visible');
-        }, TOAST_DELAY);
+        }, TOAST_DELAY + (fresh ? 60 : 0));
     }
 
     function closeSeasonDialog(reopen) {
@@ -1433,7 +1676,7 @@
             return season.Name;
         }
 
-        return season.Number === 0 ? 'Épisodes spéciaux' : 'Saison ' + season.Number;
+        return season.Number === 0 ? t('season.special') : t('season.n', [season.Number]);
     }
 
     /** Espace libre d'un dossier, écrit comme chez Jellyfin Enhanced : « 3.98 TB ». */
@@ -1488,24 +1731,24 @@
             + ' aria-labelledby="' + id + '-title" tabindex="-1">'
             + '<div class="mc-seerr-head">'
             + '<h2 id="' + id + '-title" class="mc-seerr-title">'
-            + (isTv ? 'Demander une série' : 'Demander un film') + '</h2>'
+            + t(isTv ? 'dialog.tv' : 'dialog.movie') + '</h2>'
             + '<p class="mc-seerr-subtitle">' + escapeHtml(name) + '</p></div>'
             + '<div class="mc-seerr-body">'
             + '<p class="mc-seerr-overview" hidden></p>'
             + (isTv ? '<div class="mc-seerr-seasons" aria-busy="true">'
-                + '<p class="mc-seerr-note">Chargement des saisons…</p></div>' : '')
-            + (seerrAdvanced ? '<div class="mc-seerr-advanced" hidden><h3>Options avancées</h3>'
+                + '<p class="mc-seerr-note">' + t('seasons.loading') + '</p></div>' : '')
+            + (seerrAdvanced ? '<div class="mc-seerr-advanced" hidden><h3>' + t('advanced') + '</h3>'
                 + '<div class="mc-seerr-row">'
-                + advancedField(id + '-server', 'Serveur de destination', 'mc-seerr-server')
-                + advancedField(id + '-profile', 'Profil de qualité', 'mc-seerr-profile')
+                + advancedField(id + '-server', t('field.server'), 'mc-seerr-server')
+                + advancedField(id + '-profile', t('field.profile'), 'mc-seerr-profile')
                 + '</div><div class="mc-seerr-row">'
-                + advancedField(id + '-folder', 'Dossier racine', 'mc-seerr-folder')
+                + advancedField(id + '-folder', t('field.folder'), 'mc-seerr-folder')
                 + '</div></div>' : '')
             + '<p class="mc-seerr-message" role="alert"></p>'
             + '</div>'
             + '<div class="mc-seerr-foot">'
-            + '<button type="button" class="mc-seerr-cancel">Annuler</button>'
-            + '<button type="button" class="mc-seerr-send"' + (isTv ? ' disabled' : '') + '>Demander</button>'
+            + '<button type="button" class="mc-seerr-cancel">' + t('cancel') + '</button>'
+            + '<button type="button" class="mc-seerr-send"' + (isTv ? ' disabled' : '') + '>' + t('dialog.send') + '</button>'
             + '</div></div>';
 
         // L'affiche du titre sert de fond à l'en-tête, sous le même voile sombre que chez
@@ -1586,18 +1829,18 @@
             var links = backdrop.querySelector('.mc-seerr-links');
 
             if (overview) {
-                overview.textContent = details.Overview || (withLinks ? 'Pas de résumé disponible.' : '');
+                overview.textContent = details.Overview || (withLinks ? t('details.none') : '');
                 overview.hidden = !overview.textContent;
             }
 
             if (links && withLinks) {
-                links.innerHTML = safeLink(details.SeerrUrl, 'Voir sur Seerr') + safeLink(details.TmdbUrl, 'Voir sur TMDB');
+                links.innerHTML = safeLink(details.SeerrUrl, t('link.seerr')) + safeLink(details.TmdbUrl, t('link.tmdb'));
             }
         }, function () {
             var overview = backdrop.querySelector('.mc-seerr-overview');
 
             if (withLinks && overview && backdrop.parentNode) {
-                overview.textContent = 'Le résumé n\'a pas pu être chargé.';
+                overview.textContent = t('details.failed');
                 overview.hidden = false;
             }
         });
@@ -1621,13 +1864,13 @@
             + ' aria-labelledby="' + id + '-title" tabindex="-1">'
             + '<div class="mc-seerr-head">'
             + '<h2 id="' + id + '-title" class="mc-seerr-title">' + escapeHtml(name) + '</h2>'
-            + '<p class="mc-seerr-subtitle">' + (mediaType === 'tv' ? 'Série' : 'Film') + '</p></div>'
+            + '<p class="mc-seerr-subtitle">' + t(mediaType === 'tv' ? 'type.tv' : 'type.movie') + '</p></div>'
             + '<div class="mc-seerr-body">'
-            + '<p class="mc-seerr-overview" aria-busy="true">Chargement…</p>'
+            + '<p class="mc-seerr-overview" aria-busy="true">' + t('loading') + '</p>'
             + '<p class="mc-seerr-links"></p>'
             + '</div>'
             + '<div class="mc-seerr-foot">'
-            + '<button type="button" class="mc-seerr-cancel">Fermer</button>'
+            + '<button type="button" class="mc-seerr-cancel">' + t('close') + '</button>'
             + '</div></div>';
 
         if (poster && poster.style.backgroundImage) {
@@ -1679,7 +1922,7 @@
                 var list = backdrop.querySelector('.mc-seerr-seasons');
                 list.removeAttribute('aria-busy');
                 list.innerHTML = '<p class="mc-seerr-note">' + (failure === 'offline'
-                    ? 'Seerr hors ligne' : 'Impossible de charger les informations de saison') + '</p>';
+                    ? t('state.offline') : t('seasons.failed')) + '</p>';
             });
         });
     }
@@ -1695,7 +1938,7 @@
         if (partial && requestable.length) {
             html += '<label class="mc-seerr-season mc-seerr-all-row">'
                 + '<input type="checkbox" class="mc-seerr-toggle mc-seerr-all">'
-                + '<span class="mc-seerr-all-label">Sélectionner toutes les saisons</span></label>';
+                + '<span class="mc-seerr-all-label">' + t('seasons.all') + '</span></label>';
         }
 
         seasons.forEach(function (season) {
@@ -1713,15 +1956,15 @@
                 + '<span class="mc-seerr-season-name">' + escapeHtml(seasonLabel(season)) + '</span>'
                 + (season.Year ? '<span class="mc-seerr-season-year">' + escapeHtml(season.Year) + '</span>' : '')
                 + '</span>'
-                + '<span class="mc-seerr-season-episodes">' + parseInt(season.Episodes, 10) + ' ép.</span>'
+                + '<span class="mc-seerr-season-episodes">' + t('seasons.episodes', [parseInt(season.Episodes, 10)]) + '</span>'
                 + '<span class="mc-seerr-season-state" data-state="' + state + '">'
-                + SEASON_STATES[state] + '</span></label>';
+                + t(SEASON_STATES[state]) + '</span></label>';
         });
 
         if (!seasons.length) {
-            html = '<p class="mc-seerr-note">Impossible de charger les informations de saison</p>';
+            html = '<p class="mc-seerr-note">' + t('seasons.failed') + '</p>';
         } else if (!requestable.length) {
-            html += '<p class="mc-seerr-note">Toutes les saisons sont déjà demandées ou disponibles.</p>';
+            html += '<p class="mc-seerr-note">' + t('seasons.none') + '</p>';
         }
 
         list.removeAttribute('aria-busy');
@@ -1875,7 +2118,7 @@
                 .map(function (box) { return parseInt(box.value, 10); });
 
             if (!seasons.length) {
-                message.textContent = 'Veuillez sélectionner au moins une saison';
+                message.textContent = t('seasons.pick');
                 return;
             }
 
@@ -1890,7 +2133,7 @@
 
         message.textContent = '';
         send.disabled = true;
-        send.textContent = 'Demande en cours…';
+        send.textContent = t('sending');
 
         seerrPost('Request', body).then(function (answer) {
             var state = answer && answer.State;
@@ -1900,7 +2143,7 @@
             closeSeasonDialog();
 
             if (seasons) {
-                showToast('Demandé ' + seasons.length + ' saison(s) de « ' + name + ' »');
+                showToast(t('toast.seasons', [seasons.length, name]));
             }
         }, function (response) {
             return seerrFailure(response).then(function (failure) {
@@ -1909,10 +2152,10 @@
                 }
 
                 message.textContent = failure === 'user-not-found' || failure === 'forbidden' || failure === 'offline'
-                    ? SEERR_STATES[failure].label
-                    : (seasons ? 'Échec de la demande de saisons' : 'Erreur');
+                    ? t(SEERR_STATES[failure].label)
+                    : t(seasons ? 'request.failedSeasons' : 'state.error');
                 send.disabled = false;
-                send.textContent = 'Demander';
+                send.textContent = t('dialog.send');
             });
         }).catch(function (error) {
             log('demande impossible', error);
@@ -2047,6 +2290,9 @@
         var headingId = 'mc-row-title-' + (++sequence);
 
         section.className = 'verticalSection ' + ROW_CLASS + (onLightBackground ? ' mc-on-light' : '');
+        // Un nom accessible n'est lu que sur un élément qui a un rôle : sans lui, `aria-labelledby`
+        // d'un simple <div> est ignoré.
+        section.setAttribute('role', 'group');
         section.setAttribute('aria-labelledby', headingId);
 
         section.innerHTML =
@@ -2149,7 +2395,9 @@
 
             // Les moteurs anciens exposent scrollBy(x, y) sans accepter d'objet d'options :
             // passer un objet y produirait un défilement NaN plutôt qu'une erreur.
-            if (supportsSmoothScroll) {
+            // Un défilement animé ignore la règle CSS `scroll-behavior` dès qu'on le demande par
+            // script : on respecte donc ici la préférence « réduire les animations ».
+            if (supportsSmoothScroll && !prefersReducedMotion()) {
                 strip.scrollBy({ left: amount, behavior: 'smooth' });
             } else {
                 strip.scrollLeft += amount;
@@ -2710,8 +2958,11 @@
         return getJson(path, params).then(function (result) {
             return (result && result.Items) || [];
         }, function () {
-            // Une section indisponible ne doit pas empêcher les autres de s'afficher.
-            return [];
+            // Une section indisponible ne doit pas empêcher les autres de s'afficher. La liste
+            // vide porte `failed` : une panne ne doit pas se lire comme « aucun titre ».
+            var empty = [];
+            empty.failed = true;
+            return empty;
         });
     }
 
@@ -2864,7 +3115,7 @@
      * Un gabarit sans {0} est laissé tel quel.
      */
     function becauseTitle(template, name) {
-        var pattern = template || 'Parce que tu as regardé {0}';
+        var pattern = template || t('fb.because');
         return pattern.indexOf('{0}') === -1 ? pattern : pattern.replace('{0}', name);
     }
 
@@ -2907,7 +3158,9 @@
             loaded = true;
 
             loadCachedGenreItems(genre.Id, limit).then(function (items) {
-                fillRow(section, items.map(buildPlainCard).join(''), 'Aucun titre dans ce genre.');
+                fillRow(section, items.map(buildPlainCard).join(''), items.failed
+                    ? t('genre.failed')
+                    : t('genre.empty'));
             });
         }
 
@@ -3000,26 +3253,26 @@
             // configuration, plus du code.
             var builders = {
                 local: function () {
-                    addRanked(results[0], opts.LocalRowTitle || 'Top 10 sur ce serveur');
+                    addRanked(results[0], opts.LocalRowTitle || t('fb.local'));
                 },
                 alltime: function () {
-                    addRanked(results[1], opts.AllTimeRowTitle || 'Les plus regardés de tous les temps');
+                    addRanked(results[1], opts.AllTimeRowTitle || t('fb.alltime'));
                 },
                 // Séparés, films et séries restent une seule rangée pour l'ordre et pour le
                 // panneau de personnalisation : ils se suivent, films d'abord.
                 global: function () {
                     if (globalSplit) {
-                        addRanked(results[2], opts.GlobalMoviesRowTitle || 'Top 10 des films');
-                        addRanked(results[8], opts.GlobalSeriesRowTitle || 'Top 10 des séries');
+                        addRanked(results[2], opts.GlobalMoviesRowTitle || t('fb.movies'));
+                        addRanked(results[8], opts.GlobalSeriesRowTitle || t('fb.series'));
                     } else {
-                        addRanked(results[2], opts.GlobalRowTitle || 'Top 10 mondial');
+                        addRanked(results[2], opts.GlobalRowTitle || t('fb.global'));
                     }
                 },
                 returning: function () {
-                    addPlain(results[3], opts.ReturningRowTitle || 'De retour cette semaine');
+                    addPlain(results[3], opts.ReturningRowTitle || t('fb.returning'));
                 },
                 neverplayed: function () {
-                    addPlain(results[4], opts.NeverPlayedRowTitle || 'Jamais vu');
+                    addPlain(results[4], opts.NeverPlayedRowTitle || t('fb.never'));
                 },
                 // Rangée personnalisée : absente tant que l'utilisateur n'a terminé aucun
                 // film, ou si aucun autre titre ne partage ses genres.
@@ -3033,7 +3286,7 @@
                 studios: function () {
                     if (results[5].length) {
                         rows.push(buildRow(
-                            opts.StudioRowTitle || 'Par studio',
+                            opts.StudioRowTitle || t('fb.studio'),
                             results[5].map(buildTileCard).join('')));
                     }
                 },
@@ -3185,25 +3438,11 @@
     // ce qui est affiché ; « Réinitialiser » efface tout et rend le compte au serveur.
     // ------------------------------------------------------------------
 
-    var ROW_LABELS = {
-        local: 'Top du serveur',
-        alltime: 'Les plus regardés de tous les temps',
-        global: 'Top mondial',
-        returning: 'De retour cette semaine',
-        neverplayed: 'Jamais vu',
-        because: 'Parce que tu as regardé…',
-        studios: 'Par studio',
-        genres: 'Par genre',
-        'native:smalllibrarytiles': 'Jellyfin — Mes médias',
-        'native:librarybuttons': 'Jellyfin — Mes médias (petit)',
-        'native:activerecordings': 'Jellyfin — Enregistrements actifs',
-        'native:resume': 'Jellyfin — Continuer de regarder',
-        'native:resumeaudio': 'Jellyfin — Reprendre l’écoute',
-        'native:resumebook': 'Jellyfin — Reprendre la lecture',
-        'native:livetv': 'Jellyfin — TV en direct',
-        'native:nextup': 'Jellyfin — À suivre',
-        'native:latestmedia': 'Jellyfin — Médias récemment ajoutés'
-    };
+    // Libellés des rangées dans le panneau : clés `row.<id>` de L10N.
+    function rowLabel(id) {
+        return has(L10N.fr, 'row.' + id) ? t('row.' + id) : id;
+    }
+
 
     /* Rangée du plugin -> champ de ClientOptions qui décide de son affichage. Les entrées
        natives n'y figurent pas : leur visibilité ne dépend pas de nous. */
@@ -3301,13 +3540,12 @@
         var backdrop = document.createElement('div');
         var html = '<div class="mc-prefs focuscontainer" role="dialog" aria-modal="true"'
             + ' aria-labelledby="mc-prefs-title" tabindex="-1">'
-            + '<h2 id="mc-prefs-title">Mes rangées</h2>'
-            + '<p class="mc-prefs-hint">Ces choix ne valent que pour ce compte.'
-            + ' « Réinitialiser » les efface et vous rend aux réglages du serveur.</p>'
+            + '<h2 id="mc-prefs-title">' + t('prefs.title') + '</h2>'
+            + '<p class="mc-prefs-hint">' + t('prefs.hint') + '</p>'
             + '<ul>';
 
         order.forEach(function (id, index) {
-            var label = ROW_LABELS[id] || id;
+            var label = rowLabel(id);
             var toggle = ROW_TOGGLES[id];
             // Une section native est déplaçable mais pas masquable ici : c'est Jellyfin
             // qui décide de sa présence, dans les préférences du compte.
@@ -3317,26 +3555,26 @@
                 + '<label>'
                 + '<input type="checkbox"' + (checked ? ' checked' : '')
                 + (toggle ? '' : ' disabled')
-                + ' aria-label="' + escapeHtml('Afficher : ' + label) + '">'
+                + ' aria-label="' + escapeHtml(t('prefs.show', [label])) + '">'
                 + '<span>' + escapeHtml(label) + '</span>'
                 + '</label>'
                 + '<button type="button" class="mc-prefs-move mc-prefs-up"'
-                + ' aria-label="' + escapeHtml('Monter : ' + label) + '"'
+                + ' aria-label="' + escapeHtml(t('prefs.up', [label])) + '"'
                 + (index === 0 ? ' disabled' : '') + '>&#9650;</button>'
                 + '<button type="button" class="mc-prefs-move mc-prefs-down"'
-                + ' aria-label="' + escapeHtml('Descendre : ' + label) + '"'
+                + ' aria-label="' + escapeHtml(t('prefs.down', [label])) + '"'
                 + (index === order.length - 1 ? ' disabled' : '') + '>&#9660;</button>'
                 + '</li>';
         });
 
         html += '</ul>'
             + '<div class="mc-prefs-field">'
-            + '<label for="mc-prefs-color">Couleur d’accentuation</label>'
+            + '<label for="mc-prefs-color">' + t('prefs.color') + '</label>'
             + '<input type="color" id="mc-prefs-color" value="'
             + escapeHtml(safeAccent(opts.HighlightColor)) + '">'
             + '</div>'
             + '<div class="mc-prefs-field">'
-            + '<label for="mc-prefs-scale">Taille du chiffre</label>'
+            + '<label for="mc-prefs-scale">' + t('prefs.scale') + '</label>'
             // `normalizeRankScale` rend une FRACTION (1 pour 100 %) : donnée telle quelle à
             // un curseur borné à partir de 25, elle était ramenée à 25, et enregistrer le
             // panneau sans y toucher réduisait le chiffre au plancher. Les bornes sont
@@ -3347,14 +3585,14 @@
             + Math.round(normalizeRankScale(opts.RankNumberScale) * 100) + '">'
             + '</div>'
             + '<div class="mc-prefs-field">'
-            + '<label for="mc-prefs-hide">Masquer les sections de Jellyfin</label>'
+            + '<label for="mc-prefs-hide">' + t('prefs.hide') + '</label>'
             + '<input type="checkbox" id="mc-prefs-hide"'
             + (opts.HideNativeSections ? ' checked' : '') + '>'
             + '</div>'
             + '<div class="mc-prefs-actions">'
-            + '<button type="button" class="mc-prefs-save">Enregistrer</button>'
-            + '<button type="button" class="mc-prefs-reset">Réinitialiser</button>'
-            + '<button type="button" class="mc-prefs-close">Fermer</button>'
+            + '<button type="button" class="mc-prefs-save">' + t('prefs.save') + '</button>'
+            + '<button type="button" class="mc-prefs-reset">' + t('prefs.reset') + '</button>'
+            + '<button type="button" class="mc-prefs-close">' + t('close') + '</button>'
             + '</div>'
             + '</div>';
 
@@ -3534,8 +3772,8 @@
         var button = document.createElement('button');
         button.type = 'button';
         button.className = 'mc-prefs-open';
-        button.title = 'Personnaliser mes rangées';
-        button.setAttribute('aria-label', 'Personnaliser mes rangées');
+        button.title = t('prefs.open');
+        button.setAttribute('aria-label', t('prefs.open'));
         button.innerHTML = '&#9881;';
         button.addEventListener('click', function () {
             openPreferences(opts);
@@ -3566,7 +3804,7 @@
         tile.type = 'button';
         tile.className = 'mc-prefs-tile';
         tile.innerHTML = '<span class="mc-prefs-tile-icon" aria-hidden="true">&#9881;</span>'
-            + '<span>Personnaliser mes rangées</span>';
+            + '<span>' + t('prefs.open') + '</span>';
         tile.addEventListener('click', function () {
             openPreferences(opts);
         });
@@ -3614,7 +3852,7 @@
         section.className = 'verticalSection ' + ROW_CLASS + ' mc-prefs-only';
         section.innerHTML = '<div class="sectionTitleContainer sectionTitleContainer-cards'
             + ' padded-left mc-row-header">'
-            + '<h2 class="sectionTitle sectionTitle-cards">Mes rangées</h2></div>';
+            + '<h2 class="sectionTitle sectionTitle-cards">' + t('prefs.title') + '</h2></div>';
 
         var library = findLibrarySection(container);
         container.insertBefore(section, library ? library.nextSibling : container.firstChild);
