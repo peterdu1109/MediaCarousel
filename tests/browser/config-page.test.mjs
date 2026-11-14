@@ -1041,6 +1041,10 @@ check('MISE EN PAGE: un champ seul ne s etire pas sur toute la carte', miseEnPag
 check('MISE EN PAGE: les quatre champs du Top du serveur tiennent sur une ligne', miseEnPage.lignesTopServeur === 1, miseEnPage);
 check('MISE EN PAGE: la couleur est une pastille, pas une barre', miseEnPage.couleur <= 100, miseEnPage);
 check('COMPTES: sans compte personnalise, pas de bouton de remise a zero', miseEnPage.boutonSansCompte === false, miseEnPage);
+// Tutoiement partout (decision d'Elie, 2026-11-15) : aucun vouvoiement dans la page.
+const sourcePage = (await import('node:fs')).readFileSync(path.join(repo, 'Configuration', 'configPage.html'), 'utf8');
+const vouvoyes = sourcePage.split(/\r?\n/).map((l, i) => [i + 1, l]).filter(([, l]) => /\b(vous|votre|vos|veuillez|n.avez|avez-vous)\b/i.test(l)).map(([n]) => n);
+check('LANGUE: la page de configuration tutoie partout', vouvoyes.length === 0, vouvoyes);
 check('aucune erreur js', errors.length === 0, errors);
 
 console.log(failed === 0 ? '\nTous les tests passent.' : '\n' + failed + ' echec(s).');
