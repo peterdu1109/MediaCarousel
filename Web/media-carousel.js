@@ -1201,7 +1201,7 @@
             'seasons.all': 'Sélectionner toutes les saisons',
             'seasons.episodes': '{0} ép.',
             'seasons.none': 'Toutes les saisons sont déjà demandées ou disponibles.',
-            'seasons.pick': 'Veuillez sélectionner au moins une saison',
+            'seasons.pick': 'Sélectionne au moins une saison',
             'advanced': 'Options avancées',
             'field.server': 'Serveur de destination',
             'field.profile': 'Profil de qualité',
@@ -1231,7 +1231,7 @@
             'fb.studio': 'Par studio',
             'prefs.open': 'Personnaliser mes rangées',
             'prefs.title': 'Mes rangées',
-            'prefs.hint': 'Ces choix ne valent que pour ce compte. « Réinitialiser » les efface et vous rend aux réglages du serveur.',
+            'prefs.hint': 'Ces choix ne valent que pour ce compte. « Réinitialiser » les efface et te ramène aux réglages du serveur.',
             'prefs.show': 'Afficher : {0}',
             'prefs.up': 'Monter : {0}',
             'prefs.down': 'Descendre : {0}',
@@ -3075,24 +3075,26 @@
     }
 
     /**
-     * Repère le dernier film terminé par l'utilisateur courant.
+     * Repère le dernier film ou épisode terminé par l'utilisateur courant.
      *
-     * Volontairement limité aux films : Jellyfin ne considère une série lue que si tous ses
-     * épisodes le sont, si bien qu'une série entamée puis abandonnée passerait pour le
-     * dernier titre regardé. Le tri par DatePlayed exige un utilisateur, qui est bien fourni.
+     * On part du film ou de l'épisode, jamais de la série : Jellyfin ne considère une série lue
+     * que si tous ses épisodes le sont, si bien qu'une série entamée puis abandonnée passerait
+     * pour le dernier titre regardé. Un épisode ne porte pas de genres : on remonte alors à sa
+     * série, qui sert de point de départ. Le tri par DatePlayed exige un utilisateur, qui est
+     * bien fourni.
      */
     function loadLastWatched() {
         // Les données utilisateur portent la date de lecture : sous restriction, c'est elle
         // qui départage les bibliothèques.
         return loadScopedItems({
             UserId: window.ApiClient.getCurrentUserId(),
-            IncludeItemTypes: 'Movie',
+            IncludeItemTypes: 'Movie,Episode',
             IsPlayed: true,
             Recursive: true,
             Limit: 1,
             SortBy: 'DatePlayed',
             SortOrder: 'Descending',
-            Fields: 'Genres',
+            Fields: 'Genres,SeriesId',
             EnableImages: false,
             EnableUserData: true,
             EnableTotalRecordCount: false
@@ -3100,7 +3102,32 @@
             return lastPlayedTime(b) - lastPlayedTime(a);
         }).then(function (items) {
             var item = items[0];
+
+            if (item && item.Type === 'Episode') {
+                return item.SeriesId ? loadSeriesSeed(item.SeriesId) : null;
+            }
+
             return item && item.Genres && item.Genres.length ? item : null;
+        });
+    }
+
+    /**
+     * Charge la série d'un épisode regardé, pour ses genres. Passe par la même restriction de
+     * bibliothèques que les autres requêtes : une série hors des bibliothèques autorisées ne
+     * sert pas de point de départ.
+     */
+    function loadSeriesSeed(seriesId) {
+        return loadScopedItems({
+            UserId: window.ApiClient.getCurrentUserId(),
+            Ids: seriesId,
+            Recursive: true,
+            Limit: 1,
+            Fields: 'Genres',
+            EnableImages: false,
+            EnableTotalRecordCount: false
+        }).then(function (items) {
+            var series = items[0];
+            return series && series.Genres && series.Genres.length ? series : null;
         });
     }
 
@@ -3108,13 +3135,17 @@
      * Charge d'autres titres partageant les genres du film indiqué.
      *
      * Deux genres au plus : au-delà, le filtre devient si large qu'il ne recommande plus
-     * rien de particulier. Le film de départ est exclu de sa propre rangée.
+     * rien de particulier. Le titre de départ est exclu de sa propre rangée, et ne sont
+     * proposés que des titres pas encore vus : une recommandation de ce qu'on a déjà regardé
+     * n'en est pas une. Une série entamée reste proposée, Jellyfin ne la comptant lue que
+     * lorsque tous ses épisodes le sont.
      */
     function loadBecauseItems(seed, limit) {
         return loadScopedItems({
             UserId: window.ApiClient.getCurrentUserId(),
             Genres: seed.Genres.slice(0, 2).join('|'),
             ExcludeItemIds: seed.Id,
+            IsPlayed: false,
             IncludeItemTypes: 'Movie,Series',
             Recursive: true,
             Limit: limit,

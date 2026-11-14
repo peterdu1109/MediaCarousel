@@ -138,8 +138,15 @@ const stub = () => {
           return Promise.resolve({
             Items: window.__noHistory
               ? []
+              : window.__seedEpisode
+              ? [{ Id: 'ep1', Name: 'Episode 3', Type: 'Episode', SeriesId: 'ser1' }]
               : [{ Id: 'seed1', Name: 'Blade <Runner>', Genres: ['Science-fiction', 'Thriller', 'Drame'] }]
           });
+        }
+
+        // La serie d'un episode regarde : ses genres servent de depart.
+        if (q.get('Ids') === 'ser1') {
+          return Promise.resolve({ Items: [{ Id: 'ser1', Name: 'Serie <Test>', Type: 'Series', Genres: ['Drame', 'Mystere', 'Crime'] }] });
         }
 
         // Titres partageant les genres du film de depart.
@@ -546,6 +553,30 @@ const freshRows = await fresh.evaluate(() => ({
     .filter(t => !t.textContent.trim()).length
 }));
 await fresh.close();
+
+// « Parce que tu as regarde » : seuls des titres pas encore vus sont proposes (IsPlayed=false),
+// et le dernier titre vu peut etre un episode, dont la serie sert alors de depart.
+const requetesBecause = await page.evaluate(() => window.__calls.filter(c => c.startsWith('Items?') && c.includes('Genres=')));
+const depuisSerie = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+depuisSerie.on('pageerror', e => errors.push('pageerror(depuis serie): ' + e.message));
+await depuisSerie.addInitScript(() => { window.__seedEpisode = true; });
+await depuisSerie.goto('file://' + path.join(here, 'home.html'));
+await depuisSerie.evaluate(stub);
+await depuisSerie.evaluate(script);
+await depuisSerie.waitForFunction(() => document.querySelectorAll('.mc-row').length === 10, { timeout: 8000 });
+const becauseSerie = await depuisSerie.evaluate(() => {
+  const appels = window.__calls.filter(c => c.startsWith('Items?'));
+  const voisins = appels.find(c => c.includes('Genres='));
+  const q = voisins ? new URLSearchParams(voisins.split('?')[1]) : null;
+  return {
+    titre: Array.from(document.querySelectorAll('.mc-row .sectionTitle-cards')).map(t => t.textContent)
+      .find(t => t.indexOf('Parce que') === 0),
+    exclut: q ? q.get('ExcludeItemIds') : null,
+    genres: q ? q.get('Genres') : null,
+    nonVus: q ? q.get('IsPlayed') : null
+  };
+});
+await depuisSerie.close();
 
 // Ordre configure : le rendu doit le suivre, ignorer les identifiants inconnus et
 // ajouter en fin les rangees absentes de la liste.
@@ -2547,6 +2578,11 @@ check('genre vide : message explicite', result.genreEmptyMessage === 'Aucun titr
 check('GENRES: les observateurs des rangees disparues sont relaches',
   observateurs.actifs === observateurs.enAttente, observateurs);
 check('chargement differe des genres (3 requetes, pas plus)', genreCallsAtRest === 3, genreCallsAtRest);
+check('BECAUSE: la demande ne porte que sur des titres pas encore vus',
+  requetesBecause.length === 1 && new URLSearchParams(requetesBecause[0].split('?')[1]).get('IsPlayed') === 'false', requetesBecause);
+check('BECAUSE: un episode regarde fait partir la rangee de sa serie (titre, exclusion, deux genres, non vus)',
+  becauseSerie.titre === 'Parce que tu as regardé Serie <Test>' && becauseSerie.exclut === 'ser1'
+  && becauseSerie.genres === 'Drame|Mystere' && becauseSerie.nonVus === 'false', becauseSerie);
 check('BECAUSE: deux requetes, pas plus', becauseCallsAtRest === 2, becauseCallsAtRest);
 check('BECAUSE: aucune rangee pour un compte sans historique',
   !freshRows.titles.some(t => t.indexOf('Parce que') === 0), freshRows.titles);
@@ -2947,7 +2983,7 @@ check('SAISONS: « Tout selectionner » et le bouton des demandes partielles',
   fenetre.tout === true && fenetre.envoyer === 'Demander', fenetre);
 check('SAISONS: le focus entre dans la fenetre, sur la premiere case', fenetre.focus === true, fenetre.focus);
 check('SAISONS: rien de coche, rien ne part, et la fenetre le dit',
-  sansChoix.demandes === 0 && sansChoix.message === 'Veuillez sélectionner au moins une saison', sansChoix);
+  sansChoix.demandes === 0 && sansChoix.message === 'Sélectionne au moins une saison', sansChoix);
 check('SAISONS: « Tout selectionner » laisse les specials de cote', toutCoche === '3,4', toutCoche);
 check('SAISONS: la demande part avec les saisons cochees',
   apresSaisons.corps && apresSaisons.corps.MediaType === 'tv' && apresSaisons.corps.TmdbId === 66732
@@ -3107,6 +3143,9 @@ check('LANGUE: lang="en", le panneau Mes rangees',
   check('LANGUE: chaque cle existe en francais et en anglais, memes arguments',
     manquantes.length === 0 && vides.length === 0 && placeholders.length === 0 && fr.length > 90, { manquantes, vides, placeholders });
   check('LANGUE: toute cle employee par le script est definie', utilisees.size > 60 && indefinies.length === 0, indefinies);
+  // Le francais tutoie partout (decision d'Elie, 2026-11-15) : aucun vouvoiement dans la table.
+  const vouvoiement = fr.filter(k => /\b(vous|votre|vos|veuillez)\b/i.test(table.fr[k]));
+  check('LANGUE: le francais tutoie partout, aucun « vous » ni « Veuillez »', vouvoiement.length === 0, vouvoiement);
 }
 
 check('aucune erreur js', errors.length === 0, errors);
