@@ -63,6 +63,19 @@ public static class SeerrRules
     /// <summary>« Non demandé » : état d'une saison que personne n'a demandée.</summary>
     public const string StateNotRequested = "not-requested";
 
+    /// <summary>
+    /// Statut de refus d'une requête Seerr, ou <c>null</c> si elle peut suivre son cours.
+    /// </summary>
+    /// <remarks>
+    /// Le refus des comptes restreints (403) passe avant l'examen de la requête (400) : sinon
+    /// l'un ou l'autre leur apprendrait quels titres figurent dans le Top publié.
+    /// </remarks>
+    /// <param name="showsAbsentTitles">Le compte voit les titres absents de la bibliothèque.</param>
+    /// <param name="requestIsValid">La requête désigne un titre publié, du bon type.</param>
+    /// <returns>403, 400, ou <c>null</c>.</returns>
+    public static int? RefusalStatus(bool showsAbsentTitles, bool requestIsValid)
+        => !showsAbsentTitles ? 403 : !requestIsValid ? 400 : null;
+
     // Statuts de média de Seerr (MediaStatus).
     private const int Unknown = 1;
     private const int Pending = 2;

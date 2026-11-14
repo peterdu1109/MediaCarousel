@@ -499,7 +499,7 @@
             '@keyframes mc-spin{to{transform:rotate(360deg);}}',
             '.mc-row .mc-seerr[aria-disabled="true"]{cursor:default;}',
             '.mc-row .mc-seerr[aria-disabled="false"]:hover{transform:translate3d(0,-2px,0);',
-            'box-shadow:0 4px 12px rgba(90,63,184,.4);filter:brightness(1.12);}',
+            'box-shadow:0 4px 12px rgba(90,63,184,.4);}',
             /* Un anneau blanc cerné de noir : lisible sur n'importe quelle affiche. */
             '.mc-row .mc-seerr:focus{outline:none;box-shadow:0 0 0 2px #fff,0 0 0 4px rgba(0,0,0,.7);}',
             /* Carte d'un titre absent choisie à la télécommande : son bouton est ce que OK
@@ -556,10 +556,11 @@
             /* Sur un écran étroit, marges et colonnes se resserrent : `min()` plutôt qu'un point
                de rupture, la valeur de Jellyfin Enhanced d'abord pour les moteurs qui l'ignorent. */
             '.mc-seerr-body{flex:1 1 auto;overflow-y:auto;padding:24px;padding:min(24px,5vw);}',
-            '.mc-seerr-seasons{display:grid;grid-row-gap:4px;margin-bottom:24px;}',
+            '.mc-seerr-seasons{display:block;display:grid;grid-row-gap:4px;margin-bottom:24px;}',
             /* `1fr` : la colonne du nom ne descend jamais sous son plus long mot ; sur un écran
                étroit, c'est la pastille qui passe sur deux lignes. */
-            '.mc-seerr-season{display:grid;grid-template-columns:40px 1fr auto auto;',
+            /* Repli flex : Chromium 56 (Tizen 4) ignore `grid`, la déclaration suivante l'écrase ailleurs. */
+            '.mc-seerr-season{display:flex;align-items:center;display:grid;grid-template-columns:40px 1fr auto auto;',
             'grid-column-gap:16px;grid-column-gap:min(16px,3vw);align-items:center;',
             'padding:16px 20px;padding:16px min(20px,4vw);border-radius:12px;cursor:pointer;',
             'background:rgba(30,41,59,.4);border:1px solid rgba(51,65,85,.3);',
@@ -584,17 +585,17 @@
             '.mc-seerr-toggle:focus:not(:focus-visible){outline:none;}',
             /* Sans le `min-width:0` de Jellyfin Enhanced : c'est lui qui laisse, sur un écran
                étroit, un mot long déborder sur la colonne des épisodes. */
-            '.mc-seerr-season-info{display:flex;flex-direction:column;}',
+            '.mc-seerr-season-info{display:flex;flex-direction:column;flex:1 1 auto;}',
             '.mc-seerr-season-name{font-size:1rem;font-weight:600;color:#e2e8f0;}',
             '.mc-seerr-season-year{margin-top:4px;font-size:.875rem;color:#94a3b8;}',
             '.mc-seerr-season-episodes{min-width:70px;min-width:min(70px,11vw);text-align:right;font-size:.875rem;',
-            'font-weight:500;color:#64748b;}',
+            'font-weight:500;color:#94a3b8;}',
             '.mc-seerr-season-state{box-sizing:border-box;min-width:110px;min-width:min(110px,22vw);',
             'padding:6px 12px;border-radius:20px;',
             'text-align:center;font-size:.75rem;font-weight:700;letter-spacing:.5px;text-transform:uppercase;',
             'color:#818cf8;background:rgba(99,102,241,.15);border:1px solid rgba(99,102,241,.3);}',
             '.mc-seerr-season-state[data-state="requested"],.mc-seerr-season-state[data-state="processing"]{',
-            'color:#a855f7;background:rgba(147,51,234,.15);border-color:rgba(147,51,234,.3);}',
+            'color:#c084fc;background:rgba(147,51,234,.15);border-color:rgba(147,51,234,.3);}',
             '.mc-seerr-season-state[data-state="available"],.mc-seerr-season-state[data-state="partial"]{',
             'color:#4ade80;background:rgba(34,197,94,.15);border-color:rgba(34,197,94,.3);}',
             '.mc-seerr-season-state[data-state="blocked"]{color:#f87171;background:rgba(239,68,68,.15);',
@@ -1415,6 +1416,9 @@
             + ' data-name="' + escapeHtml(entry.Name || '') + '"></button></div>';
     }
 
+    /** États d'un titre déjà demandé : la fiche s'ouvre à la télécommande, faute de bouton « i ». */
+    var DETAILS_STATES = { pending: true, requested: true, processing: true };
+
     function seerrActs(button, state) {
         var spec = has(SEERR_STATES, state) ? SEERR_STATES[state] : null;
 
@@ -1835,7 +1839,9 @@
                 overview.hidden = !overview.textContent;
             }
 
-            if (links && withLinks) {
+            // Pas de lien externe à la télécommande : sur Android TV et Tizen il s'ouvre dans une page
+            // cachée (essai du 2026-11-14), sans rien montrer ni rendre la main.
+            if (links && withLinks && layoutCardClass() !== ' show-focus') {
                 links.innerHTML = safeLink(details.SeerrUrl, t('link.seerr')) + safeLink(details.TmdbUrl, t('link.tmdb'));
             }
         }, function () {
@@ -2267,6 +2273,12 @@
             event.stopPropagation();
 
             if (!seerrActs(button, button.getAttribute('data-state'))) {
+                // À la télécommande, il n'y a pas de bouton « i » (il ne serait pas atteint) : OK sur
+                // un titre déjà demandé ouvre la fiche, en lecture seule. Un titre disponible reste inerte.
+                if (layoutCardClass() === ' show-focus' && has(DETAILS_STATES, button.getAttribute('data-state'))) {
+                    openDetailsDialog(button);
+                }
+
                 return;
             }
 
@@ -2367,7 +2379,8 @@
         section.addEventListener('keydown', function (event) {
             var card = event.target;
 
-            if (event.keyCode !== 13 || !card.classList || !card.classList.contains('focusable')
+            // OK maintenu : seul l'appui initial agit, sinon chaque répétition rouvre la fenêtre.
+            if (event.repeat || event.keyCode !== 13 || !card.classList || !card.classList.contains('focusable')
                 || !card.classList.contains('card')) {
                 return;
             }

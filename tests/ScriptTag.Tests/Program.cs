@@ -919,6 +919,67 @@ reglages["GlobalTopSplitByType"] = true;
 Check("REGLAGES: cocher la case separee compte comme un changement",
     SettingsSignature.Of(reglages) != empreinte);
 
+// Un reglage d'affichage (couleur, titres de rangee, Seerr) n'alimente aucun calcul : le
+// modifier ne doit pas relancer un recalcul complet. Un reglage lu par un calcul, si.
+var complets = new System.Text.Json.Nodes.JsonObject
+{
+    ["HighlightColor"] = "#775BF4",
+    ["LocalRowTitle"] = "Top 10 sur ce serveur",
+    ["SeerrUrl"] = "",
+    ["RowOrder"] = "local,global",
+    ["GlobalTopSize"] = 10,
+    ["ExcludeChannelContent"] = true
+};
+var empreinteComplete = SettingsSignature.Of(complets);
+var affichage = (System.Text.Json.Nodes.JsonObject)complets.DeepClone();
+affichage["HighlightColor"] = "#FF0000";
+affichage["LocalRowTitle"] = "Autre titre";
+affichage["SeerrUrl"] = "http://seerr";
+affichage["RowOrder"] = "global,local";
+Check("REGLAGES: couleur, titres, ordre et Seerr ne relancent pas le recalcul",
+    SettingsSignature.Of(affichage) == empreinteComplete);
+var reglageCalcule = (System.Text.Json.Nodes.JsonObject)complets.DeepClone();
+reglageCalcule["GlobalTopSize"] = 20;
+Check("REGLAGES: la taille du Top mondial relance le recalcul",
+    SettingsSignature.Of(reglageCalcule) != empreinteComplete);
+var sansChaines = (System.Text.Json.Nodes.JsonObject)complets.DeepClone();
+sansChaines["ExcludeChannelContent"] = false;
+Check("REGLAGES: l'exclusion des chaines relance le recalcul",
+    SettingsSignature.Of(sansChaines) != empreinteComplete);
+
+// Purge du cache d'affiches : un fichier qui ne se supprime pas (verrouille, droits) ne doit pas
+// arreter la purge des autres.
+var dossierPurge = Path.Combine(Path.GetTempPath(), "mc-purge-" + Guid.NewGuid().ToString("N"));
+Directory.CreateDirectory(dossierPurge);
+foreach (var nom in new[] { "a.jpg", "b.jpg", "c.jpg" })
+{
+    var fichier = Path.Combine(dossierPurge, nom);
+    File.WriteAllText(fichier, "x");
+    File.SetLastAccessTimeUtc(fichier, DateTime.UtcNow.AddDays(-60));
+}
+
+var fichierRecent = Path.Combine(dossierPurge, "recent.jpg");
+File.WriteAllText(fichierRecent, "x");
+var purges = PosterCacheFile.PurgeOlderThan(
+    dossierPurge,
+    DateTime.UtcNow.AddDays(-30),
+    f => { if (Path.GetFileName(f) == "a.jpg") { throw new IOException("verrouille"); } File.Delete(f); });
+Check("PURGE: un fichier verrouille n'arrete pas la purge des suivants",
+    purges == 2 && File.Exists(Path.Combine(dossierPurge, "a.jpg"))
+    && !File.Exists(Path.Combine(dossierPurge, "b.jpg")) && !File.Exists(Path.Combine(dossierPurge, "c.jpg")));
+Check("PURGE: un fichier recent est garde", File.Exists(fichierRecent));
+Directory.Delete(dossierPurge, true);
+
+// ETAG: le script change sans changement de version -> l'etiquette change aussi.
+var scriptA = System.Text.Encoding.UTF8.GetBytes("var a = 1;");
+var scriptB = System.Text.Encoding.UTF8.GetBytes("var a = 2;");
+Check("ETAG: un script modifie a la meme version change d'etiquette",
+    ScriptEtag.Of("4.6.0.0", scriptA) != ScriptEtag.Of("4.6.0.0", scriptB));
+Check("ETAG: le meme script garde la meme etiquette",
+    ScriptEtag.Of("4.6.0.0", scriptA) == ScriptEtag.Of("4.6.0.0", (byte[])scriptA.Clone()));
+Check("ETAG: la version reste dans l'etiquette",
+    ScriptEtag.Of("4.6.0.0", scriptA).StartsWith("4.6.0.0-") && ScriptEtag.Of("4.7.0.0", scriptA) != ScriptEtag.Of("4.6.0.0", scriptA));
+
 // ---------------------------------------------------------------------------
 // Top du serveur d'apres les vraies lectures (Playback Reporting). Les cas rejouent la
 // prod du 2026-09-28 : un compte a 0 minute faisait gagner une voix, et 96 heures de
@@ -1230,8 +1291,10 @@ Check("DROITS: entree ventilee, compte filtre : ses bibliotheques seules",
 // Les routes Seerr suivent la regle du classement : aucun titre absent pour un compte
 // restreint. Les droits ne se simulent pas hors serveur : le controle porte sur le code.
 var codeSeerr = CodeSansCommentaires(Path.Combine("Api", "SeerrController.cs"));
-Check("DROITS: Status, Seasons, Details et Request refusent un compte restreint",
-    System.Text.RegularExpressions.Regex.Matches(codeSeerr, @"if \(!ShowsAbsentTitles\(\)\)").Count == 4);
+Check("DROITS: Status refuse un compte restreint",
+    System.Text.RegularExpressions.Regex.Matches(codeSeerr, @"if \(!ShowsAbsentTitles\(\)\)").Count == 1);
+Check("DROITS: Seasons, Details, Request et Options refusent un compte restreint, avant le titre",
+    System.Text.RegularExpressions.Regex.Matches(codeSeerr, @"SeerrRules\.RefusalStatus\(\s*ShowsAbsentTitles\(\)").Count == 4);
 
 // R3 : un Seerr muet n'est pas reinterroge a chaque titre pendant OfflineMemory.
 var memoire = new OfflineMemory(TimeSpan.FromSeconds(45));
@@ -1276,6 +1339,17 @@ Check("FICHE-PUBLIE: une serie du Top est publiee", SeerrRules.IsPublished(publi
 Check("FICHE-PUBLIE: un titre hors Top est rejete", !SeerrRules.IsPublished(publies, "movie", 604));
 Check("FICHE-PUBLIE: le type compte (movie:1399 n'est pas tv:1399)", !SeerrRules.IsPublished(publies, "movie", 1399));
 Check("FICHE-PUBLIE: un type inconnu est rejete", !SeerrRules.IsPublished(publies, "person", 603));
+
+// Un compte restreint ne doit rien apprendre du Top publie : le refus 403 passe avant l'examen
+// de la demande, que le titre soit publie ou non (Details, Request, Seasons, Options).
+Check("REFUS: compte restreint et titre publie, 403",
+    SeerrRules.RefusalStatus(showsAbsentTitles: false, requestIsValid: true) == 403);
+Check("REFUS: compte restreint et titre inconnu, 403 et non 400",
+    SeerrRules.RefusalStatus(showsAbsentTitles: false, requestIsValid: false) == 403);
+Check("REFUS: compte ordinaire et titre inconnu, 400",
+    SeerrRules.RefusalStatus(showsAbsentTitles: true, requestIsValid: false) == 400);
+Check("REFUS: compte ordinaire et titre publie, aucun refus",
+    SeerrRules.RefusalStatus(showsAbsentTitles: true, requestIsValid: true) is null);
 Check("FICHE-PUBLIE: un type absent est rejete", !SeerrRules.IsPublished(publies, null, 603));
 Check("FICHE-PUBLIE: un identifiant nul ou negatif est rejete",
     !SeerrRules.IsPublished(publies, "movie", 0) && !SeerrRules.IsPublished(publies, "movie", -603));
@@ -1287,8 +1361,8 @@ string CorpsEntre(string code, string depuis, string jusqua)
 }
 
 var corpsFiche = CorpsEntre(codeSeerr, "GetDetails(", "[HttpPost(\"Test\")]");
-var iRestreint = corpsFiche.IndexOf("if (!ShowsAbsentTitles())", StringComparison.Ordinal);
-var iNonPublie = corpsFiche.IndexOf("!IsPublished(PublishedTitles(), item)", StringComparison.Ordinal);
+var iRestreint = corpsFiche.IndexOf("RefusalStatus(ShowsAbsentTitles()", StringComparison.Ordinal);
+var iNonPublie = corpsFiche.IndexOf("IsPublished(PublishedTitles(), item)", StringComparison.Ordinal);
 Check("FICHE-PUBLIE: Details refuse un titre non publie (400)",
     iNonPublie >= 0 && corpsFiche.IndexOf("BadRequest()", iNonPublie, StringComparison.Ordinal) > iNonPublie);
 Check("FICHE-PUBLIE: Details refuse le compte restreint (403) avant d'examiner le titre",

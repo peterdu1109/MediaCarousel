@@ -418,17 +418,7 @@ public sealed class TopListRefreshService
                 return;
             }
 
-            var cutoff = DateTime.UtcNow.AddDays(-30);
-            var removed = 0;
-
-            foreach (var file in System.IO.Directory.EnumerateFiles(posters))
-            {
-                if (System.IO.File.GetLastAccessTimeUtc(file) < cutoff)
-                {
-                    System.IO.File.Delete(file);
-                    removed++;
-                }
-            }
+            var removed = PosterCacheFile.PurgeOlderThan(posters, DateTime.UtcNow.AddDays(-30));
 
             if (removed > 0)
             {

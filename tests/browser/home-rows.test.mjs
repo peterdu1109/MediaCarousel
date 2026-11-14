@@ -2103,6 +2103,36 @@ const contrastes = await fichePanne.evaluate(() => {
     return { ton, rapport: Math.round(1.05 / (luminance(fond) + 0.05) * 100) / 100 };
   });
 });
+const contrastesFiche = await fichePanne.evaluate(() => {
+  const canaux = (c) => (c.match(/[\d.]+/g) || []).map(Number);
+  const lin = (v) => { const c = v / 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+  const lum = (c) => 0.2126 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.0722 * lin(c[2]);
+  const poser = (fond, c) => { const a = c.length > 3 ? c[3] : 1; return [0, 1, 2].map((k) => c[k] * a + fond[k] * (1 - a)); };
+  const rapport = (x, y) => Math.round((Math.max(lum(x), lum(y)) + 0.05) / (Math.min(lum(x), lum(y)) + 0.05) * 100) / 100;
+  const fondDe = (el) => {
+    const chaine = [];
+    for (let n = el; n; n = n.parentElement) chaine.unshift(canaux(getComputedStyle(n).backgroundColor));
+    return chaine.reduce((fond, c) => (c.length ? poser(fond, c) : fond), [0, 0, 0]);
+  };
+  const fenetre = document.createElement('div');
+  fenetre.className = 'mc-seerr-dialog';
+  fenetre.innerHTML = '<div class="mc-seerr-season"><span class="mc-seerr-season-episodes">8</span>'
+    + '<span class="mc-seerr-season-state" data-state="requested">Demande</span></div>';
+  document.body.appendChild(fenetre);
+  const episodes = fenetre.querySelector('.mc-seerr-season-episodes');
+  const pastille = fenetre.querySelector('.mc-seerr-season-state');
+  const res = {
+    episodes: rapport(canaux(getComputedStyle(episodes).color), fondDe(episodes)),
+    demande: rapport(canaux(getComputedStyle(pastille).color), fondDe(pastille))
+  };
+  fenetre.remove();
+  return res;
+});
+const survolFiltre = await fichePanne.evaluate(() => {
+  const b = document.querySelector('.mc-seerr[data-tmdb="27205"]');
+  return b ? getComputedStyle(b).filter : 'absent';
+});
+const sourceScript = fs.readFileSync(path.join(here, '..', '..', 'Web', 'media-carousel.js'), 'utf8');
 await fichePanne.close();
 
 // Options illisibles : la section reste cachee, et la demande part sans elles.
@@ -2324,6 +2354,77 @@ const apresRetourSeerr = await tvSeerr.evaluate(() => ({
   focus: document.activeElement === document.querySelector('.mc-seerr[data-tmdb="66732"]').closest('.card'),
   demandes: window.__appels.filter(a => a.route === 'MediaCarousel/Seerr/Request').length
 }));
+
+// TV, serie sans demandes partielles : a l'ouverture, le focus ne doit pas tomber sur « Demander »
+// (action definitive, a un OK de l'envoi) ; et un OK maintenu (touche repetee) ne rouvre ni ne
+// declenche rien : seul l'appui initial agit.
+const tvEntiere = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+tvEntiere.on('pageerror', e => errors.push('pageerror(tv entiere): ' + e.message));
+await enTv(tvEntiere);
+await tvEntiere.goto('file://' + path.join(here, 'home.html'));
+await tvEntiere.evaluate(() => { document.documentElement.classList.add('layout-tv'); window.__partiel = false; });
+await tvEntiere.evaluate(serveurSeerr);
+await tvEntiere.evaluate(script);
+await tvEntiere.waitForFunction(etatSeerr('66732', 'request'));
+const reperage = () => {
+  const carte = document.querySelector('.mc-seerr[data-tmdb="66732"]').closest('.card');
+  carte.focus();
+  const envoi = (repeat) => {
+    const e = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true, repeat });
+    Object.defineProperty(e, 'keyCode', { get: () => 13 });
+    carte.dispatchEvent(e);
+  };
+  window.__okCarte = envoi;
+};
+await tvEntiere.evaluate(reperage);
+await tvEntiere.evaluate(() => window.__okCarte(true));
+await tvEntiere.waitForTimeout(300);
+const toucheRepetee = await tvEntiere.evaluate(() => ({
+  fenetres: document.querySelectorAll('.mc-seerr-backdrop').length,
+  appels: window.__appels.filter(a => a.route === 'MediaCarousel/Seerr/Seasons').length
+}));
+await tvEntiere.evaluate(() => window.__okCarte(false));
+await tvEntiere.waitForSelector('.mc-seerr-dialog .mc-seerr-pick');
+await tvEntiere.waitForTimeout(300);
+const focusEntiere = await tvEntiere.evaluate(() => ({
+  classe: document.activeElement.className,
+  surEnvoi: !!document.activeElement.closest('.mc-seerr-send')
+}));
+await tvEntiere.close();
+
+// TV : pas de bouton « i », la fiche s'ouvre sur OK quand le titre est deja demande ; elle reste
+// fermee pour un titre disponible ; la fenetre de demande porte les liens avant de demander.
+const tvFiche = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+tvFiche.on('pageerror', e => errors.push('pageerror(tv fiche): ' + e.message));
+await enTv(tvFiche);
+await tvFiche.goto('file://' + path.join(here, 'home.html'));
+await tvFiche.evaluate(() => document.documentElement.classList.add('layout-tv'));
+await tvFiche.evaluate(serveurSeerr);
+await tvFiche.evaluate(script);
+await tvFiche.waitForFunction(etatSeerr('95396', 'pending'));
+await tvFiche.waitForFunction(etatSeerr('87108', 'available'));
+const okSur = async (tmdb) => {
+  await tvFiche.evaluate((t) => document.querySelector('.mc-seerr[data-tmdb="' + t + '"]').closest('.card').focus(), tmdb);
+  await touche(tvFiche, 13, 'Enter');
+  await tvFiche.waitForTimeout(500);
+  const etat = await tvFiche.evaluate(() => {
+    const f = document.querySelector('.mc-seerr-backdrop');
+    return {
+      fenetre: !!f, liens: f ? f.querySelectorAll('.mc-seerr-link').length : 0,
+      synopsis: f ? f.querySelector('.mc-seerr-overview').textContent : '',
+      envoyer: f ? !!f.querySelector('.mc-seerr-send') : false
+    };
+  });
+  await touche(tvFiche, 10009, '');
+  await tvFiche.waitForTimeout(200);
+  etat.retour = await tvFiche.evaluate((t) => document.activeElement === document.querySelector('.mc-seerr[data-tmdb="' + t + '"]').closest('.card')
+    && !document.querySelector('.mc-seerr-backdrop'), tmdb);
+  return etat;
+};
+const ficheDemandee = await okSur('95396');
+const ficheDisponible = await okSur('87108');
+const ficheAvantDemande = await okSur('66732');
+await tvFiche.close();
 
 // LANGUE — `lang` de <html> : anglais pour toute langue autre que le francais, francais si
 // l'attribut est absent ou en `fr` (avec region). Meme fixture, memes gestes que plus haut.
@@ -2881,6 +2982,12 @@ check('FICHE: titre, resume, deux liens ouverts hors de la page, rien demande',
   ficheVue.titre === 'Inception' && ficheVue.resume === 'Un voleur entre dans les reves.' && !ficheVue.envoyer
     && ficheVue.demandes === 0 && ficheVue.liens.length === 2
     && ficheVue.liens.every(l => l.cible === '_blank' && l.rel === 'noopener noreferrer'), ficheVue);
+check('CONTRASTE: le nombre d episodes d une saison atteint 4,5:1', contrastesFiche.episodes >= 4.5, contrastesFiche);
+check('CONTRASTE: la pastille « Demande » d une saison atteint 4,5:1', contrastesFiche.demande >= 4.5, contrastesFiche);
+check('CONTRASTE: le survol du bouton Seerr n eclaircit plus le blanc (pas de filter)',
+  !/brightness\(1\.12\)/.test(sourceScript), survolFiltre);
+check('SAISONS: un repli flex precede la grille (Chromium 56 ignore grid)',
+  sourceScript.indexOf("'.mc-seerr-season{display:flex;align-items:center;display:grid;") >= 0, null);
 check('CONTRASTE: chaque etat du bouton Seerr atteint 4,5:1 en blanc',
   contrastes.length === 7 && contrastes.every(c => c.rapport >= 4.5), contrastes);
 check('FICHE: les liens sont Seerr puis TMDB',
@@ -2941,6 +3048,17 @@ check('TV: Retour ferme la fenetre Seerr sans rien demander, focus rendu a la ca
   retourSeerr === true && apresRetourSeerr.fenetre === 0 && apresRetourSeerr.focus
     && apresRetourSeerr.demandes === 0, apresRetourSeerr);
 
+check('TV: serie sans demandes partielles, le focus de la fenetre est sur Annuler, pas sur « Demander »',
+  !focusEntiere.surEnvoi && focusEntiere.classe === 'mc-seerr-cancel', focusEntiere);
+check("TV: un OK maintenu (touche repetee) sur une carte n'ouvre rien",
+  toucheRepetee.fenetres === 0 && toucheRepetee.appels === 0, toucheRepetee);
+
+check('TV: OK sur un titre deja demande ouvre la fiche (synopsis, sans lien), sans envoyer ; Retour rend le focus',
+  ficheDemandee.fenetre && ficheDemandee.liens === 0 && ficheDemandee.synopsis !== '' && !ficheDemandee.envoyer && ficheDemandee.retour, ficheDemandee);
+check("TV: OK sur un titre disponible n'ouvre rien",
+  !ficheDisponible.fenetre, ficheDisponible);
+check('TV: la fenetre de demande reste celle de avant (synopsis, envoi), sans lien externe',
+  ficheAvantDemande.fenetre && ficheAvantDemande.envoyer && ficheAvantDemande.liens === 0, ficheAvantDemande);
 check('AUDIT: le panneau ne propose que les rangees affichees par le serveur',
   rangeesProposees.filter(id => id.indexOf('native:') !== 0).join(',') === 'local', rangeesProposees);
 check('AUDIT: enregistrer sans rien masquer n ecrit aucune rangee', enregistreSansRangee.length === 0, enregistreSansRangee);

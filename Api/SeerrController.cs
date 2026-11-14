@@ -155,15 +155,17 @@ public class SeerrController : ControllerBase
             return StatusCode(StatusCodes.Status503ServiceUnavailable);
         }
 
-        if (item is null || !IsPublished(PublishedTitles(), item))
+        // Même règle que le classement : un compte restreint ne voit aucun titre absent, et son
+        // refus passe avant l'examen du titre (voir SeerrRules.RefusalStatus).
+        var refusal = SeerrRules.RefusalStatus(ShowsAbsentTitles(), item is not null && IsPublished(PublishedTitles(), item));
+        if (refusal is { } refusedStatus)
         {
-            return BadRequest();
+            return StatusCode(refusedStatus);
         }
 
-        // Même règle que le classement : un compte restreint ne voit aucun titre absent.
-        if (!ShowsAbsentTitles())
+        if (item is null)
         {
-            return StatusCode(StatusCodes.Status403Forbidden);
+            return BadRequest();
         }
 
         // Une série se demande saison par saison, un film jamais : le client ne peut pas
@@ -245,6 +247,7 @@ public class SeerrController : ControllerBase
     [HttpPost("Options")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status502BadGateway)]
     public async Task<ActionResult<SeerrOptionsDto>> GetOptions(
@@ -256,7 +259,13 @@ public class SeerrController : ControllerBase
             return NotFound();
         }
 
-        if (item is null || !SeerrRules.IsMediaType(item.MediaType))
+        var refusal = SeerrRules.RefusalStatus(ShowsAbsentTitles(), item is not null && SeerrRules.IsMediaType(item.MediaType));
+        if (refusal is { } refusedStatus)
+        {
+            return StatusCode(refusedStatus);
+        }
+
+        if (item is null)
         {
             return BadRequest();
         }
@@ -310,16 +319,19 @@ public class SeerrController : ControllerBase
             return StatusCode(StatusCodes.Status503ServiceUnavailable);
         }
 
-        if (item is null
-            || !string.Equals(item.MediaType, SeerrRules.Tv, StringComparison.Ordinal)
-            || !IsPublished(PublishedTitles(), item))
+        var refusal = SeerrRules.RefusalStatus(
+            ShowsAbsentTitles(),
+            item is not null
+                && string.Equals(item.MediaType, SeerrRules.Tv, StringComparison.Ordinal)
+                && IsPublished(PublishedTitles(), item));
+        if (refusal is { } refusedStatus)
         {
-            return BadRequest();
+            return StatusCode(refusedStatus);
         }
 
-        if (!ShowsAbsentTitles())
+        if (item is null)
         {
-            return StatusCode(StatusCodes.Status403Forbidden);
+            return BadRequest();
         }
 
         var (choice, failure) = await _seerr.GetSeasonsAsync(baseUrl, apiKey, item.TmdbId, cancellationToken)
@@ -374,12 +386,13 @@ public class SeerrController : ControllerBase
 
         // Le refus des comptes restreints passe avant l'examen du titre : sinon un 400 ou un 403
         // leur apprendrait quels titres figurent dans le Top publié.
-        if (!ShowsAbsentTitles())
+        var refusal = SeerrRules.RefusalStatus(ShowsAbsentTitles(), item is not null && IsPublished(PublishedTitles(), item));
+        if (refusal is { } refusedStatus)
         {
-            return StatusCode(StatusCodes.Status403Forbidden);
+            return StatusCode(refusedStatus);
         }
 
-        if (item is null || !IsPublished(PublishedTitles(), item))
+        if (item is null)
         {
             return BadRequest();
         }

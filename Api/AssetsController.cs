@@ -3,6 +3,7 @@ using System.IO;
 using System.Reflection;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
+using JellyfinCarouselPlugin.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Net.Http.Headers;
 
@@ -23,11 +24,28 @@ public class AssetsController : ControllerBase
 {
     private const string ResourceName = "JellyfinCarouselPlugin.Web.media-carousel.js";
 
+    // Le script est embarqué : son contenu ne change pas tant que le processus tourne.
+    private static readonly Lazy<byte[]?> Script = new(ReadScript);
+
+    private static byte[]? ReadScript()
+    {
+        using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(ResourceName);
+        if (stream is null)
+        {
+            return null;
+        }
+
+        using var memory = new MemoryStream();
+        stream.CopyTo(memory);
+        return memory.ToArray();
+    }
+
     /// <summary>
     /// Renvoie le script de rendu des rangées de la page d'accueil.
     /// </summary>
     /// <remarks>
-    /// Le contenu ne change qu'avec la version du plugin : celle-ci sert d'<c>ETag</c>, et
+    /// L'<c>ETag</c> combine la version du plugin et un condensat du script (un correctif sans
+    /// changement de version ne reste pas masqué par le cache des clients) ; et
     /// ASP.NET répond alors <c>304 Not Modified</c> aux rechargements suivants au lieu de
     /// retransmettre le script. <c>must-revalidate</c> garantit qu'une mise à jour du plugin
     /// est prise en compte immédiatement plutôt qu'à l'expiration d'un cache.
@@ -43,17 +61,17 @@ public class AssetsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public ActionResult GetScript()
     {
-        var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(ResourceName);
+        var script = Script.Value;
 
-        if (stream is null)
+        if (script is null)
         {
             return NotFound();
         }
 
-        var version = Plugin.Instance?.Version?.ToString() ?? "0";
+        var etag = ScriptEtag.Of(Plugin.Instance?.Version?.ToString() ?? "0", script);
         Response.Headers.CacheControl = "public, max-age=0, must-revalidate";
 
         // Cette surcharge gère elle-même If-None-Match et renvoie 304 le cas échéant.
-        return File(stream, "application/javascript; charset=utf-8", null, new EntityTagHeaderValue('"' + version + '"'));
+        return File(script, "application/javascript; charset=utf-8", null, new EntityTagHeaderValue('"' + etag + '"'));
     }
 }
