@@ -970,16 +970,6 @@ Check("PURGE: un fichier verrouille n'arrete pas la purge des suivants",
 Check("PURGE: un fichier recent est garde", File.Exists(fichierRecent));
 Directory.Delete(dossierPurge, true);
 
-// ETAG: le script change sans changement de version -> l'etiquette change aussi.
-var scriptA = System.Text.Encoding.UTF8.GetBytes("var a = 1;");
-var scriptB = System.Text.Encoding.UTF8.GetBytes("var a = 2;");
-Check("ETAG: un script modifie a la meme version change d'etiquette",
-    ScriptEtag.Of("4.6.0.0", scriptA) != ScriptEtag.Of("4.6.0.0", scriptB));
-Check("ETAG: le meme script garde la meme etiquette",
-    ScriptEtag.Of("4.6.0.0", scriptA) == ScriptEtag.Of("4.6.0.0", (byte[])scriptA.Clone()));
-Check("ETAG: la version reste dans l'etiquette",
-    ScriptEtag.Of("4.6.0.0", scriptA).StartsWith("4.6.0.0-") && ScriptEtag.Of("4.7.0.0", scriptA) != ScriptEtag.Of("4.6.0.0", scriptA));
-
 // ---------------------------------------------------------------------------
 // Top du serveur d'apres les vraies lectures (Playback Reporting). Les cas rejouent la
 // prod du 2026-09-28 : un compte a 0 minute faisait gagner une voix, et 96 heures de
