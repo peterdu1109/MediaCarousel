@@ -758,13 +758,10 @@
                choisie éclairée. Même chose dans la fenêtre de demande à Seerr. */
             '.layout-tv .mc-prefs li:focus-within{background:rgba(255,255,255,.12);border-radius:4px;}',
             /* TV : la télécommande ne fait pas défiler la fenêtre. Un titre long passe sur deux
-               lignes (l'en-tête grandit au besoin) et le synopsis de la fenêtre de demande est
-               limité à sept lignes, pour que la liste des saisons reste visible. */
+               lignes (l'en-tête grandit au besoin). */
             '.layout-tv .mc-seerr-head{height:auto;min-height:8em;}',
             '.layout-tv .mc-seerr-subtitle{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;',
             '-webkit-box-orient:vertical;}',
-            '.layout-tv .mc-seerr-request .mc-seerr-overview{display:-webkit-box;-webkit-line-clamp:7;',
-            '-webkit-box-orient:vertical;overflow:hidden;}',
             /* Liste à nous à la télécommande : la liste d'Android est blanche et ne se colore pas. */
             '.layout-tv .mc-seerr-field select{display:none;}',
             '.mc-seerr-choice{position:relative;box-sizing:border-box;width:100%;padding:12px 40px 12px 16px;',
@@ -1843,12 +1840,8 @@
         enhanceSelectsForTv(backdrop);
         backdrop.querySelector('.mc-seerr-dialog').focus();
 
-        // Le synopsis ne retarde rien : il s'écrit quand il arrive, ou jamais. Hors télécommande,
-        // le bouton « i » de la carte le donne : le répéter ici serait un doublon.
-        if (layoutCardClass() === ' show-focus' && !isTv) {
-            loadDetails(backdrop, mediaType, tmdbId, false);
-        }
-
+        // Pas de synopsis ici : le bouton « i » de la carte le donne, et à la télécommande la fiche
+        // qui précède cette fenêtre. Le répéter serait un doublon.
         if (isTv) {
             loads.push(loadSeasons(backdrop, tmdbId));
         }
@@ -1957,7 +1950,8 @@
             + '</div>'
             + '<div class="mc-seerr-foot">'
             + '<button type="button" class="mc-seerr-cancel">' + t('close') + '</button>'
-            + (withNext ? '<button type="button" class="mc-seerr-next">' + t('details.choose') + '</button>' : '')
+            + (withNext ? '<button type="button" class="mc-seerr-next">'
+                + t(mediaType === 'tv' ? 'details.choose' : 'dialog.send') + '</button>' : '')
             + '</div></div>';
 
         if (poster && poster.style.backgroundImage) {
@@ -1971,9 +1965,17 @@
         if (withNext) {
             backdrop.addEventListener('click', function (event) {
                 if (event.target.classList && event.target.classList.contains('mc-seerr-next')) {
-                    openRequestDialog(info).catch(function (error) {
-                        log('fenêtre de demande impossible', error);
-                    });
+                    if (mediaType === 'tv' || seerrAdvanced) {
+                        openRequestDialog(info).catch(function (error) {
+                            log('fenêtre de demande impossible', error);
+                        });
+                    } else {
+                        // Film sans options avancées : « Demander » envoie, comme le bouton de la carte.
+                        closeSeasonDialog();
+                        requestMovie(info).catch(function (error) {
+                            log('demande à Seerr impossible', error);
+                        });
+                    }
                 }
             });
         }
@@ -2536,11 +2538,11 @@
 
             // Une série ouvre toujours la fenêtre ; un film, avec les options avancées ou à la
             // télécommande (où rien ne part sans avoir pu lire le synopsis, et sans OK accidentel).
-            if (button.getAttribute('data-media') === 'tv' && layoutCardClass() === ' show-focus') {
-                // À la télécommande, une série s'ouvre en deux étapes : le synopsis d'abord, puis
-                // les saisons seules, pour que chaque fenêtre reste légère.
+            if (layoutCardClass() === ' show-focus') {
+                // À la télécommande, un titre à demander s'ouvre en deux étapes : le synopsis d'abord
+                // (rien ne part), puis les saisons ou les options seules, ou l'envoi direct d'un film.
                 openDetailsDialog(button, true);
-            } else if (button.getAttribute('data-media') === 'tv' || seerrAdvanced || layoutCardClass() === ' show-focus') {
+            } else if (button.getAttribute('data-media') === 'tv' || seerrAdvanced) {
                 openRequestDialog(button).catch(function (error) {
                     log('fenêtre de demande impossible', error);
                 });

@@ -2519,6 +2519,20 @@ const etapeSerie = await (async () => {
 const demandesAvant = await tvFiche.evaluate(() => window.__appels.filter(a => a.route === 'MediaCarousel/Seerr/Request').length);
 const ficheFilmADemander = await okSur('27205');
 const demandesApres = await tvFiche.evaluate(() => window.__appels.filter(a => a.route === 'MediaCarousel/Seerr/Request').length);
+const envoiFilm = await (async () => {
+  await tvFiche.evaluate(() => document.querySelector('.mc-seerr[data-tmdb="27205"]').closest('.card').focus());
+  await touche(tvFiche, 13, 'Enter');
+  await tvFiche.waitForSelector('.mc-seerr-next', { timeout: 4000 });
+  const avant = await tvFiche.evaluate(() => window.__appels.filter(a => a.route === 'MediaCarousel/Seerr/Request').length);
+  await tvFiche.focus('.mc-seerr-next');
+  await tvFiche.keyboard.press('Enter');
+  await tvFiche.waitForTimeout(600);
+  return tvFiche.evaluate((n) => ({
+    demandes: window.__appels.filter(a => a.route === 'MediaCarousel/Seerr/Request').length - n,
+    fermee: !document.querySelector('.mc-seerr-backdrop'),
+    libelle: null
+  }), avant);
+})();
 
 // TV : un titre long et un synopsis long ne cachent rien (titre sur deux lignes, premiere case visible).
 const longTitre = 'Les chroniques extraordinaires et peu connues du royaume lointain de Westeros et au-dela';
@@ -2647,6 +2661,9 @@ await tvListe.evaluate(script);
 await tvListe.waitForFunction(etatSeerr('27205', 'request'));
 await tvListe.evaluate(() => document.querySelector('.mc-seerr[data-tmdb="27205"]').closest('.card').focus());
 await touche(tvListe, 13, 'Enter');
+await tvListe.waitForSelector('.mc-seerr-next');
+await tvListe.focus('.mc-seerr-next');
+await tvListe.keyboard.press('Enter');
 await tvListe.waitForSelector('.mc-seerr-choice');
 await tvListe.waitForTimeout(400);
 const listeAvant = await tvListe.evaluate(() => ({
@@ -3262,9 +3279,12 @@ check('TV: une serie a demander s ouvre en deux etapes : synopsis et bouton pour
   ficheAvantDemande.fenetre && ficheAvantDemande.suite && !ficheAvantDemande.envoyer && ficheAvantDemande.synopsis !== '' && ficheAvantDemande.liens === 0, ficheAvantDemande);
 check('TV: la deuxieme etape montre les saisons sans repeter le synopsis ; Retour rend le focus a la carte',
   etapeSerie.seconde.saisons > 0 && etapeSerie.seconde.synopsis === '' && etapeSerie.seconde.envoyer && etapeSerie.seconde.retour, etapeSerie);
-check('TV: OK sur un film a demander ouvre la fenetre (synopsis, bouton Demander), sans rien envoyer',
-  ficheFilmADemander.fenetre && ficheFilmADemander.envoyer && ficheFilmADemander.synopsis !== '' && demandesApres === demandesAvant && ficheFilmADemander.retour,
+check('TV: OK sur un film a demander ouvre la fiche (synopsis, bouton Demander), sans rien envoyer',
+  ficheFilmADemander.fenetre && ficheFilmADemander.suite && !ficheFilmADemander.envoyer && ficheFilmADemander.synopsis !== ''
+    && demandesApres === demandesAvant && ficheFilmADemander.retour,
   { ficheFilmADemander, demandesAvant, demandesApres });
+check('TV: « Demander » dans la fiche d un film (sans options avancees) envoie la demande et ferme la fenetre',
+  envoiFilm.demandes === 1 && envoiFilm.fermee, envoiFilm);
 check('AUDIT: le panneau ne propose que les rangees affichees par le serveur',
   rangeesProposees.filter(id => id.indexOf('native:') !== 0).join(',') === 'local', rangeesProposees);
 check('AUDIT: enregistrer sans rien masquer n ecrit aucune rangee', enregistreSansRangee.length === 0, enregistreSansRangee);
