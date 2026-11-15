@@ -765,9 +765,23 @@
             '-webkit-box-orient:vertical;}',
             '.layout-tv .mc-seerr-request .mc-seerr-overview{display:-webkit-box;-webkit-line-clamp:7;',
             '-webkit-box-orient:vertical;overflow:hidden;}',
+            /* Liste à nous à la télécommande : la liste d'Android est blanche et ne se colore pas. */
+            '.layout-tv .mc-seerr-field select{display:none;}',
+            '.mc-seerr-choice{position:relative;box-sizing:border-box;width:100%;padding:12px 40px 12px 16px;',
+            'text-align:left;font:inherit;color:#e2e8f0;background:#0f172a;border:1px solid rgba(71,85,105,.8);',
+            'border-radius:8px;cursor:pointer;}',
+            '.mc-seerr-choice::after{content:"";position:absolute;right:16px;top:50%;margin-top:-3px;',
+            'border:6px solid transparent;border-top-color:#94a3b8;border-bottom:0;}',
+            '.mc-seerr-choices{margin-top:4px;max-height:40vh;overflow-y:auto;background:#0f172a;',
+            'border:1px solid rgba(71,85,105,.8);border-radius:8px;}',
+            '.mc-seerr-choices[hidden]{display:none;}',
+            '.mc-seerr-opt{display:block;box-sizing:border-box;width:100%;margin:0;padding:12px 16px;border:0;',
+            'text-align:left;font:inherit;color:#e2e8f0;background:transparent;cursor:pointer;}',
+            '.mc-seerr-opt[aria-selected="true"]{background:var(--mc-accent);color:var(--mc-on-accent);}',
             '.layout-tv .mc-prefs input:focus,.layout-tv .mc-prefs button:focus,',
             '.layout-tv .mc-seerr-dialog input:focus,.layout-tv .mc-seerr-dialog select:focus,',
             '.layout-tv .mc-seerr-dialog button:focus{outline:3px solid #fff!important;outline-offset:2px;}',
+            '.layout-tv .mc-seerr-opt:focus{outline-offset:-3px;}',
 
             /* Flèches de défilement : confort souris, masquées au clavier et au tactile. */
             '.mc-row .mc-arrow{position:absolute;top:0;bottom:0;width:3.2vw;min-width:34px;max-width:72px;',
@@ -1708,6 +1722,19 @@
             return;
         }
 
+        // Retour (historique) pendant qu'une de nos listes est dépliée : elle seule se ferme.
+        if (reopen && reopen.type === 'popstate') {
+            if (open.mcIgnorePop) {
+                open.mcIgnorePop = false;
+                return;
+            }
+
+            if (open.mcCloseList) {
+                open.mcCloseList(true);
+                return;
+            }
+        }
+
         var origin = open.mcOrigin;
         open.parentNode.removeChild(open);
 
@@ -1813,6 +1840,7 @@
         document.body.appendChild(backdrop);
         markDialogInHistory(backdrop);
         wireRequestDialog(backdrop, button, mediaType, tmdbId, name);
+        enhanceSelectsForTv(backdrop);
         backdrop.querySelector('.mc-seerr-dialog').focus();
 
         // Le synopsis ne retarde rien : il s'écrit quand il arrive, ou jamais. Hors télécommande,
@@ -2166,12 +2194,175 @@
         backdrop.addEventListener('keydown', function (event) {
             if (isCloseKey(event)) {
                 event.preventDefault();
+
+                if (backdrop.mcCloseList) {
+                    backdrop.mcCloseList(false);
+                    return;
+                }
+
                 closeSeasonDialog();
                 return;
             }
 
             toggleOnEnter(event);
         });
+    }
+
+    /**
+     * À la télécommande, la liste déroulante native est la liste système d'Android : blanche,
+     * impossible à colorer par le CSS (essai du 2026-11-15 sur une Freebox Pop). Chaque liste du
+     * serveur, du profil et du dossier est donc doublée d'un bouton et d'une liste aux couleurs de
+     * la fenêtre ; le select d'origine reste dans la page, caché, et garde la valeur choisie.
+     */
+    function enhanceSelectsForTv(backdrop) {
+        if (layoutCardClass() !== ' show-focus') {
+            return;
+        }
+
+        Array.prototype.forEach.call(backdrop.querySelectorAll('.mc-seerr-field select'), function (select) {
+            tvSelect(backdrop, select);
+        });
+    }
+
+    function tvSelect(backdrop, select) {
+        var field = select.parentNode;
+        var title = field.querySelector('label');
+        var button = document.createElement('button');
+        var list = document.createElement('div');
+
+        button.type = 'button';
+        button.className = 'mc-seerr-choice';
+        button.setAttribute('aria-haspopup', 'listbox');
+        button.setAttribute('aria-expanded', 'false');
+        list.className = 'mc-seerr-choices';
+        list.setAttribute('role', 'listbox');
+        list.hidden = true;
+        select.setAttribute('tabindex', '-1');
+        select.setAttribute('aria-hidden', 'true');
+        field.appendChild(button);
+        field.appendChild(list);
+
+        function sync() {
+            var current = select.options[select.selectedIndex];
+
+            button.textContent = current ? current.text : '';
+            button.setAttribute('aria-label', (title ? title.textContent + ' : ' : '') + button.textContent);
+        }
+
+        function close(fromHistory) {
+            if (list.hidden) {
+                return;
+            }
+
+            list.hidden = true;
+            button.setAttribute('aria-expanded', 'false');
+            backdrop.mcCloseList = null;
+
+            // Fermée autrement que par Retour : on rend l'étape d'historique prise à l'ouverture.
+            if (fromHistory !== true) {
+                try {
+                    if (window.history.state && window.history.state.mcList) {
+                        backdrop.mcIgnorePop = true;
+                        window.history.back();
+                    }
+                } catch (error) {
+                    backdrop.mcIgnorePop = false;
+                }
+            }
+
+            if (document.activeElement && list.contains(document.activeElement)) {
+                button.focus();
+            }
+        }
+
+        function open() {
+            var options = Array.prototype.slice.call(select.options);
+
+            if (!options.length) {
+                return;
+            }
+
+            list.innerHTML = '';
+            options.forEach(function (option, index) {
+                var item = document.createElement('button');
+
+                item.type = 'button';
+                item.className = 'mc-seerr-opt';
+                item.setAttribute('role', 'option');
+                item.setAttribute('aria-selected', index === select.selectedIndex ? 'true' : 'false');
+                item.setAttribute('data-index', String(index));
+                item.textContent = option.text;
+                list.appendChild(item);
+            });
+
+            if (backdrop.mcCloseList) {
+                backdrop.mcCloseList(false);
+            }
+
+            list.hidden = false;
+            button.setAttribute('aria-expanded', 'true');
+            backdrop.mcCloseList = close;
+
+            try {
+                var copy = {};
+                var state = window.history.state;
+
+                for (var key in state || {}) {
+                    if (has(state, key)) {
+                        copy[key] = state[key];
+                    }
+                }
+
+                copy.mcDialog = true;
+                copy.mcList = true;
+                window.history.pushState(copy, '');
+            } catch (error) {
+                // Sans historique, Retour et Échap ferment toujours la liste par le clavier.
+            }
+
+            (list.querySelector('[aria-selected="true"]') || list.firstChild).focus();
+        }
+
+        button.addEventListener('click', function () {
+            if (list.hidden) {
+                open();
+            } else {
+                close(false);
+            }
+        });
+
+        list.addEventListener('click', function (event) {
+            var item = event.target.closest ? event.target.closest('.mc-seerr-opt') : null;
+
+            if (!item) {
+                return;
+            }
+
+            select.selectedIndex = parseInt(item.getAttribute('data-index'), 10);
+            select.dispatchEvent(new Event('change', { bubbles: true }));
+            sync();
+            close(false);
+            button.focus();
+        });
+
+        // Le focus qui quitte la liste (en descendant vers « Demander », par exemple) la referme.
+        list.addEventListener('focusout', function (event) {
+            var next = event.relatedTarget;
+
+            if (next && (list.contains(next) || next === button)) {
+                return;
+            }
+
+            close(false);
+        });
+
+        select.addEventListener('change', sync);
+
+        if (window.MutationObserver) {
+            new MutationObserver(sync).observe(select, { childList: true });
+        }
+
+        sync();
     }
 
     function sendRequest(backdrop, button, mediaType, tmdbId, name) {

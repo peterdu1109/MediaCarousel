@@ -1729,7 +1729,10 @@ const serveurSeerr = () => {
         ] : [
           { Id: 0, Name: 'Radarr', Is4k: false, IsDefault: true, ActiveProfileId: 4, ActiveDirectory: '/films',
             Profiles: [{ Id: 4, Name: 'HD-1080p' }], RootFolders: [{ Path: '/films', FreeSpace: 1099511627776 }] }
-        ] });
+        ].concat(window.__deuxServeurs ? [
+          { Id: 1, Name: 'Radarr 4K', Is4k: true, IsDefault: false, ActiveProfileId: 9, ActiveDirectory: '/films-4k',
+            Profiles: [{ Id: 9, Name: 'Ultra-HD' }, { Id: 10, Name: 'Remux' }], RootFolders: [{ Path: '/films-4k', FreeSpace: null }] }
+        ] : []) });
       }
       if (route === 'MediaCarousel/Seerr/Seasons') {
         if (window.__refusSaisons) {
@@ -2631,6 +2634,65 @@ const enPanneau = await enPrefs.evaluate(() => {
 });
 await enPrefs.close();
 
+// TV : la liste systeme d'Android (blanche, impossible a colorer) est remplacee par une liste aux
+// couleurs de la fenetre pour le serveur, le profil et le dossier.
+const tvListe = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+tvListe.on('pageerror', e => errors.push('pageerror(tv liste): ' + e.message));
+await enTv(tvListe);
+await tvListe.addInitScript(() => { window.__avance = true; window.__deuxServeurs = true; });
+await tvListe.goto('file://' + path.join(here, 'home.html'));
+await tvListe.evaluate(() => document.documentElement.classList.add('layout-tv'));
+await tvListe.evaluate(serveurSeerr);
+await tvListe.evaluate(script);
+await tvListe.waitForFunction(etatSeerr('27205', 'request'));
+await tvListe.evaluate(() => document.querySelector('.mc-seerr[data-tmdb="27205"]').closest('.card').focus());
+await touche(tvListe, 13, 'Enter');
+await tvListe.waitForSelector('.mc-seerr-choice');
+await tvListe.waitForTimeout(400);
+const listeAvant = await tvListe.evaluate(() => ({
+  boutons: document.querySelectorAll('.mc-seerr-choice').length,
+  natifCache: getComputedStyle(document.querySelector('.mc-seerr-server')).display === 'none',
+  texte: document.querySelector('.mc-seerr-field .mc-seerr-choice').textContent,
+  listeOuverte: !!document.querySelector('.mc-seerr-choices:not([hidden])')
+}));
+await tvListe.click('.mc-seerr-field .mc-seerr-choice');
+await tvListe.waitForSelector('.mc-seerr-choices:not([hidden]) .mc-seerr-opt');
+const listeOuverte = await tvListe.evaluate(() => {
+  const o = Array.from(document.querySelectorAll('.mc-seerr-choices:not([hidden]) .mc-seerr-opt'));
+  const fond = getComputedStyle(document.querySelector('.mc-seerr-choices:not([hidden])')).backgroundColor;
+  return { options: o.map(x => x.textContent), choisie: o.map(x => x.getAttribute('aria-selected')), fond, focus: document.activeElement.className };
+});
+await tvListe.click('.mc-seerr-choices:not([hidden]) .mc-seerr-opt:nth-child(2)');
+await tvListe.waitForTimeout(300);
+const listeChoix = await tvListe.evaluate(() => ({
+  valeur: document.querySelector('.mc-seerr-server').value,
+  texte: document.querySelector('.mc-seerr-field .mc-seerr-choice').textContent,
+  fermee: !document.querySelector('.mc-seerr-choices:not([hidden])'),
+  profil: document.querySelectorAll('.mc-seerr-field')[1].querySelector('.mc-seerr-choice').textContent,
+  profils: document.querySelector('.mc-seerr-profile').options.length,
+  focus: document.activeElement.className
+}));
+// Retour (historique d'Android TV) : ferme la liste, pas la fenetre.
+await tvListe.click('.mc-seerr-field .mc-seerr-choice');
+await tvListe.waitForSelector('.mc-seerr-choices:not([hidden])');
+await tvListe.evaluate(() => window.history.back());
+await tvListe.waitForTimeout(400);
+const retourListe = await tvListe.evaluate(() => ({
+  fenetre: !!document.querySelector('.mc-seerr-backdrop'), liste: !!document.querySelector('.mc-seerr-choices:not([hidden])')
+}));
+// Retour d'une TV Samsung (touche 10009) : meme chose, puis la fenetre se ferme au Retour suivant.
+await tvListe.click('.mc-seerr-field .mc-seerr-choice');
+await tvListe.waitForSelector('.mc-seerr-choices:not([hidden])');
+await touche(tvListe, 10009, '');
+await tvListe.waitForTimeout(300);
+const touchesListe = await tvListe.evaluate(() => ({
+  fenetre: !!document.querySelector('.mc-seerr-backdrop'), liste: !!document.querySelector('.mc-seerr-choices:not([hidden])')
+}));
+await touche(tvListe, 10009, '');
+await tvListe.waitForTimeout(300);
+const fermeApres = await tvListe.evaluate(() => !document.querySelector('.mc-seerr-backdrop'));
+await tvListe.close();
+
 await browser.close();
 
 let failed = 0;
@@ -3275,6 +3337,15 @@ check('D11: contraste force : le titre n est plus un texte transparent, interrup
 check('D11: le panneau Mes rangees a le rayon et le flou de la fenetre de demande',
   /\.mc-prefs\{[^}]*border-radius:16px/.test(prefs.css) && /\.mc-prefs-backdrop\{[^}]*backdrop-filter:blur\(8px\)/.test(prefs.css), 'prefs');
 check('D11: la roue des reglages est une icone dessinee, pas un emoji', prefs.roueSvg && !prefs.roueEmoji, { svg: prefs.roueSvg, emoji: prefs.roueEmoji });
+check('TV LISTE: le serveur, le profil et le dossier ont une liste a nous ; la liste native est cachee',
+  listeAvant.boutons === 3 && listeAvant.natifCache && listeAvant.texte === 'Radarr' && !listeAvant.listeOuverte, listeAvant);
+check('TV LISTE: OK deplie la liste (toutes les options, la courante marquee, fond sombre)',
+  listeOuverte.options.join('|') === 'Radarr|Radarr 4K' && listeOuverte.choisie.join('|') === 'true|false'
+  && listeOuverte.fond !== 'rgba(0, 0, 0, 0)' && listeOuverte.fond !== 'rgb(255, 255, 255)', listeOuverte);
+check('TV LISTE: choisir une option change le serveur, ferme la liste et met a jour le profil',
+  listeChoix.valeur === '1' && listeChoix.texte === 'Radarr 4K' && listeChoix.fermee && listeChoix.profil === 'Ultra-HD' && listeChoix.profils === 2, listeChoix);
+check('TV LISTE: Retour (historique) ferme la liste sans fermer la fenetre', retourListe.fenetre && !retourListe.liste, retourListe);
+check('TV LISTE: Retour (touche 10009) ferme la liste, puis la fenetre au suivant', touchesListe.fenetre && !touchesListe.liste && fermeApres, { touchesListe, fermeApres });
 check('aucune erreur js', errors.length === 0, errors);
 
 console.log(failed === 0 ? '\nTous les tests passent.' : '\n' + failed + ' echec(s).');
