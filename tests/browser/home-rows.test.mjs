@@ -2396,6 +2396,10 @@ const tvAbsent = await tvSeerr.evaluate(() => {
   };
 });
 const okAbsent = await touche(tvSeerr, 13, 'Enter');
+// Une serie s'ouvre en deux etapes a la telecommande : le synopsis, puis les saisons.
+await tvSeerr.waitForSelector('.mc-seerr-next');
+await tvSeerr.focus('.mc-seerr-next');
+await tvSeerr.keyboard.press('Enter');
 await tvSeerr.waitForSelector('.mc-seerr-dialog .mc-seerr-pick');
 await tvSeerr.focus('.mc-seerr-pick');
 const tvFenetre = await tvSeerr.evaluate(() => ({
@@ -2440,6 +2444,9 @@ const toucheRepetee = await tvEntiere.evaluate(() => ({
   appels: window.__appels.filter(a => a.route === 'MediaCarousel/Seerr/Seasons').length
 }));
 await tvEntiere.evaluate(() => window.__okCarte(false));
+await tvEntiere.waitForSelector('.mc-seerr-next');
+await tvEntiere.focus('.mc-seerr-next');
+await tvEntiere.keyboard.press('Enter');
 await tvEntiere.waitForSelector('.mc-seerr-dialog .mc-seerr-pick');
 await tvEntiere.waitForTimeout(300);
 const focusEntiere = await tvEntiere.evaluate(() => ({
@@ -2476,7 +2483,8 @@ const okSur = async (tmdb) => {
     return {
       fenetre: !!f, liens: f ? f.querySelectorAll('.mc-seerr-link').length : 0,
       synopsis: f ? f.querySelector('.mc-seerr-overview').textContent : '',
-      envoyer: f ? !!f.querySelector('.mc-seerr-send') : false
+      envoyer: f ? !!f.querySelector('.mc-seerr-send') : false,
+      suite: f ? !!f.querySelector('.mc-seerr-next') : false
     };
   });
   await touche(tvFiche, 10009, '');
@@ -2489,6 +2497,22 @@ const ficheDemandee = await okSur('95396');
 const ficheDisponible = await okSur('87108');
 const fichePartielle = await okSur('157336');
 const ficheAvantDemande = await okSur('66732');
+const etapeSerie = await (async () => {
+  await tvFiche.evaluate(() => document.querySelector('.mc-seerr[data-tmdb="66732"]').closest('.card').focus());
+  await touche(tvFiche, 13, 'Enter');
+  await tvFiche.waitForSelector('.mc-seerr-next', { timeout: 4000 });
+  await tvFiche.waitForTimeout(500);
+  const premiere = await tvFiche.evaluate(() => ({ synopsis: document.querySelector('.mc-seerr-overview').textContent, envoyer: !!document.querySelector('.mc-seerr-send') }));
+  await tvFiche.focus('.mc-seerr-next');
+  await tvFiche.keyboard.press('Enter');
+  await tvFiche.waitForSelector('.mc-seerr-pick', { timeout: 4000 });
+  await tvFiche.waitForTimeout(500);
+  const seconde = await tvFiche.evaluate(() => { const o = document.querySelector('.mc-seerr-overview'); return { saisons: document.querySelectorAll('.mc-seerr-pick').length, synopsis: o ? (o.hidden ? '' : o.textContent) : '', envoyer: !!document.querySelector('.mc-seerr-send') }; });
+  await touche(tvFiche, 10009, '');
+  await tvFiche.waitForTimeout(300);
+  seconde.retour = await tvFiche.evaluate(() => !document.querySelector('.mc-seerr-backdrop') && document.activeElement.classList.contains('card'));
+  return { premiere, seconde };
+})();
 const demandesAvant = await tvFiche.evaluate(() => window.__appels.filter(a => a.route === 'MediaCarousel/Seerr/Request').length);
 const ficheFilmADemander = await okSur('27205');
 const demandesApres = await tvFiche.evaluate(() => window.__appels.filter(a => a.route === 'MediaCarousel/Seerr/Request').length);
@@ -2527,7 +2551,7 @@ const mesureFiche = async (tmdb) => {
   return m;
 };
 const tvLongFiche = await mesureFiche('95396');
-const tvLongDemande = await mesureFiche('66732');
+const tvLongDemande = await mesureFiche('27205');
 await tvFiche.close();
 
 // LANGUE — `lang` de <html> : anglais pour toute langue autre que le francais, francais si
@@ -3172,8 +3196,10 @@ check('TV: OK sur un titre partiellement disponible ouvre la fiche, sans envoyer
   fichePartielle.fenetre && fichePartielle.liens === 0 && fichePartielle.synopsis !== '' && !fichePartielle.envoyer && fichePartielle.retour, fichePartielle);
 check("TV: OK sur un titre disponible n'ouvre rien",
   !ficheDisponible.fenetre, ficheDisponible);
-check('TV: la fenetre de demande reste celle de avant (synopsis, envoi), sans lien externe',
-  ficheAvantDemande.fenetre && ficheAvantDemande.envoyer && ficheAvantDemande.liens === 0, ficheAvantDemande);
+check('TV: une serie a demander s ouvre en deux etapes : synopsis et bouton pour choisir les saisons, sans envoi',
+  ficheAvantDemande.fenetre && ficheAvantDemande.suite && !ficheAvantDemande.envoyer && ficheAvantDemande.synopsis !== '' && ficheAvantDemande.liens === 0, ficheAvantDemande);
+check('TV: la deuxieme etape montre les saisons sans repeter le synopsis ; Retour rend le focus a la carte',
+  etapeSerie.seconde.saisons > 0 && etapeSerie.seconde.synopsis === '' && etapeSerie.seconde.envoyer && etapeSerie.seconde.retour, etapeSerie);
 check('TV: OK sur un film a demander ouvre la fenetre (synopsis, bouton Demander), sans rien envoyer',
   ficheFilmADemander.fenetre && ficheFilmADemander.envoyer && ficheFilmADemander.synopsis !== '' && demandesApres === demandesAvant && ficheFilmADemander.retour,
   { ficheFilmADemander, demandesAvant, demandesApres });
@@ -3240,7 +3266,7 @@ check('ACCENT: plus de violet ou de bleu fixe dans la fenetre de demande (un seu
 check('ACCENT: titre, cases cochees et bouton Demander suivent l accent',
   /\.mc-seerr-title\{[^}]*color:var\(--mc-accent\)/.test(prefs.css)
   && /\.mc-seerr-toggle:checked\{background:var\(--mc-accent\)/.test(prefs.css)
-  && /\.mc-seerr-send\{[^}]*background:var\(--mc-accent\);[^}]*color:var\(--mc-on-accent\)/.test(prefs.css), 'regles');
+  && /\.mc-seerr-send,\.mc-seerr-foot \.mc-seerr-next\{[^}]*background:var\(--mc-accent\);[^}]*color:var\(--mc-on-accent\)/.test(prefs.css), 'regles');
 // D11 : lisibilite et finitions.
 check('D11: un interrupteur eteint est cerne (visible sur le fond de la fenetre)',
   /\.mc-seerr-toggle\{[^}]*box-shadow:inset 0 0 0 2px #94a3b8/.test(prefs.css), 'anneau');

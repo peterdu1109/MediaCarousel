@@ -662,9 +662,9 @@
             'background:rgba(15,23,42,.3);border-top:1px solid rgba(51,65,85,.3);}',
             '.mc-seerr-foot button{min-width:120px;margin-left:12px;padding:12px 24px;border:0;border-radius:8px;',
             'font:inherit;font-size:.875rem;font-weight:600;cursor:pointer;transition:transform .2s ease;}',
-            '.mc-seerr-foot .mc-seerr-send{background:var(--mc-accent);color:var(--mc-on-accent);',
+            '.mc-seerr-foot .mc-seerr-send,.mc-seerr-foot .mc-seerr-next{background:var(--mc-accent);color:var(--mc-on-accent);',
             'box-shadow:0 4px 12px rgba(0,0,0,.3);}',
-            '.mc-seerr-foot .mc-seerr-send:hover:not([disabled]){box-shadow:inset 0 0 0 999px rgba(0,0,0,.18),0 4px 12px rgba(0,0,0,.3);',
+            '.mc-seerr-foot .mc-seerr-send:hover:not([disabled]),.mc-seerr-foot .mc-seerr-next:hover{box-shadow:inset 0 0 0 999px rgba(0,0,0,.18),0 4px 12px rgba(0,0,0,.3);',
             'transform:translate3d(0,-1px,0);}',
             '.mc-seerr-foot .mc-seerr-send[disabled]{opacity:.6;cursor:not-allowed;}',
             /* Contraste forcé de Windows : couleurs système, contours visibles. */
@@ -1237,6 +1237,7 @@
             'dialog.tv': 'Demander une série',
             'dialog.movie': 'Demander un film',
             'dialog.send': 'Demander',
+            'details.choose': 'Choisir les saisons',
             'seasons.loading': 'Chargement des saisons…',
             'seasons.failed': 'Impossible de charger les informations de saison',
             'seasons.all': 'Sélectionner toutes les saisons',
@@ -1333,6 +1334,7 @@
             'dialog.tv': 'Request a series',
             'dialog.movie': 'Request a movie',
             'dialog.send': 'Request',
+            'details.choose': 'Choose seasons',
             'seasons.loading': 'Loading seasons…',
             'seasons.failed': 'Could not load season information',
             'seasons.all': 'Select all seasons',
@@ -1815,7 +1817,7 @@
 
         // Le synopsis ne retarde rien : il s'écrit quand il arrive, ou jamais. Hors télécommande,
         // le bouton « i » de la carte le donne : le répéter ici serait un doublon.
-        if (layoutCardClass() === ' show-focus') {
+        if (layoutCardClass() === ' show-focus' && !isTv) {
             loadDetails(backdrop, mediaType, tmdbId, false);
         }
 
@@ -1903,7 +1905,7 @@
     }
 
     /** Fenêtre « fiche » d'un titre absent : affiche, résumé, liens. Ne demande rien. */
-    function openDetailsDialog(info) {
+    function openDetailsDialog(info, withNext) {
         closeSeasonDialog(true);
         closePreferences(true);
 
@@ -1927,6 +1929,7 @@
             + '</div>'
             + '<div class="mc-seerr-foot">'
             + '<button type="button" class="mc-seerr-cancel">' + t('close') + '</button>'
+            + (withNext ? '<button type="button" class="mc-seerr-next">' + t('details.choose') + '</button>' : '')
             + '</div></div>';
 
         if (poster && poster.style.backgroundImage) {
@@ -1936,6 +1939,16 @@
         document.body.appendChild(backdrop);
         markDialogInHistory(backdrop);
         wireRequestDialog(backdrop, info, mediaType, tmdbId, name);
+
+        if (withNext) {
+            backdrop.addEventListener('click', function (event) {
+                if (event.target.classList && event.target.classList.contains('mc-seerr-next')) {
+                    openRequestDialog(info).catch(function (error) {
+                        log('fenêtre de demande impossible', error);
+                    });
+                }
+            });
+        }
         backdrop.querySelector('.mc-seerr-dialog').focus();
 
         loadDetails(backdrop, mediaType, tmdbId, true).then(function () {
@@ -2332,7 +2345,11 @@
 
             // Une série ouvre toujours la fenêtre ; un film, avec les options avancées ou à la
             // télécommande (où rien ne part sans avoir pu lire le synopsis, et sans OK accidentel).
-            if (button.getAttribute('data-media') === 'tv' || seerrAdvanced || layoutCardClass() === ' show-focus') {
+            if (button.getAttribute('data-media') === 'tv' && layoutCardClass() === ' show-focus') {
+                // À la télécommande, une série s'ouvre en deux étapes : le synopsis d'abord, puis
+                // les saisons seules, pour que chaque fenêtre reste légère.
+                openDetailsDialog(button, true);
+            } else if (button.getAttribute('data-media') === 'tv' || seerrAdvanced || layoutCardClass() === ' show-focus') {
                 openRequestDialog(button).catch(function (error) {
                     log('fenêtre de demande impossible', error);
                 });
