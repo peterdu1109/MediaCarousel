@@ -2489,6 +2489,9 @@ const ficheDemandee = await okSur('95396');
 const ficheDisponible = await okSur('87108');
 const fichePartielle = await okSur('157336');
 const ficheAvantDemande = await okSur('66732');
+const demandesAvant = await tvFiche.evaluate(() => window.__appels.filter(a => a.route === 'MediaCarousel/Seerr/Request').length);
+const ficheFilmADemander = await okSur('27205');
+const demandesApres = await tvFiche.evaluate(() => window.__appels.filter(a => a.route === 'MediaCarousel/Seerr/Request').length);
 
 // TV : un titre long et un synopsis long ne cachent rien (titre sur deux lignes, premiere case visible).
 const longTitre = 'Les chroniques extraordinaires et peu connues du royaume lointain de Westeros et au-dela';
@@ -3100,8 +3103,8 @@ check('FICHE: les liens sont Seerr puis TMDB',
   ficheVue.liens[0].href === 'https://seer.example.org/movie/27205'
     && ficheVue.liens[1].href === 'https://www.themoviedb.org/movie/27205', ficheVue.liens);
 check('FICHE: le bouton i porte le nom du titre', /Inception/.test(ficheVue.bouton), ficheVue.bouton);
-check('FICHE: la fenetre de la serie montre le synopsis',
-  resumeSerie.texte === 'Un voleur entre dans les reves.' && !resumeSerie.cache, resumeSerie);
+check('FICHE: la fenetre de demande d une serie n a plus de synopsis hors TV (le bouton i le donne)',
+  resumeSerie.texte === '' && resumeSerie.cache === true, resumeSerie);
 check('FICHE: sans adresse publique, seul le lien TMDB reste',
   liensSansSeerr.length === 1 && liensSansSeerr[0] === 'Voir sur TMDB', liensSansSeerr);
 check('FICHE: une panne de Seerr laisse la fenetre fermable, sans lien',
@@ -3171,6 +3174,9 @@ check("TV: OK sur un titre disponible n'ouvre rien",
   !ficheDisponible.fenetre, ficheDisponible);
 check('TV: la fenetre de demande reste celle de avant (synopsis, envoi), sans lien externe',
   ficheAvantDemande.fenetre && ficheAvantDemande.envoyer && ficheAvantDemande.liens === 0, ficheAvantDemande);
+check('TV: OK sur un film a demander ouvre la fenetre (synopsis, bouton Demander), sans rien envoyer',
+  ficheFilmADemander.fenetre && ficheFilmADemander.envoyer && ficheFilmADemander.synopsis !== '' && demandesApres === demandesAvant && ficheFilmADemander.retour,
+  { ficheFilmADemander, demandesAvant, demandesApres });
 check('AUDIT: le panneau ne propose que les rangees affichees par le serveur',
   rangeesProposees.filter(id => id.indexOf('native:') !== 0).join(',') === 'local', rangeesProposees);
 check('AUDIT: enregistrer sans rien masquer n ecrit aucune rangee', enregistreSansRangee.length === 0, enregistreSansRangee);

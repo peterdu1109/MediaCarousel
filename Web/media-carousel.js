@@ -1448,7 +1448,7 @@
         var tvOnly = layoutCardClass() === ' show-focus' ? ' tabindex="-1"' : '';
 
         // La fiche n'a pas de place à la télécommande, où la carte entière est le bouton :
-        // la fenêtre d'une série (et celle des options avancées) montre le synopsis elle aussi.
+        // la fenêtre de demande y montre le synopsis (hors télécommande, c'est le « i » qui le donne).
         var info = tvOnly
             ? ''
             : '<button type="button" class="mc-info" aria-haspopup="dialog" aria-label="' + escapeHtml(t('info.aria', [entry.Name || '']))
@@ -1813,8 +1813,11 @@
         wireRequestDialog(backdrop, button, mediaType, tmdbId, name);
         backdrop.querySelector('.mc-seerr-dialog').focus();
 
-        // Le synopsis ne retarde rien : il s'écrit quand il arrive, ou jamais.
-        loadDetails(backdrop, mediaType, tmdbId, false);
+        // Le synopsis ne retarde rien : il s'écrit quand il arrive, ou jamais. Hors télécommande,
+        // le bouton « i » de la carte le donne : le répéter ici serait un doublon.
+        if (layoutCardClass() === ' show-focus') {
+            loadDetails(backdrop, mediaType, tmdbId, false);
+        }
 
         if (isTv) {
             loads.push(loadSeasons(backdrop, tmdbId));
@@ -2327,8 +2330,9 @@
                 return;
             }
 
-            // Une série ouvre toujours la fenêtre ; un film, seulement avec les options avancées.
-            if (button.getAttribute('data-media') === 'tv' || seerrAdvanced) {
+            // Une série ouvre toujours la fenêtre ; un film, avec les options avancées ou à la
+            // télécommande (où rien ne part sans avoir pu lire le synopsis, et sans OK accidentel).
+            if (button.getAttribute('data-media') === 'tv' || seerrAdvanced || layoutCardClass() === ' show-focus') {
                 openRequestDialog(button).catch(function (error) {
                     log('fenêtre de demande impossible', error);
                 });
