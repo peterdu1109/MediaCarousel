@@ -273,6 +273,34 @@
         return Math.min(100, Math.max(40, Math.round(value))) / 100;
     }
 
+    /**
+     * Texte lisible sur la couleur d'accent : noir ou blanc, celui qui contraste le plus
+     * (luminance relative WCAG). Un blanc fixe devenait illisible sur un accent clair, jaune
+     * ou cyan par exemple. Valeur déjà validée par safeAccent : #rgb, #rgba, #rrggbb ou #rrggbbaa.
+     */
+    function onAccent(hex) {
+        var h = String(hex).slice(1);
+
+        if (h.length === 3 || h.length === 4) {
+            h = h.charAt(0) + h.charAt(0) + h.charAt(1) + h.charAt(1) + h.charAt(2) + h.charAt(2);
+        }
+
+        if (h.length < 6) {
+            return '#fff';
+        }
+
+        var lum = [0, 2, 4].map(function (i) {
+            var c = parseInt(h.substr(i, 2), 16) / 255;
+            return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+        });
+        var l = 0.2126 * lum[0] + 0.7152 * lum[1] + 0.0722 * lum[2];
+
+        // Le blanc reste le choix tant qu'il tient le seuil AA (4,5:1) : c'est le rendu d'origine,
+        // et le violet par défaut est presque à égalité avec le noir. Contraste du blanc :
+        // 1,05 / (l + 0,05).
+        return 1.05 / (l + 0.05) >= 4.5 ? '#fff' : '#000';
+    }
+
     function buildCss(accent, rankScale) {
         var scale = rankScale || DEFAULT_RANK_SCALE;
 
@@ -283,6 +311,7 @@
                contours de focus disparaissaient — invisibles à la télécommande. */
             '.mc-row,.mc-prefs-backdrop,.mc-seerr-backdrop{',
             '--mc-accent:' + safeAccent(accent) + ';',
+            '--mc-on-accent:' + onAccent(safeAccent(accent)) + ';',
             /* Repris du thème quand il l'expose ; sinon la valeur de `.padded-left`. */
             '--mc-side-padding:var(--sidePadding,3.3%);',
             '--mc-ease:cubic-bezier(.22,.61,.36,1);--mc-dur:.28s;',
@@ -713,7 +742,7 @@
             '.mc-prefs .mc-prefs-actions{display:flex;flex-wrap:wrap;margin-top:1.2em;}',
             '.mc-prefs .mc-prefs-actions button{margin-right:.5em;margin-top:.4em;border:0;',
             'border-radius:4px;padding:.55em 1em;cursor:pointer;font-size:.95em;}',
-            '.mc-prefs .mc-prefs-save{background:var(--mc-accent);color:#fff;}',
+            '.mc-prefs .mc-prefs-save{background:var(--mc-accent);color:var(--mc-on-accent);}',
             '.mc-prefs .mc-prefs-reset,.mc-prefs .mc-prefs-close{',
             'background:rgba(255,255,255,.12);color:#fff;}',
             '.mc-prefs .mc-prefs-actions button:focus{outline:2px solid var(--mc-accent);',
@@ -724,6 +753,14 @@
                dans son fond violet. Un cadre blanc épais partout, et la ligne de la rangée
                choisie éclairée. Même chose dans la fenêtre de demande à Seerr. */
             '.layout-tv .mc-prefs li:focus-within{background:rgba(255,255,255,.12);border-radius:4px;}',
+            /* TV : la télécommande ne fait pas défiler la fenêtre. Un titre long passe sur deux
+               lignes (l'en-tête grandit au besoin) et le synopsis de la fenêtre de demande est
+               limité à sept lignes, pour que la liste des saisons reste visible. */
+            '.layout-tv .mc-seerr-head{height:auto;min-height:8em;}',
+            '.layout-tv .mc-seerr-subtitle{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;',
+            '-webkit-box-orient:vertical;}',
+            '.layout-tv .mc-seerr-request .mc-seerr-overview{display:-webkit-box;-webkit-line-clamp:7;',
+            '-webkit-box-orient:vertical;overflow:hidden;}',
             '.layout-tv .mc-prefs input:focus,.layout-tv .mc-prefs button:focus,',
             '.layout-tv .mc-seerr-dialog input:focus,.layout-tv .mc-seerr-dialog select:focus,',
             '.layout-tv .mc-seerr-dialog button:focus{outline:3px solid #fff!important;outline-offset:2px;}',
@@ -1417,7 +1454,7 @@
     }
 
     /** États d'un titre déjà demandé : la fiche s'ouvre à la télécommande, faute de bouton « i ». */
-    var DETAILS_STATES = { pending: true, requested: true, processing: true };
+    var DETAILS_STATES = { pending: true, requested: true, processing: true, partial: true };
 
     function seerrActs(button, state) {
         var spec = has(SEERR_STATES, state) ? SEERR_STATES[state] : null;
@@ -1733,7 +1770,7 @@
 
         backdrop.className = 'mc-seerr-backdrop';
         backdrop.mcOrigin = button;
-        backdrop.innerHTML = '<div class="mc-seerr-dialog focuscontainer" role="dialog" aria-modal="true"'
+        backdrop.innerHTML = '<div class="mc-seerr-dialog mc-seerr-request focuscontainer" role="dialog" aria-modal="true"'
             + ' aria-labelledby="' + id + '-title" tabindex="-1">'
             + '<div class="mc-seerr-head">'
             + '<h2 id="' + id + '-title" class="mc-seerr-title">'

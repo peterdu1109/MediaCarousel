@@ -387,6 +387,27 @@ await injection.evaluate(stub);
 await injection.evaluate(script);
 await injection.waitForFunction(() => document.querySelectorAll('.mc-row').length === 10, { timeout: 8000 });
 
+// D19 : le texte du bouton « Enregistrer » suit la luminance de l'accent choisi (noir sur jaune
+// ou cyan clair, blanc sur le violet par defaut), jamais un blanc fixe.
+const surAccent = {};
+for (const couleur of ['#ffeb3b', '#00e5ff', '#775BF4', '#102a43', '#fe0']) {
+  const pageAccent = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  pageAccent.on('pageerror', e => errors.push('pageerror(accent): ' + e.message));
+  await pageAccent.addInitScript((c) => { window.__accent = c; }, couleur);
+  await pageAccent.goto('file://' + path.join(here, 'home.html'));
+  await pageAccent.evaluate(stub);
+  await pageAccent.evaluate(script);
+  await pageAccent.waitForFunction(() => document.querySelectorAll('.mc-row').length === 10, { timeout: 8000 });
+  surAccent[couleur] = await pageAccent.evaluate(() => {
+    const css = document.getElementById('mc-styles').textContent;
+    return {
+      jeton: getComputedStyle(document.querySelector('.mc-row')).getPropertyValue('--mc-on-accent').trim(),
+      regle: /\.mc-prefs-save\{[^}]*color:var\(--mc-on-accent\)/.test(css)
+    };
+  });
+  await pageAccent.close();
+}
+
 const accent = await injection.evaluate(() => {
   const row = document.querySelector('.mc-row');
   return {
@@ -2428,12 +2449,20 @@ await tvEntiere.close();
 const tvFiche = await browser.newPage({ viewport: { width: 1280, height: 900 } });
 tvFiche.on('pageerror', e => errors.push('pageerror(tv fiche): ' + e.message));
 await enTv(tvFiche);
+// Un titre « partiellement disponible » (Interstellar) : il doit s'ouvrir comme un titre demande.
+await tvFiche.addInitScript(() => {
+  window.__etats = {
+    'movie:27205': 'request', 'tv:1399': 'request-missing', 'tv:87108': 'available', 'movie:550': null,
+    'movie:157336': 'partial', 'tv:66732': 'request', 'tv:95396': 'pending'
+  };
+});
 await tvFiche.goto('file://' + path.join(here, 'home.html'));
 await tvFiche.evaluate(() => document.documentElement.classList.add('layout-tv'));
 await tvFiche.evaluate(serveurSeerr);
 await tvFiche.evaluate(script);
 await tvFiche.waitForFunction(etatSeerr('95396', 'pending'));
 await tvFiche.waitForFunction(etatSeerr('87108', 'available'));
+await tvFiche.waitForFunction(etatSeerr('157336', 'partial'));
 const okSur = async (tmdb) => {
   await tvFiche.evaluate((t) => document.querySelector('.mc-seerr[data-tmdb="' + t + '"]').closest('.card').focus(), tmdb);
   await touche(tvFiche, 13, 'Enter');
@@ -2454,7 +2483,44 @@ const okSur = async (tmdb) => {
 };
 const ficheDemandee = await okSur('95396');
 const ficheDisponible = await okSur('87108');
+const fichePartielle = await okSur('157336');
 const ficheAvantDemande = await okSur('66732');
+
+// TV : un titre long et un synopsis long ne cachent rien (titre sur deux lignes, premiere case visible).
+const longTitre = 'Les chroniques extraordinaires et peu connues du royaume lointain de Westeros et au-dela';
+const longSynopsis = Array.from({ length: 180 }, (_, i) => 'mot' + i).join(' ');
+await tvFiche.setViewportSize({ width: 1280, height: 720 });
+const mesureFiche = async (tmdb) => {
+  await tvFiche.evaluate((t) => document.querySelector('.mc-seerr[data-tmdb="' + t + '"]').closest('.card').focus(), tmdb);
+  await touche(tvFiche, 13, 'Enter');
+  await tvFiche.waitForSelector('.mc-seerr-overview:not([hidden])', { timeout: 4000 });
+  await tvFiche.waitForTimeout(900);
+  const m = await tvFiche.evaluate(([titre, synopsis]) => {
+    const f = document.querySelector('.mc-seerr-backdrop');
+    const sub = f.querySelector('.mc-seerr-subtitle'), head = f.querySelector('.mc-seerr-head');
+    const body = f.querySelector('.mc-seerr-body');
+    sub.textContent = titre;
+    f.querySelector('.mc-seerr-title').textContent = titre;
+    f.querySelector('.mc-seerr-overview').textContent = synopsis;
+    const dedans = (el) => {
+      const b = el.getBoundingClientRect(), c = body.getBoundingClientRect();
+      return b.top >= c.top - 1 && b.bottom <= c.bottom + 1;
+    };
+    const premiere = f.querySelector('.mc-seerr-body input:not([disabled])');
+    return {
+      titreCoupe: sub.scrollWidth > sub.clientWidth + 1,
+      titreRogne: sub.getBoundingClientRect().bottom > head.getBoundingClientRect().bottom + 1
+        || f.querySelector('.mc-seerr-title').getBoundingClientRect().bottom > head.getBoundingClientRect().bottom + 1,
+      premiereCase: premiere ? dedans(premiere) : null,
+      envoyerVisible: (() => { const e = f.querySelector('.mc-seerr-send'); if (!e) return null; const b = e.getBoundingClientRect(); return b.bottom <= window.innerHeight && b.top >= 0; })()
+    };
+  }, [longTitre, longSynopsis]);
+  await touche(tvFiche, 10009, '');
+  await tvFiche.waitForTimeout(200);
+  return m;
+};
+const tvLongFiche = await mesureFiche('95396');
+const tvLongDemande = await mesureFiche('66732');
 await tvFiche.close();
 
 // LANGUE — `lang` de <html> : anglais pour toute langue autre que le francais, francais si
@@ -3091,6 +3157,12 @@ check("TV: un OK maintenu (touche repetee) sur une carte n'ouvre rien",
 
 check('TV: OK sur un titre deja demande ouvre la fiche (synopsis, sans lien), sans envoyer ; Retour rend le focus',
   ficheDemandee.fenetre && ficheDemandee.liens === 0 && ficheDemandee.synopsis !== '' && !ficheDemandee.envoyer && ficheDemandee.retour, ficheDemandee);
+check("TV: le titre d'une serie long passe sur deux lignes, sans etre coupe ni rogne (fiche)",
+  tvLongFiche.titreCoupe === false && tvLongFiche.titreRogne === false, tvLongFiche);
+check('TV: un synopsis long ne pousse pas la premiere case hors de la fenetre de demande',
+  tvLongDemande.premiereCase !== false && tvLongDemande.envoyerVisible !== false && tvLongDemande.titreRogne === false, tvLongDemande);
+check('TV: OK sur un titre partiellement disponible ouvre la fiche, sans envoyer ; Retour rend le focus',
+  fichePartielle.fenetre && fichePartielle.liens === 0 && fichePartielle.synopsis !== '' && !fichePartielle.envoyer && fichePartielle.retour, fichePartielle);
 check("TV: OK sur un titre disponible n'ouvre rien",
   !ficheDisponible.fenetre, ficheDisponible);
 check('TV: la fenetre de demande reste celle de avant (synopsis, envoi), sans lien externe',
@@ -3148,6 +3220,10 @@ check('LANGUE: lang="en", le panneau Mes rangees',
   check('LANGUE: le francais tutoie partout, aucun « vous » ni « Veuillez »', vouvoiement.length === 0, vouvoiement);
 }
 
+check('ACCENT: texte noir sur un accent clair (jaune, cyan, #fe0), blanc sur un accent sombre',
+  surAccent['#ffeb3b'].jeton === '#000' && surAccent['#00e5ff'].jeton === '#000' && surAccent['#fe0'].jeton === '#000'
+  && surAccent['#775BF4'].jeton === '#fff' && surAccent['#102a43'].jeton === '#fff', surAccent);
+check('ACCENT: le bouton Enregistrer lit ce jeton', Object.values(surAccent).every(v => v.regle), surAccent);
 check('aucune erreur js', errors.length === 0, errors);
 
 console.log(failed === 0 ? '\nTous les tests passent.' : '\n' + failed + ' echec(s).');
