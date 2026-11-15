@@ -840,7 +840,11 @@ await prefsPage.waitForFunction(() => document.querySelectorAll('.mc-row').lengt
 const prefs = await prefsPage.evaluate(() => ({
   boutons: document.querySelectorAll('.mc-prefs-open').length,
   surNotreRangee: !!document.querySelector('.mc-row .mc-row-header .mc-prefs-open'),
-  panneauAvant: document.querySelectorAll('.mc-prefs').length
+  panneauAvant: document.querySelectorAll('.mc-prefs').length,
+  // D11 : la roue est une icone dessinee, pas un emoji dont l'aspect change d'un telephone a l'autre.
+  roueSvg: !!document.querySelector('.mc-prefs-open svg'),
+  roueEmoji: /[⚙]/.test(document.querySelector('.mc-prefs-open').textContent),
+  css: document.getElementById('mc-styles').textContent
 }));
 
 // Ouverture, puis une ligne par rangee ordonnee.
@@ -1938,7 +1942,7 @@ const fenetre = await saisons.evaluate(() => {
     interrupteurs: toggles.length > 0 && toggles.every(t => t.classList.contains('mc-seerr-toggle')
       && getComputedStyle(t).appearance === 'none' && getComputedStyle(t).width === '40px'),
     fondEntete: getComputedStyle(d.querySelector('.mc-seerr-head')).backgroundImage,
-    titreDegrade: getComputedStyle(d.querySelector('h2')).backgroundImage.indexOf('linear-gradient') !== -1,
+    titreAccent: getComputedStyle(d.querySelector('h2')).color === 'rgb(119, 91, 244)',
     capitales: getComputedStyle(pastille).textTransform === 'uppercase',
     avancees: d.querySelectorAll('.mc-seerr-advanced').length,
     demandes: window.__appels.filter(a => a.route === 'MediaCarousel/Seerr/Request').length
@@ -2860,8 +2864,8 @@ check('CLAIR: sur page claire, seule la teinte change — la geometrie tient',
 
 check('CSS: la feuille produit bien des regles', styling.ruleCount > 25, styling.ruleCount);
 check('CSS: accolades equilibrees', styling.bracesBalanced === true, styling.bracesBalanced);
-check('CSS: seuls les points de rupture de comportement subsistent (plus aucun de taille)',
-  styling.mediaCount === 3, styling.mediaCount);
+check('CSS: seuls les points de rupture de comportement subsistent (survol, mouvement reduit, contraste, contraste force ; plus aucun de taille)',
+  styling.mediaCount === 4, styling.mediaCount);
 
 // Jellyfin RETRECIT ses cartes a certains paliers pour en montrer davantage :
 // une echelle strictement croissante n'a plus de sens. Ce qui doit tenir, a chaque
@@ -3038,8 +3042,8 @@ check('SAISONS: nom, specials, annee et episodes',
   fenetre.lignes[0].nom === 'Épisodes spéciaux' && fenetre.lignes[2].nom === 'Stranger Things 2'
     && fenetre.lignes[3].nom === 'Saison 3' && fenetre.lignes[3].annee === '2019' && fenetre.lignes[3].episodes === '8 ép.'
     && fenetre.lignes[4].annee === '' && fenetre.lignes[4].episodes === '9 ép.', fenetre.lignes);
-check('SAISONS: la fenetre de Jellyfin Enhanced — interrupteurs, titre en degrade, pastilles en capitales',
-  fenetre.interrupteurs && fenetre.titreDegrade && fenetre.capitales, fenetre);
+check('SAISONS: la fenetre de Jellyfin Enhanced — interrupteurs, titre a la couleur d accent, pastilles en capitales',
+  fenetre.interrupteurs && fenetre.titreAccent && fenetre.capitales, fenetre);
 check('SAISONS: l en-tete est illustre par l affiche du titre, deja relayee',
   fenetre.fondEntete.indexOf('st.jpg') !== -1, fenetre.fondEntete);
 check('SAISONS: sans options avancees proposees, pas de section', fenetre.avancees === 0, fenetre.avancees);
@@ -3224,6 +3228,21 @@ check('ACCENT: texte noir sur un accent clair (jaune, cyan, #fe0), blanc sur un 
   surAccent['#ffeb3b'].jeton === '#000' && surAccent['#00e5ff'].jeton === '#000' && surAccent['#fe0'].jeton === '#000'
   && surAccent['#775BF4'].jeton === '#fff' && surAccent['#102a43'].jeton === '#fff', surAccent);
 check('ACCENT: le bouton Enregistrer lit ce jeton', Object.values(surAccent).every(v => v.regle), surAccent);
+// D8 : un seul violet. Les teintes fixes du plugin cedent la place a l'accent choisi.
+const teintesFixes = ['#8b5cf6', '#4f46e5', '#7c3aed', '#c084fc', '#3b82f6'].filter(c => prefs.css.toLowerCase().indexOf(c) !== -1);
+check('ACCENT: plus de violet ou de bleu fixe dans la fenetre de demande (un seul accent)', teintesFixes.length === 0, teintesFixes);
+check('ACCENT: titre, cases cochees et bouton Demander suivent l accent',
+  /\.mc-seerr-title\{[^}]*color:var\(--mc-accent\)/.test(prefs.css)
+  && /\.mc-seerr-toggle:checked\{background:var\(--mc-accent\)/.test(prefs.css)
+  && /\.mc-seerr-send\{[^}]*background:var\(--mc-accent\);[^}]*color:var\(--mc-on-accent\)/.test(prefs.css), 'regles');
+// D11 : lisibilite et finitions.
+check('D11: un interrupteur eteint est cerne (visible sur le fond de la fenetre)',
+  /\.mc-seerr-toggle\{[^}]*box-shadow:inset 0 0 0 2px #94a3b8/.test(prefs.css), 'anneau');
+check('D11: contraste force : le titre n est plus un texte transparent, interrupteur et pastilles ont un contour systeme',
+  prefs.css.indexOf('text-fill-color:transparent') === -1 && /forced-colors:active[^@]*\.mc-seerr-toggle/.test(prefs.css), 'forced-colors');
+check('D11: le panneau Mes rangees a le rayon et le flou de la fenetre de demande',
+  /\.mc-prefs\{[^}]*border-radius:16px/.test(prefs.css) && /\.mc-prefs-backdrop\{[^}]*backdrop-filter:blur\(8px\)/.test(prefs.css), 'prefs');
+check('D11: la roue des reglages est une icone dessinee, pas un emoji', prefs.roueSvg && !prefs.roueEmoji, { svg: prefs.roueSvg, emoji: prefs.roueEmoji });
 check('aucune erreur js', errors.length === 0, errors);
 
 console.log(failed === 0 ? '\nTous les tests passent.' : '\n' + failed + ' echec(s).');

@@ -573,13 +573,12 @@
             '.mc-seerr-dialog:focus{outline:none;}',
             '.mc-seerr-head{position:relative;flex:0 0 auto;box-sizing:border-box;height:8em;',
             'padding:24px;padding:min(24px,5vw);',
-            'overflow:hidden;border-radius:16px 16px 0 0;background-color:#1e293b;',
-            'background-image:linear-gradient(45deg,#3b82f6,#8b5cf6);background-size:cover;background-position:center;}',
+            'overflow:hidden;border-radius:16px 16px 0 0;background-color:var(--mc-accent);',
+            'background-size:cover;background-position:center;}',
             '.mc-seerr-head::before{content:"";position:absolute;left:0;top:0;right:0;bottom:0;',
             'background:rgba(0,0,0,.8);-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px);}',
             '.mc-seerr-title{position:relative;margin:0 0 6px;font-size:1.8rem;font-weight:700;line-height:1.2;',
-            'color:#8b5cf6;background:linear-gradient(45deg,#3b82f6,#8b5cf6);-webkit-background-clip:text;',
-            'background-clip:text;-webkit-text-fill-color:transparent;}',
+            'color:var(--mc-accent);}',
             '.mc-seerr-subtitle{position:relative;margin:0;font-size:1.4rem;font-weight:500;',
             'color:rgba(255,255,255,.9);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}',
             /* Sur un écran étroit, marges et colonnes se resserrent : `min()` plutôt qu'un point
@@ -604,10 +603,11 @@
             '.mc-seerr-all-label{font-size:.95rem;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:#cbd5e1;}',
             '.mc-seerr-toggle{-webkit-appearance:none;appearance:none;position:relative;box-sizing:border-box;',
             'width:40px;min-width:40px;height:22px;margin:0;border:0;border-radius:999px;cursor:pointer;',
-            'background:rgba(71,85,105,.6);transition:background-color .2s ease;}',
+            /* Éteint : un anneau clair, sans quoi l'interrupteur se confond avec le fond (1,5:1). */
+            'background:rgba(71,85,105,.6);box-shadow:inset 0 0 0 2px #94a3b8;transition:background-color .2s ease;}',
             '.mc-seerr-toggle::before{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;',
             'border-radius:50%;background:#fff;transition:transform .2s ease;}',
-            '.mc-seerr-toggle:checked{background:#4f46e5;}',
+            '.mc-seerr-toggle:checked{background:var(--mc-accent);box-shadow:none;}',
             '.mc-seerr-toggle:checked::before{transform:translateX(18px);}',
             '.mc-seerr-toggle:disabled{opacity:.4;cursor:not-allowed;}',
             '.mc-seerr-toggle:focus{outline:2px solid rgba(59,130,246,.8);outline-offset:2px;}',
@@ -624,7 +624,7 @@
             'text-align:center;font-size:.75rem;font-weight:700;letter-spacing:.5px;text-transform:uppercase;',
             'color:#818cf8;background:rgba(99,102,241,.15);border:1px solid rgba(99,102,241,.3);}',
             '.mc-seerr-season-state[data-state="requested"],.mc-seerr-season-state[data-state="processing"]{',
-            'color:#c084fc;background:rgba(147,51,234,.15);border-color:rgba(147,51,234,.3);}',
+            'color:var(--mc-on-accent);background:var(--mc-accent);border-color:transparent;}',
             '.mc-seerr-season-state[data-state="available"],.mc-seerr-season-state[data-state="partial"]{',
             'color:#4ade80;background:rgba(34,197,94,.15);border-color:rgba(34,197,94,.3);}',
             '.mc-seerr-season-state[data-state="blocked"]{color:#f87171;background:rgba(239,68,68,.15);',
@@ -662,11 +662,14 @@
             'background:rgba(15,23,42,.3);border-top:1px solid rgba(51,65,85,.3);}',
             '.mc-seerr-foot button{min-width:120px;margin-left:12px;padding:12px 24px;border:0;border-radius:8px;',
             'font:inherit;font-size:.875rem;font-weight:600;cursor:pointer;transition:transform .2s ease;}',
-            '.mc-seerr-foot .mc-seerr-send{color:#fff;background:linear-gradient(135deg,#4f46e5,#7c3aed);',
-            'box-shadow:0 4px 12px rgba(79,70,229,.3);}',
-            '.mc-seerr-foot .mc-seerr-send:hover:not([disabled]){background:linear-gradient(135deg,#4338ca,#6d28d9);',
+            '.mc-seerr-foot .mc-seerr-send{background:var(--mc-accent);color:var(--mc-on-accent);',
+            'box-shadow:0 4px 12px rgba(0,0,0,.3);}',
+            '.mc-seerr-foot .mc-seerr-send:hover:not([disabled]){box-shadow:inset 0 0 0 999px rgba(0,0,0,.18),0 4px 12px rgba(0,0,0,.3);',
             'transform:translate3d(0,-1px,0);}',
             '.mc-seerr-foot .mc-seerr-send[disabled]{opacity:.6;cursor:not-allowed;}',
+            /* Contraste forcé de Windows : couleurs système, contours visibles. */
+            '@media (forced-colors:active){.mc-seerr-title{color:CanvasText;}',
+            '.mc-seerr-toggle,.mc-seerr-season-state{border:1px solid CanvasText;forced-color-adjust:auto;}}',
             '.mc-seerr-foot .mc-seerr-cancel{color:#e2e8f0;background:rgba(71,85,105,.8);',
             'border:1px solid rgba(148,163,184,.2);}',
             '.mc-seerr-foot .mc-seerr-cancel:hover{background:rgba(71,85,105,1);}',
@@ -719,8 +722,9 @@
 
             '.mc-prefs-backdrop{position:fixed;left:0;right:0;top:0;bottom:0;z-index:10000;',
             'background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;',
-            'padding:1em;}',
-            '.mc-prefs{background:#1c1c1f;color:#fff;border-radius:8px;padding:1.2em;',
+            '-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);padding:1em;}',
+            '.layout-tv .mc-prefs-backdrop{-webkit-backdrop-filter:none;backdrop-filter:none;}',
+            '.mc-prefs{background:#1c1c1f;color:#fff;border-radius:16px;padding:1.2em;',
             'width:100%;max-width:420px;max-height:86vh;overflow-y:auto;',
             'box-shadow:0 12px 40px rgba(0,0,0,.6);}',
             '.mc-prefs h2{margin:0 0 .2em;font-size:1.2em;}',
@@ -1392,6 +1396,10 @@
             'row.native:latestmedia': 'Jellyfin — Recently Added Media'
         }
     };
+
+    /** Roue dessinée : un emoji change d'aspect d'un téléphone à l'autre. Suit la couleur du texte. */
+    var GEAR_ICON = '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor" aria-hidden="true" focusable="false">'
+        + '<path d="M19.14 12.94c.04-.3.06-.61.06-.94s-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.48.48 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.48.48 0 0 0-.59.22L2.74 8.87a.48.48 0 0 0 .12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2z"/></svg>';
 
     function uiLanguage() {
         var tag = (document.documentElement.getAttribute('lang') || '').toLowerCase();
@@ -3857,7 +3865,7 @@
         button.className = 'mc-prefs-open';
         button.title = t('prefs.open');
         button.setAttribute('aria-label', t('prefs.open'));
-        button.innerHTML = '&#9881;';
+        button.innerHTML = GEAR_ICON;
         button.addEventListener('click', function () {
             openPreferences(opts);
         });
@@ -3886,7 +3894,7 @@
         var tile = document.createElement('button');
         tile.type = 'button';
         tile.className = 'mc-prefs-tile';
-        tile.innerHTML = '<span class="mc-prefs-tile-icon" aria-hidden="true">&#9881;</span>'
+        tile.innerHTML = '<span class="mc-prefs-tile-icon" aria-hidden="true">' + GEAR_ICON + '</span>'
             + '<span>' + t('prefs.open') + '</span>';
         tile.addEventListener('click', function () {
             openPreferences(opts);
