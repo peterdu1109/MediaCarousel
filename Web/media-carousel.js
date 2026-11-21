@@ -778,9 +778,8 @@
             '.layout-tv .mc-prefs input:focus,.layout-tv .mc-prefs button:focus,',
             '.layout-tv .mc-seerr-dialog input:focus,.layout-tv .mc-seerr-dialog select:focus,',
             '.layout-tv .mc-seerr-dialog button:focus{outline:3px solid #fff!important;outline-offset:2px;}',
-            '.layout-tv .mc-seerr-dialog .mc-seerr-opt:focus{outline:0!important;background:#475569;color:#fff;box-shadow:inset 10px 0 0 #fff;}',
-            '.layout-tv .mc-seerr-opt[aria-selected="true"]:focus{background:var(--mc-accent);color:var(--mc-on-accent);',
-            'box-shadow:inset 10px 0 0 #fff;}',
+            /* Focus d'une option : fond clair, texte sombre (le plus net à 3 m), choisie ou non ; la coche dit le choix. */
+            '.layout-tv .mc-seerr-dialog .mc-seerr-opt:focus{outline:0!important;background:#f8fafc;color:#0f172a;font-weight:600;}',
             '.layout-tv .mc-seerr-opt[aria-selected="true"]::before{content:"\\2713\\00a0";}',
             '.layout-tv .mc-seerr-overview[tabindex]:focus{outline:3px solid #fff;outline-offset:4px;}',
 
