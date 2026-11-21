@@ -2738,6 +2738,11 @@ const longAvant = await tvLong.evaluate(() => {
   const b = document.querySelector('.mc-seerr-body');
   return { focus: document.activeElement.className, haut: b.scrollTop, deborde: b.scrollHeight > b.clientHeight };
 });
+const longHors = await tvLong.evaluate(() => {
+  const b = document.createElement('button'); b.className = 'emby-tab-button'; document.body.appendChild(b);
+  b.focus();
+  return !!document.activeElement.closest('.mc-seerr-backdrop');
+});
 const longBas = await touche(tvLong, 40, 'ArrowDown');
 const longApres = await tvLong.evaluate(() => document.querySelector('.mc-seerr-body').scrollTop);
 for (let i = 0; i < 40; i++) { await touche(tvLong, 40, 'ArrowDown'); }
@@ -2756,7 +2761,8 @@ const check = (name, ok, got) => { console.log((ok ? 'OK    ' : 'ECHEC ') + name
 check('TV: liste -> option focalisee se distingue de la choisie (fond, contour) et la choisie porte une coche',
   listeFocus.apres !== listeFocus.avant && listeFocus.apres !== listeFocus.accent && listeFocus.contour === '3px'
     && listeFocus.coche.indexOf('✓') !== -1, listeFocus);
-check('TV: synopsis long -> prend le focus au depart', longAvant.deborde && longAvant.focus.includes('mc-seerr-overview') && longAvant.haut <= 24, longAvant);
+check('TV: synopsis long -> prend le focus au depart', longAvant.deborde && longAvant.focus.includes('mc-seerr-overview') && longAvant.haut === 0, longAvant);
+check('TV: un focus envoye hors de la fenetre y revient (tvfocus.js envoie Haut sur la barre du haut)', longHors === true, longHors);
 check('TV: synopsis long -> Bas fait defiler le corps et garde la touche', longBas === true && longApres > 0, { longBas, longApres });
 check('TV: synopsis long -> on atteint la fin, puis la touche est rendue a la navigation',
   longFin.bout && longBoutRepris === false, { longFin, longBoutRepris });

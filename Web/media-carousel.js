@@ -778,7 +778,7 @@
             '.layout-tv .mc-prefs input:focus,.layout-tv .mc-prefs button:focus,',
             '.layout-tv .mc-seerr-dialog input:focus,.layout-tv .mc-seerr-dialog select:focus,',
             '.layout-tv .mc-seerr-dialog button:focus{outline:3px solid #fff!important;outline-offset:2px;}',
-            '.layout-tv .mc-seerr-opt:focus{outline-offset:-3px;background:#334155;color:#fff;}',
+            '.layout-tv .mc-seerr-opt:focus{outline-offset:-3px;background:#475569;color:#fff;box-shadow:inset 10px 0 0 #fff;}',
             '.layout-tv .mc-seerr-opt[aria-selected="true"]:focus{background:var(--mc-accent);color:var(--mc-on-accent);',
             'box-shadow:inset 10px 0 0 #fff;}',
             '.layout-tv .mc-seerr-opt[aria-selected="true"]::before{content:"\\2713\\00a0";}',
@@ -1949,6 +1949,7 @@
         }
 
         overview.setAttribute('tabindex', '0');
+        overview.classList.add('focusable');
 
         if (overview.mcReadable) {
             return;
@@ -1963,10 +1964,12 @@
                 return;
             }
 
+            overview.mcMoved = true;
             event.preventDefault();
             event.stopPropagation();
             body.scrollTop = Math.max(0, Math.min(max, body.scrollTop
                 + (down ? 1 : -1) * Math.max(40, Math.round(body.clientHeight * 0.8))));
+            backdrop.mcKeep = body.scrollTop;
         });
     }
 
@@ -2046,10 +2049,37 @@
 
         for (var i = 0; i < candidates.length; i++) {
             if (candidates[i].offsetParent !== null) {
-                candidates[i].focus();
+                // Un synopsis plus haut que le corps : focus() le ferait défiler vers sa fin ; on lit depuis le haut.
+                if (candidates[i].classList.contains('mc-seerr-overview')) {
+                    holdAtTop(candidates[i]);
+                } else {
+                    candidates[i].focus();
+                }
+
                 return;
             }
         }
+    }
+
+    /**
+     * Donne le focus au synopsis sans le faire défiler vers sa fin : sur la Freebox, jellyfin-web ramène
+     * le corps au bas du synopsis à l'image suivante (essai du 2026-11-21). On remet donc le haut tant
+     * que personne n'a fait défiler.
+     */
+    function holdAtTop(overview) {
+        var body = overview.parentNode;
+        var reset = function () {
+            if (!overview.mcMoved) {
+                body.scrollTop = 0;
+            }
+        };
+
+        overview.focus({ preventScroll: true });
+        reset();
+        window.requestAnimationFrame(function () {
+            reset();
+            window.setTimeout(reset, 150);
+        });
     }
 
     function loadSeasons(backdrop, tmdbId) {
@@ -2210,7 +2240,56 @@
         all.indeterminate = checked > 0 && checked < boxes.length;
     }
 
+    /**
+     * À la télécommande, le focus ne doit pas quitter la fenêtre. tvfocus.js (appli Android TV) envoie sur
+     * la barre du haut tout Haut qui ne déplace pas le focus, sauf depuis un dialogue de jellyfin, ce que
+     * notre fenêtre n'est pas (essai du 2026-11-21 : Haut depuis le haut de la fiche tombait sur les onglets).
+     * Un focus qui arrive hors de la fenêtre, et hors d'un dialogue de jellyfin, revient au dernier
+     * contrôle de la fenêtre. Le garde s'efface avec la fenêtre.
+     */
+    function keepFocusInside(backdrop) {
+        if (layoutCardClass() !== ' show-focus') {
+            return;
+        }
+
+        var last = null;
+        var top = 0;
+        var body = backdrop.querySelector('.mc-seerr-body');
+        // Le défilement du corps au moment de la touche : l'aller-retour du focus ne doit pas le déplacer.
+        var restore = function () {
+            if (body) {
+                body.scrollTop = backdrop.mcKeep != null ? backdrop.mcKeep : top;
+            }
+        };
+        var guard = function (event) {
+            if (!backdrop.parentNode) {
+                document.removeEventListener('focusin', guard, true);
+                return;
+            }
+
+            if (backdrop.contains(event.target)) {
+                last = event.target;
+            } else if (last && !(event.target.closest && event.target.closest('.dialogContainer, .dialog'))) {
+                last.focus({ preventScroll: true });
+                restore();
+                window.requestAnimationFrame(function () {
+                    restore();
+                    window.setTimeout(restore, 150);
+                });
+            }
+        };
+
+        backdrop.addEventListener('keydown', function () {
+            top = body ? body.scrollTop : 0;
+            backdrop.mcKeep = null;
+        }, true);
+
+        document.addEventListener('focusin', guard, true);
+    }
+
     function wireRequestDialog(backdrop, button, mediaType, tmdbId, name) {
+        keepFocusInside(backdrop);
+
         backdrop.addEventListener('click', function (event) {
             // Un clic hors de la fenêtre la ferme, comme n'importe quelle boîte de dialogue.
             if (event.target === backdrop || event.target.classList.contains('mc-seerr-cancel')) {
