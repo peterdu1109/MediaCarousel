@@ -778,7 +778,11 @@
             '.layout-tv .mc-prefs input:focus,.layout-tv .mc-prefs button:focus,',
             '.layout-tv .mc-seerr-dialog input:focus,.layout-tv .mc-seerr-dialog select:focus,',
             '.layout-tv .mc-seerr-dialog button:focus{outline:3px solid #fff!important;outline-offset:2px;}',
-            '.layout-tv .mc-seerr-opt:focus{outline-offset:-3px;}',
+            '.layout-tv .mc-seerr-opt:focus{outline-offset:-3px;background:#334155;color:#fff;}',
+            '.layout-tv .mc-seerr-opt[aria-selected="true"]:focus{background:var(--mc-accent);color:var(--mc-on-accent);',
+            'box-shadow:inset 10px 0 0 #fff;}',
+            '.layout-tv .mc-seerr-opt[aria-selected="true"]::before{content:"\\2713\\00a0";}',
+            '.layout-tv .mc-seerr-overview[tabindex]:focus{outline:3px solid #fff;outline-offset:4px;}',
 
             /* Flèches de défilement : confort souris, masquées au clavier et au tactile. */
             '.mc-row .mc-arrow{position:absolute;top:0;bottom:0;width:3.2vw;min-width:34px;max-width:72px;',
@@ -1908,6 +1912,7 @@
             if (overview) {
                 overview.textContent = details.Overview || (withLinks ? t('details.none') : '');
                 overview.hidden = !overview.textContent;
+                makeOverviewReadable(backdrop);
             }
 
             // Pas de lien externe à la télécommande : sur Android TV et Tizen il s'ouvre dans une page
@@ -1922,6 +1927,46 @@
                 overview.textContent = t('details.failed');
                 overview.hidden = false;
             }
+        });
+    }
+
+    /**
+     * À la télécommande, un synopsis plus haut que la fenêtre prend le focus et fait défiler le corps
+     * par pages sur Bas/Haut : le texte n'a ni lien ni bouton où poser le focus, donc rien d'autre ne
+     * le faisait défiler. En bout de course, la touche passe à la navigation de Jellyfin.
+     */
+    function makeOverviewReadable(backdrop) {
+        var overview = backdrop.querySelector('.mc-seerr-overview');
+        var body = backdrop.querySelector('.mc-seerr-body');
+
+        if (!overview || !body || layoutCardClass() !== ' show-focus') {
+            return;
+        }
+
+        if (overview.hidden || body.scrollHeight <= body.clientHeight + 1) {
+            overview.removeAttribute('tabindex');
+            return;
+        }
+
+        overview.setAttribute('tabindex', '0');
+
+        if (overview.mcReadable) {
+            return;
+        }
+
+        overview.mcReadable = true;
+        overview.addEventListener('keydown', function (event) {
+            var down = event.keyCode === 40;
+            var max = body.scrollHeight - body.clientHeight;
+
+            if ((!down && event.keyCode !== 38) || (down ? body.scrollTop >= max - 1 : body.scrollTop <= 0)) {
+                return;
+            }
+
+            event.preventDefault();
+            event.stopPropagation();
+            body.scrollTop = Math.max(0, Math.min(max, body.scrollTop
+                + (down ? 1 : -1) * Math.max(40, Math.round(body.clientHeight * 0.8))));
         });
     }
 
@@ -1996,7 +2041,7 @@
 
     /** Premier contrôle visible et actif de la fenêtre, pour le clavier et la télécommande. */
     function focusFirst(backdrop) {
-        var candidates = backdrop.querySelectorAll('.mc-seerr-body input:not([disabled]),'
+        var candidates = backdrop.querySelectorAll('.mc-seerr-overview[tabindex], .mc-seerr-body input:not([disabled]),'
             + ' .mc-seerr-body select, .mc-seerr-link, .mc-seerr-send:not([disabled]), .mc-seerr-cancel');
 
         for (var i = 0; i < candidates.length; i++) {

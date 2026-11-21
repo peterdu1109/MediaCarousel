@@ -1754,7 +1754,7 @@ const serveurSeerr = () => {
           return Promise.reject({ status: 502, json: () => Promise.resolve({ Error: 'offline' }) });
         }
         return Promise.resolve({
-          MediaType: corps.MediaType, TmdbId: corps.TmdbId, Overview: 'Un voleur entre dans les reves.',
+          MediaType: corps.MediaType, TmdbId: corps.TmdbId, Overview: window.__synopsisLong ? Array(60).join('Un voleur entre dans les reves. ') : 'Un voleur entre dans les reves.',
           SeerrUrl: window.__sansLienSeerr ? null : 'https://seer.example.org/' + corps.MediaType + '/' + corps.TmdbId,
           TmdbUrl: 'https://www.themoviedb.org/' + corps.MediaType + '/' + corps.TmdbId
         });
@@ -2679,6 +2679,16 @@ const listeOuverte = await tvListe.evaluate(() => {
   const fond = getComputedStyle(document.querySelector('.mc-seerr-choices:not([hidden])')).backgroundColor;
   return { options: o.map(x => x.textContent), choisie: o.map(x => x.getAttribute('aria-selected')), fond, focus: document.activeElement.className };
 });
+const listeFocus = await tvListe.evaluate(() => {
+  const o = Array.from(document.querySelectorAll('.mc-seerr-choices:not([hidden]) .mc-seerr-opt'));
+  const choisie = o.find(x => x.getAttribute('aria-selected') === 'true');
+  const autre = o.find(x => x !== choisie);
+  const avant = getComputedStyle(autre).backgroundColor;
+  autre.focus();
+  const style = getComputedStyle(autre);
+  return { avant, apres: style.backgroundColor, accent: getComputedStyle(choisie).backgroundColor,
+    coche: getComputedStyle(choisie, '::before').content, contour: style.outlineWidth };
+});
 await tvListe.click('.mc-seerr-choices:not([hidden]) .mc-seerr-opt:nth-child(2)');
 await tvListe.waitForTimeout(300);
 const listeChoix = await tvListe.evaluate(() => ({
@@ -2710,11 +2720,46 @@ await tvListe.waitForTimeout(300);
 const fermeApres = await tvListe.evaluate(() => !document.querySelector('.mc-seerr-backdrop'));
 await tvListe.close();
 
+// Synopsis plus haut que la fenetre : il prend le focus, Bas/Haut font defiler le corps par pages,
+// en bout de course la touche passe a la navigation (essai demande par Elie, 2026-11-21).
+const tvLong = await browser.newPage({ viewport: { width: 960, height: 540 } });
+await enTv(tvLong);
+await tvLong.addInitScript(() => { window.__synopsisLong = true; window.__etats = { 'movie:27205': 'request' }; });
+await tvLong.goto('file://' + path.join(here, 'home.html'));
+await tvLong.evaluate(() => document.documentElement.classList.add('layout-tv'));
+await tvLong.evaluate(serveurSeerr);
+await tvLong.evaluate(script);
+await tvLong.waitForFunction(etatSeerr('27205', 'request'));
+await tvLong.evaluate(() => document.querySelector('.mc-seerr[data-tmdb="27205"]').closest('.card').focus());
+await touche(tvLong, 13, 'Enter');
+await tvLong.waitForSelector('.mc-seerr-overview[tabindex]', { timeout: 4000 });
+await tvLong.waitForTimeout(400);
+const longAvant = await tvLong.evaluate(() => {
+  const b = document.querySelector('.mc-seerr-body');
+  return { focus: document.activeElement.className, haut: b.scrollTop, deborde: b.scrollHeight > b.clientHeight };
+});
+const longBas = await touche(tvLong, 40, 'ArrowDown');
+const longApres = await tvLong.evaluate(() => document.querySelector('.mc-seerr-body').scrollTop);
+for (let i = 0; i < 40; i++) { await touche(tvLong, 40, 'ArrowDown'); }
+const longFin = await tvLong.evaluate(() => {
+  const b = document.querySelector('.mc-seerr-body');
+  return { bout: b.scrollTop >= b.scrollHeight - b.clientHeight - 1, focus: document.activeElement.className };
+});
+const longBoutRepris = await touche(tvLong, 40, 'ArrowDown');
+await tvLong.close();
+
 await browser.close();
 
 let failed = 0;
 const check = (name, ok, got) => { console.log((ok ? 'OK    ' : 'ECHEC ') + name + (ok ? '' : '  -> ' + JSON.stringify(got))); if (!ok) failed++; };
 
+check('TV: liste -> option focalisee se distingue de la choisie (fond, contour) et la choisie porte une coche',
+  listeFocus.apres !== listeFocus.avant && listeFocus.apres !== listeFocus.accent && listeFocus.contour === '3px'
+    && listeFocus.coche.indexOf('✓') !== -1, listeFocus);
+check('TV: synopsis long -> prend le focus au depart', longAvant.deborde && longAvant.focus.includes('mc-seerr-overview') && longAvant.haut <= 24, longAvant);
+check('TV: synopsis long -> Bas fait defiler le corps et garde la touche', longBas === true && longApres > 0, { longBas, longApres });
+check('TV: synopsis long -> on atteint la fin, puis la touche est rendue a la navigation',
+  longFin.bout && longBoutRepris === false, { longFin, longBoutRepris });
 check('AUDIT: exclusions -> chaque requete Items porte une bibliotheque autorisee',
   scopedCalls.length > 0 && scopedCalls.every(c => /ParentId=lib[AB]/.test(c)), scopedCalls);
 check('AUDIT: exclusions -> les deux bibliotheques sont interrogees pour les genres',
