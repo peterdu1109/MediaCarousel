@@ -2758,8 +2758,8 @@ await browser.close();
 let failed = 0;
 const check = (name, ok, got) => { console.log((ok ? 'OK    ' : 'ECHEC ') + name + (ok ? '' : '  -> ' + JSON.stringify(got))); if (!ok) failed++; };
 
-check('TV: liste -> option focalisee se distingue de la choisie (fond, contour) et la choisie porte une coche',
-  listeFocus.apres !== listeFocus.avant && listeFocus.apres !== listeFocus.accent && listeFocus.contour === '3px'
+check('TV: liste -> option focalisee se distingue de la choisie (fond, barre, sans trait blanc) et la choisie porte une coche',
+  listeFocus.apres !== listeFocus.avant && listeFocus.apres !== listeFocus.accent && listeFocus.contour === '0px'
     && listeFocus.coche.indexOf('✓') !== -1, listeFocus);
 check('TV: synopsis long -> prend le focus au depart', longAvant.deborde && longAvant.focus.includes('mc-seerr-overview') && longAvant.haut === 0, longAvant);
 check('TV: un focus envoye hors de la fenetre y revient (tvfocus.js envoie Haut sur la barre du haut)', longHors === true, longHors);

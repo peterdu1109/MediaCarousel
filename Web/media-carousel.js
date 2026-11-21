@@ -778,7 +778,7 @@
             '.layout-tv .mc-prefs input:focus,.layout-tv .mc-prefs button:focus,',
             '.layout-tv .mc-seerr-dialog input:focus,.layout-tv .mc-seerr-dialog select:focus,',
             '.layout-tv .mc-seerr-dialog button:focus{outline:3px solid #fff!important;outline-offset:2px;}',
-            '.layout-tv .mc-seerr-opt:focus{outline-offset:-3px;background:#475569;color:#fff;box-shadow:inset 10px 0 0 #fff;}',
+            '.layout-tv .mc-seerr-dialog .mc-seerr-opt:focus{outline:0!important;background:#475569;color:#fff;box-shadow:inset 10px 0 0 #fff;}',
             '.layout-tv .mc-seerr-opt[aria-selected="true"]:focus{background:var(--mc-accent);color:var(--mc-on-accent);',
             'box-shadow:inset 10px 0 0 #fff;}',
             '.layout-tv .mc-seerr-opt[aria-selected="true"]::before{content:"\\2713\\00a0";}',
