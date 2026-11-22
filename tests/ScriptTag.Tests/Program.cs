@@ -174,6 +174,29 @@ Check("B2: vu des deux bibliotheques, Warner vaut 3", warner.CountIn(new[] { fil
 Check("B2: sans aucune bibliotheque visible, Warner disparait", warner.CountIn(Array.Empty<Guid>()) == 0);
 Check("B2: Universal est invisible depuis la jeunesse", studios.Buckets[StudioNameNormalizer.Normalize("Universal Pictures")].CountIn(new[] { jeunesse }) == 0);
 
+// Synopsis Seerr : la langue vient du client, la memoire ne doit pas grossir sans limite.
+var overviewCache = new BoundedCache<string?>(TimeSpan.FromHours(1), 100);
+var cacheNow = new DateTime(2026, 11, 22, 12, 0, 0, DateTimeKind.Utc);
+for (var i = 0; i < 10000; i++)
+{
+    overviewCache.Set("movie:1|l" + i, "x", cacheNow);
+}
+
+Check("CACHE: 10000 cles distinctes, la memoire reste au plafond", overviewCache.Count <= 100);
+Check("CACHE: une entree gardee est servie", overviewCache.TryGet("movie:1|l0", cacheNow, out _));
+Check("CACHE: une cle refusee faute de place n'est pas servie", !overviewCache.TryGet("movie:1|l9999", cacheNow, out _));
+Check("CACHE: une entree expiree n'est pas servie", !overviewCache.TryGet("movie:1|l0", cacheNow.AddHours(2), out _));
+overviewCache.Set("movie:2|fr", "y", cacheNow.AddHours(2));
+Check("CACHE: les entrees expirees liberent la place", overviewCache.TryGet("movie:2|fr", cacheNow.AddHours(2), out _) && overviewCache.Count < 100);
+// Temoin : le dictionnaire d'avant le correctif, sans plafond, atteignait 10000 entrees.
+var unbounded = new System.Collections.Concurrent.ConcurrentDictionary<string, string>();
+for (var i = 0; i < 10000; i++)
+{
+    unbounded["movie:1|l" + i] = "x";
+}
+
+Check("CACHE: temoin, sans plafond la memoire atteint 10000", unbounded.Count == 10000);
+
 // Les genres se regroupent a la casse pres, et s'additionnent aussi (regression A2).
 var genres = NewGenreCounter();
 genres.Add("Science-Fiction", filmotheque);
@@ -1285,6 +1308,14 @@ Check("DROITS: Status refuse un compte restreint",
     System.Text.RegularExpressions.Regex.Matches(codeSeerr, @"if \(!ShowsAbsentTitles\(\)\)").Count == 1);
 Check("DROITS: Seasons, Details, Request et Options refusent un compte restreint, avant le titre",
     System.Text.RegularExpressions.Regex.Matches(codeSeerr, @"SeerrRules\.RefusalStatus\(\s*ShowsAbsentTitles\(\)").Count == 4);
+
+// Un recalcul annule apres la creation d'une collection garde son identifiant : l'ecriture
+// est dans le finally, sinon le passage suivant recree une collection du meme nom.
+var codeRecalculIds = CodeSansCommentaires(Path.Combine("Services", "TopListRefreshService.cs"));
+var debutFinally = codeRecalculIds.IndexOf("finally", StringComparison.Ordinal);
+var ecriture = codeRecalculIds.IndexOf("plugin.SaveCollectionIds(", StringComparison.Ordinal);
+Check("COLLECTIONS: les identifiants sont enregistres dans le finally du recalcul",
+    debutFinally >= 0 && ecriture > debutFinally && ecriture < codeRecalculIds.IndexOf("_gate.Release()", StringComparison.Ordinal));
 
 // R3 : un Seerr muet n'est pas reinterroge a chaque titre pendant OfflineMemory.
 var memoire = new OfflineMemory(TimeSpan.FromSeconds(45));

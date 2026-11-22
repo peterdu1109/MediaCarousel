@@ -85,6 +85,7 @@ public sealed class SeerrClient
     private static readonly TimeSpan UserMiss = TimeSpan.FromMinutes(1);
     private static readonly TimeSpan StateLifetime = TimeSpan.FromMinutes(1);
     private static readonly TimeSpan OverviewLifetime = TimeSpan.FromHours(1);
+    private const int OverviewCapacity = 2000;
     private static readonly TimeSpan OfflineLifetime = TimeSpan.FromSeconds(45);
     private static readonly TimeSpan SettingsLifetime = TimeSpan.FromMinutes(10);
     private static readonly TimeSpan ServersLifetime = TimeSpan.FromMinutes(5);
@@ -93,7 +94,7 @@ public sealed class SeerrClient
     private readonly ILogger<SeerrClient> _logger;
     private readonly ConcurrentDictionary<Guid, (int? Id, DateTime At)> _users = new();
     private readonly ConcurrentDictionary<string, (string State, DateTime At)> _states = new(StringComparer.Ordinal);
-    private readonly ConcurrentDictionary<string, (string? Overview, DateTime At)> _overviews = new(StringComparer.Ordinal);
+    private readonly BoundedCache<string?> _overviews = new(OverviewLifetime, OverviewCapacity);
     private readonly OfflineMemory _offline = new(OfflineLifetime);
     private (string BaseUrl, bool PartialRequests, bool SpecialEpisodes, DateTime At)? _settings;
     private readonly ConcurrentDictionary<string, (IReadOnlyList<SeerrServer> Servers, DateTime At)> _servers = new(StringComparer.Ordinal);
@@ -199,9 +200,9 @@ public sealed class SeerrClient
     {
         var key = StateKey(mediaType, tmdbId) + "|" + (language ?? string.Empty);
 
-        if (_overviews.TryGetValue(key, out var cached) && DateTime.UtcNow - cached.At < OverviewLifetime)
+        if (_overviews.TryGet(key, DateTime.UtcNow, out var cached))
         {
-            return (cached.Overview, SeerrFailure.None);
+            return (cached, SeerrFailure.None);
         }
 
         if (_offline.IsOffline(baseUrl, DateTime.UtcNow))
@@ -225,7 +226,7 @@ public sealed class SeerrClient
         try
         {
             var overview = SeerrRules.ReadOverview(body!);
-            _overviews[key] = (overview, DateTime.UtcNow);
+            _overviews.Set(key, overview, DateTime.UtcNow);
             return (overview, SeerrFailure.None);
         }
         catch (JsonException)

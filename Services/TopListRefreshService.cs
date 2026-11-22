@@ -108,11 +108,14 @@ public sealed class TopListRefreshService
         _health.BeginRun();
         RunStarting?.Invoke(this, EventArgs.Empty);
 
+        // Hors du try : un recalcul annulé après la création d'une collection doit tout de même
+        // en garder l'identifiant, sans quoi le passage suivant en recrée une du même nom.
+        string? localCollectionId = null;
+        string? globalCollectionId = null;
+
         try
         {
             var config = plugin.Configuration;
-            string? localCollectionId = null;
-            string? globalCollectionId = null;
 
             progress?.Report(0);
 
@@ -147,6 +150,10 @@ public sealed class TopListRefreshService
 
             PurgePosterCache();
 
+            progress?.Report(100);
+        }
+        finally
+        {
             // Seuls les identifiants sont écrits, sur les réglages du moment : un enregistrement
             // fait pendant le recalcul n'est plus remplacé par les réglages lus à son départ.
             if (localCollectionId is not null || globalCollectionId is not null)
@@ -154,10 +161,6 @@ public sealed class TopListRefreshService
                 plugin.SaveCollectionIds(localCollectionId, globalCollectionId);
             }
 
-            progress?.Report(100);
-        }
-        finally
-        {
             _health.EndRun();
             _gate.Release();
         }
