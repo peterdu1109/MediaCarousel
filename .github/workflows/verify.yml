@@ -5,9 +5,9 @@ name: Verify
 # Build & Release l'appelle aussi, et ne publie que si elle passe.
 on:
   push:
-    branches: [jellyfin-12]
+    branches: [main]
   pull_request:
-    branches: [jellyfin-12]
+    branches: [main]
   workflow_dispatch:
   workflow_call:
 

@@ -1,9 +1,8 @@
 name: Build & Release
 
+# Lancement a la main seulement : la ligne 12 vit sur main depuis la fusion du 2026-11-22, et un push
+# sur main ne doit pas publier de version.
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
 
 permissions:
@@ -211,7 +210,7 @@ jobs:
             echo "---"
             echo
             echo "Jellyfin 12.0 ou plus recent. Installation :"
-            echo "[README de la ligne 12](https://github.com/peterdu1109/MediaCarousel/tree/jellyfin-12#readme)."
+            echo "[README de la ligne 12](https://github.com/peterdu1109/MediaCarousel/tree/main#readme)."
           } > "$N"
 
           gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
