@@ -881,7 +881,7 @@
         var label = opts.ariaLabel || opts.name || '';
         var imageClasses = 'cardImageContainer cardContent' + (opts.contain ? '' : ' coveredImage');
         var style = opts.imageUrl
-            ? ' style="background-image:url(&#39;' + escapeHtml(cssUrl(opts.imageUrl)) + '&#39;)"'
+            ? ' data-mc-bg="' + escapeHtml(cssUrl(opts.imageUrl)) + '"'
             : '';
 
         var inner = opts.inner || '';
@@ -1839,6 +1839,10 @@
 
         // L'affiche du titre sert de fond à l'en-tête, sous le même voile sombre que chez
         // Jellyfin Enhanced : elle est déjà relayée par le serveur, TMDB ne voit pas le visiteur.
+        if (poster) {
+            revealPoster(poster);
+        }
+
         if (poster && poster.style.backgroundImage) {
             backdrop.querySelector('.mc-seerr-head').style.backgroundImage = poster.style.backgroundImage;
         }
@@ -2006,6 +2010,10 @@
             + (withNext ? '<button type="button" class="mc-seerr-next">'
                 + t(mediaType === 'tv' ? 'details.choose' : 'dialog.send') + '</button>' : '')
             + '</div></div>';
+
+        if (poster) {
+            revealPoster(poster);
+        }
 
         if (poster && poster.style.backgroundImage) {
             backdrop.querySelector('.mc-seerr-head').style.backgroundImage = poster.style.backgroundImage;
@@ -2824,7 +2832,71 @@
      * deja en cache est marquee immediatement, une image en erreur aussi — une
      * vignette cassee vaut mieux qu'une vignette invisible pour toujours.
      */
+    function revealPoster(node) {
+        var url = node.getAttribute('data-mc-bg');
+
+        if (url) {
+            node.removeAttribute('data-mc-bg');
+            node.style.backgroundImage = "url('" + url + "')";
+        }
+    }
+
+    /**
+     * Une affiche n'est demandée qu'à l'approche de sa carte : posée en fond dès l'insertion, elle
+     * était téléchargée même hors écran (environ 70 affiches à l'accueil par défaut, dont une
+     * quinzaine visibles). Les cartes natives de Jellyfin sont différées de la même façon.
+     */
+    function deferPosters(root, attempt) {
+        var pending = root.querySelectorAll('[data-mc-bg]');
+
+        if (!pending.length) {
+            return;
+        }
+
+        // Observée avant d'être dans la page, une carte ne reçoit jamais de notification
+        // (constaté dans Chromium) : la rangée est construite hors du document, puis placée.
+        // On attend qu'elle y soit ; au bout de dix secondes, on charge tout comme avant.
+        if (!root.isConnected) {
+            if ((attempt || 0) < 50) {
+                window.setTimeout(function () {
+                    deferPosters(root, (attempt || 0) + 1);
+                }, 200);
+                return;
+            }
+
+            for (var m = 0; m < pending.length; m++) {
+                revealPoster(pending[m]);
+            }
+            return;
+        }
+
+        if (typeof window.IntersectionObserver !== 'function') {
+            for (var i = 0; i < pending.length; i++) {
+                revealPoster(pending[i]);
+            }
+            return;
+        }
+
+        // Un observateur par bande, relâché dès que sa dernière affiche est chargée.
+        if (!root.mcPosterObserver) {
+            root.mcPosterObserver = new window.IntersectionObserver(function (entries) {
+                for (var j = 0; j < entries.length; j++) {
+                    if (entries[j].isIntersecting) {
+                        root.mcPosterObserver.unobserve(entries[j].target);
+                        revealPoster(entries[j].target);
+                    }
+                }
+            }, { rootMargin: '300px 500px' });
+        }
+
+        for (var k = 0; k < pending.length; k++) {
+            root.mcPosterObserver.observe(pending[k]);
+        }
+    }
+
     function watchImages(root) {
+        deferPosters(root);
+
         function ready(img) {
             img.className += img.className.indexOf('mc-ready') === -1 ? ' mc-ready' : '';
         }

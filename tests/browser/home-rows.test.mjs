@@ -181,6 +181,8 @@ await page.evaluate(() => {
   window.__observateursActifs = 0;
   window.IntersectionObserver = function (cb, opts) {
     const o = new Natif(cb, opts);
+    // L'observateur des affiches est unique et permanent par conception : il ne compte pas ici.
+    if (opts && opts.rootMargin === '300px 500px') { return o; }
     let actif = false;
     const observe = o.observe.bind(o);
     const disconnect = o.disconnect.bind(o);
@@ -192,6 +194,18 @@ await page.evaluate(() => {
 await page.evaluate(script);
 await page.waitForFunction(() => document.querySelectorAll('.mc-row').length === 10, { timeout: 8000 });
 
+// Affiches differees : celles qui sont a l'ecran se chargent, celles qui sont loin a droite ou en bas attendent.
+await page.waitForFunction(
+  () => Array.from(document.querySelectorAll('.mc-row .cardImageContainer')).some(n => n.style.backgroundImage),
+  { timeout: 4000 });
+const differees = await page.evaluate(() => {
+  const toutes = Array.from(document.querySelectorAll('.mc-row .cardImageContainer'));
+  return {
+    chargees: toutes.filter(n => n.style.backgroundImage).length,
+    enAttente: toutes.filter(n => n.hasAttribute('data-mc-bg')).length,
+    total: toutes.length
+  };
+});
 // Avant tout defilement, les rangees de genre differees montrent des silhouettes.
 const beforeScroll = await page.evaluate(() => {
   const rows = Array.from(document.querySelectorAll('.mc-row'));
@@ -1104,7 +1118,7 @@ const styling = await sizing.evaluate(() => {
     readyOpacity: getComputedStyle(document.querySelector('.mc-row img.mc-ready')).opacity,
     postersAreBackgrounds: Array.prototype.every.call(
       document.querySelectorAll('.mc-row .mc-ranked .cardImageContainer'),
-      el => getComputedStyle(el).backgroundImage !== 'none'),
+      el => getComputedStyle(el).backgroundImage !== 'none' || el.hasAttribute('data-mc-bg')),
 
     snapType: getComputedStyle(document.querySelector('.mc-row .mc-strip')).scrollSnapType,
 
@@ -3075,6 +3089,7 @@ check('TIZEN: la bande n utilise pas `gap` (absent avant Chromium 84)',
 check('PARITE: l espacement entre cartes est celui de Jellyfin',
   styling.cardPadding === styling.nativeCardPadding,
   [styling.cardPadding, styling.nativeCardPadding]);
+check('AFFICHES: seules les cartes proches de l ecran chargent leur image', differees.chargees > 0 && differees.enAttente > 0, differees);
 check('PARITE: les affiches sont des fonds CSS, comme chez Jellyfin',
   styling.postersAreBackgrounds === true, styling.postersAreBackgrounds);
 check('TIZEN: le contour de focus tient sur :focus seul',
