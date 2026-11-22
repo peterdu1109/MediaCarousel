@@ -760,6 +760,12 @@
             /* TV : la télécommande ne fait pas défiler la fenêtre. Un titre long passe sur deux
                lignes (l'en-tête grandit au besoin). */
             '.layout-tv .mc-seerr-head{height:auto;min-height:8em;}',
+            /* TV : html.layout-tv met 1rem à 20 px, le minimum de Jellyfin pour une télévision
+               (fonts.scss). Les petits textes de la fenêtre de demande montent à 1rem, et une saison
+               verrouillée reste lisible (le contraste à .6 tombait vers 3:1). */
+            '.layout-tv .mc-seerr-season-year,.layout-tv .mc-seerr-season-episodes,',
+            '.layout-tv .mc-seerr-season-state,.layout-tv .mc-seerr-link,.layout-tv .mc-seerr-foot button{font-size:1rem;}',
+            '.layout-tv .mc-seerr-season.mc-seerr-season-locked{opacity:.8;}',
             '.layout-tv .mc-seerr-subtitle{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;',
             '-webkit-box-orient:vertical;}',
             /* Liste à nous à la télécommande : la liste d'Android est blanche et ne se colore pas. */
@@ -4025,6 +4031,8 @@
             + '</div>';
 
         backdrop.className = 'mc-prefs-backdrop';
+        // Sans ce garde, Haut depuis la première case envoie le focus derrière le panneau (tvfocus.js).
+        keepFocusInside(backdrop);
         backdrop.innerHTML = html;
         document.body.appendChild(backdrop);
         markDialogInHistory(backdrop);
@@ -4074,8 +4082,12 @@
 
             if (event.target.classList.contains('mc-prefs-reset')) {
                 sendPreferences('DELETE').then(function () {
+                    var hadFocus = backdrop.contains(document.activeElement);
                     closePreferences();
                     rerender();
+                    if (hadFocus) {
+                        focusPrefsTileLater();
+                    }
                 }, function (error) {
                     log('réinitialisation impossible', error);
                 });
@@ -4084,8 +4096,12 @@
 
             if (event.target.classList.contains('mc-prefs-save')) {
                 sendPreferences('POST', collectPreferences(backdrop)).then(function () {
+                    var hadFocus = backdrop.contains(document.activeElement);
                     closePreferences();
                     rerender();
+                    if (hadFocus) {
+                        focusPrefsTileLater();
+                    }
                 }, function (error) {
                     log('enregistrement impossible', error);
                 });
@@ -4106,6 +4122,29 @@
         void order;
     }
 
+    /**
+     * Les rangées sont reconstruites après un enregistrement : la tuile « Mes rangées » en cache
+     * l'ancienne, qui portait le focus. Dès que la nouvelle existe, le focus y revient, si rien
+     * d'autre ne l'a pris entre-temps.
+     */
+    function focusPrefsTileLater() {
+        var tries = 0;
+        var timer = window.setInterval(function () {
+            tries++;
+            var tile = document.querySelector('.mc-prefs-tile');
+            var active = document.activeElement;
+            var free = !active || active === document.body;
+
+            if (tile && free) {
+                tile.focus();
+            }
+
+            if ((tile && free) || !free || tries >= 25) {
+                window.clearInterval(timer);
+            }
+        }, 200);
+    }
+
     function moveRow(backdrop, button) {
         var item = button.closest('li');
         var up = button.classList.contains('mc-prefs-up');
@@ -4123,8 +4162,13 @@
 
         refreshMoveButtons(backdrop);
         var same = item.querySelector(up ? '.mc-prefs-up' : '.mc-prefs-down');
+        // En bout de liste la flèche cliquée se désactive : le focus passe à l'autre flèche de la
+        // ligne, sinon il tombait sur le corps de la page.
+        var other = item.querySelector(up ? '.mc-prefs-down' : '.mc-prefs-up');
         if (same && !same.disabled) {
             same.focus();
+        } else if (other && !other.disabled) {
+            other.focus();
         }
     }
 

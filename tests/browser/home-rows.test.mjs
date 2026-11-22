@@ -860,6 +860,23 @@ const ouvert = await prefsPage.evaluate(() => {
   };
 });
 
+// Foyer en bout de liste : la derniere place desactive la fleche cliquee, le focus passe a
+// l'autre fleche de la ligne au lieu de tomber sur le corps de la page.
+const focusBout = await prefsPage.evaluate(() => {
+  const items = Array.from(document.querySelectorAll('.mc-prefs li'));
+  const bouton = items[items.length - 2].querySelector('.mc-prefs-down');
+  bouton.focus();
+  bouton.click();
+  const actif = document.activeElement;
+  const resultat = {
+    surLaLigne: !!actif && actif.closest('li') === document.querySelectorAll('.mc-prefs li')[items.length - 1],
+    surUneFleche: !!actif && actif.classList.contains('mc-prefs-up'),
+    pasLeCorps: actif !== document.body
+  };
+  actif.click();
+  return resultat;
+});
+
 // On decoche la premiere rangee, on descend la deuxieme, puis on enregistre.
 await prefsPage.evaluate(() => {
   document.querySelector('.mc-prefs li input[type=checkbox]').checked = false;
@@ -2409,6 +2426,19 @@ const tvFenetre = await tvSeerr.evaluate(() => ({
   conteneur: document.querySelector('.mc-seerr-dialog').classList.contains('focuscontainer'),
   coche: document.activeElement.checked
 }));
+// Jellyfin met 1rem a 20 px en TV (fonts.scss : .layout-tv { font-size: 125% }) : les petits textes
+// de la fenetre ne descendent pas sous ce minimum.
+const tvTailles = await tvSeerr.evaluate(() => {
+  document.documentElement.style.fontSize = '125%';
+  const taille = (sel) => { const n = document.querySelector(sel); return n ? parseFloat(getComputedStyle(n).fontSize) : null; };
+  return {
+    annee: taille('.mc-seerr-season-year'),
+    episodes: taille('.mc-seerr-season-episodes'),
+    etat: taille('.mc-seerr-season-state'),
+    pied: taille('.mc-seerr-foot button'),
+    css: document.getElementById('mc-styles').textContent
+  };
+});
 await touche(tvSeerr, 13, 'Enter');
 const saisonCochee = await tvSeerr.evaluate(() => document.activeElement.checked);
 const retourSeerr = await touche(tvSeerr, 10009, '');
@@ -3002,6 +3032,10 @@ check('PREFS: couleur et echelle accompagnent l envoi',
   /^#[0-9a-f]{3,8}$/i.test(enregistre.couleur) && enregistre.echelle === 100, enregistre);
 check('PREFS: le panneau se ferme apres enregistrement', enregistre.ferme === true, enregistre);
 check('PREFS: la reinitialisation part en DELETE', reinitialise === 'DELETE', reinitialise);
+check('TV: les petits textes de la fenetre de demande font 20 px au moins',
+  [tvTailles.episodes, tvTailles.pied].every(v => v >= 20) && [tvTailles.annee, tvTailles.etat].every(v => v === null || v >= 20), tvTailles);
+check('TV: une saison verrouillee reste lisible (opacite .8)', /\.layout-tv \.mc-seerr-season\.mc-seerr-season-locked\{opacity:\.8;\}/.test(tvTailles.css));
+check('PREFS: en bout de liste, le focus reste sur une fleche de la meme ligne', focusBout.surLaLigne && focusBout.surUneFleche && focusBout.pasLeCorps, focusBout);
 check('PREFS: sans autorisation du serveur, aucun bouton', prefsInterdites === 0, prefsInterdites);
 
 check('VISUEL: silhouettes en place avant le chargement differe',
