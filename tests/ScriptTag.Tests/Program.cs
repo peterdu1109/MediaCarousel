@@ -168,11 +168,17 @@ Check("STUDIOS: deux groupes seulement", studios.Buckets.Count == 2);
 Check("STUDIOS: 2 titres Warner en filmotheque", warner.ByLibrary[filmotheque] == 2);
 Check("STUDIOS: 1 titre Warner en jeunesse", warner.ByLibrary[jeunesse] == 1);
 
-// B2 : un utilisateur qui ne voit que la jeunesse ne compte que ce qu'il peut ouvrir.
-Check("B2: vu de la jeunesse seule, Warner vaut 1", warner.CountIn(new[] { jeunesse }) == 1);
-Check("B2: vu des deux bibliotheques, Warner vaut 3", warner.CountIn(new[] { filmotheque, jeunesse }) == 3);
-Check("B2: sans aucune bibliotheque visible, Warner disparait", warner.CountIn(Array.Empty<Guid>()) == 0);
-Check("B2: Universal est invisible depuis la jeunesse", studios.Buckets[StudioNameNormalizer.Normalize("Universal Pictures")].CountIn(new[] { jeunesse }) == 0);
+// B2 : un utilisateur qui ne voit que la jeunesse ne compte que ce qu'il peut ouvrir. Le filtre
+// est celui de la production, CatalogVisibility.Count, sur la ventilation du decompte.
+int CountIn(CatalogCount bucket, IReadOnlyCollection<Guid> ids) =>
+    CatalogVisibility.Count(
+        new CatalogEntry { Name = "B2", ItemCount = bucket.Total, CountsByLibrary = new Dictionary<Guid, int>(bucket.ByLibrary) },
+        ids);
+
+Check("B2: vu de la jeunesse seule, Warner vaut 1", CountIn(warner, new[] { jeunesse }) == 1);
+Check("B2: vu des deux bibliotheques, Warner vaut 3", CountIn(warner, new[] { filmotheque, jeunesse }) == 3);
+Check("B2: sans aucune bibliotheque visible, Warner disparait", CountIn(warner, Array.Empty<Guid>()) == 0);
+Check("B2: Universal est invisible depuis la jeunesse", CountIn(studios.Buckets[StudioNameNormalizer.Normalize("Universal Pictures")], new[] { jeunesse }) == 0);
 
 // Synopsis Seerr : la langue vient du client, la memoire ne doit pas grossir sans limite.
 var overviewCache = new BoundedCache<string?>(TimeSpan.FromHours(1), 100);

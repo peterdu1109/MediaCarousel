@@ -128,25 +128,4 @@ public sealed class CatalogCount
         _byVariant.TryGetValue(variant, out var variantCount);
         _byVariant[variant] = variantCount + 1;
     }
-
-    /// <summary>
-    /// Additionne les décomptes des bibliothèques indiquées.
-    /// </summary>
-    /// <param name="libraryIds">Bibliothèques à prendre en compte.</param>
-    /// <returns>Le nombre de titres visibles dans ces bibliothèques.</returns>
-    public int CountIn(IReadOnlyCollection<Guid> libraryIds)
-    {
-        ArgumentNullException.ThrowIfNull(libraryIds);
-
-        var total = 0;
-        foreach (var libraryId in libraryIds)
-        {
-            if (_byLibrary.TryGetValue(libraryId, out var count))
-            {
-                total += count;
-            }
-        }
-
-        return total;
-    }
 }
