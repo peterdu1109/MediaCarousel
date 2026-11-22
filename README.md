@@ -3,7 +3,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fpeterdu1109%2FMediaCarousel%2Fmain%2Fmanifest.json&query=%24%5B0%5D.versions%5B0%5D.version&label=version&color=blue&cacheSeconds=3600" alt="Version">
   <img src="https://img.shields.io/badge/.NET-10.0%20%7C%209.0-purple" alt=".NET">
-  <img src="https://img.shields.io/badge/Jellyfin-12.x%20%7C%2010.11.x-blueviolet" alt="Jellyfin">
+  <img src="https://img.shields.io/badge/Jellyfin-12.x-blueviolet" alt="Jellyfin">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
   <img src="https://img.shields.io/github/stars/peterdu1109/MediaCarousel?style=flat&color=yellow&cacheSeconds=3600" alt="GitHub stars">
   <img src="https://img.shields.io/github/downloads/peterdu1109/MediaCarousel/total?color=brightgreen&cacheSeconds=3600" alt="Downloads">
@@ -58,13 +58,14 @@ Media Carousel adds ranked rows under your libraries, like on streaming platform
 > [!IMPORTANT]
 > **Requirements:**
 > * Jellyfin **12.x**
-> * Jellyfin **10.11.x** (with Media Carousel 3.15.1, no longer updated)
+>
+> On Jellyfin 10.11, Media Carousel stays at version 3.15.1 and is no longer updated.
 >
 > 📺 **On TV:** the rows only show if the TV app loads the server's web interface. The Samsung (Tizen) and LG (webOS) apps carry their own copy and don't show them.
 
 ### Steps
 1.  Open **Dashboard → Plugins → Repositories**.
-2.  Add this repository, the same for 12.x and 10.11.x:
+2.  Add this repository:
     ```
     https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/manifest.json
     ```
@@ -168,13 +169,14 @@ Media Carousel ajoute sous tes bibliothèques des rangées classées, comme sur 
 > [!IMPORTANT]
 > **Prérequis :**
 > * Jellyfin **12.x**
-> * Jellyfin **10.11.x** (avec Media Carousel 3.15.1, qui n'est plus mis à jour)
+>
+> Sur Jellyfin 10.11, Media Carousel reste à la version 3.15.1 et n'est plus mis à jour.
 >
 > 📺 **Sur la télé :** les rangées n'apparaissent que si l'appli charge l'interface web du serveur. Les applis Samsung (Tizen) et LG (webOS) ont leur propre copie et ne les affichent pas.
 
 ### Étapes
 1.  Ouvre **Tableau de bord → Extensions → Dépôts**.
-2.  Ajoute ce dépôt, le même pour 12.x et 10.11.x :
+2.  Ajoute ce dépôt :
     ```
     https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/manifest.json
     ```
