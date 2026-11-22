@@ -717,6 +717,9 @@
             'margin:0 0 0 1em;padding:1em .6em;border:0;border-radius:8px;cursor:pointer;',
             'background:rgba(255,255,255,.08);color:#fff;font:inherit;text-align:center;line-height:1.3;}',
             '.mc-row .mc-prefs-tile-icon{display:block;font-size:2.4em;margin-bottom:.3em;opacity:.8;}',
+            /* Le libellé passe à la ligne dans la tuile (sinon il sort du contour). */
+            '.mc-row .mc-prefs-tile{box-sizing:border-box;white-space:normal;overflow-wrap:break-word;}',
+            '.mc-row .mc-prefs-tile-label{display:block;white-space:normal;overflow-wrap:break-word;}',
             '.mc-row .mc-prefs-tile:focus{outline:3px solid #fff;outline-offset:2px;',
             'background:rgba(255,255,255,.18);}',
 
@@ -4348,7 +4351,7 @@
         tile.type = 'button';
         tile.className = 'mc-prefs-tile';
         tile.innerHTML = '<span class="mc-prefs-tile-icon" aria-hidden="true">' + GEAR_ICON + '</span>'
-            + '<span>' + t('prefs.open') + '</span>';
+            + '<span class="mc-prefs-tile-label">' + t('prefs.open') + '</span>';
         tile.addEventListener('click', function () {
             openPreferences(opts);
         });
