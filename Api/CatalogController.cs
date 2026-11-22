@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Jellyfin.Data;
 using JellyfinCarouselPlugin.Models;
 using JellyfinCarouselPlugin.Services;
 using MediaBrowser.Controller.Dto;
@@ -80,7 +81,7 @@ public class CatalogController : ControllerBase
     {
         var snapshot = _store.Get(kind);
         var take = Math.Clamp(limit ?? snapshot.Entries.Count, 0, 100);
-        var visibleLibraries = ResolveVisibleLibraries(ResolveUser());
+        var visibleLibraries = ResolveVisibleLibraries();
 
         var entries = new List<CatalogEntryDto>(Math.Min(take, snapshot.Entries.Count));
         var items = new List<BaseItem>();
@@ -93,7 +94,7 @@ public class CatalogController : ControllerBase
 
         foreach (var entry in snapshot.Entries)
         {
-            var count = CountVisible(entry, visibleLibraries);
+            var count = CatalogVisibility.Count(entry, visibleLibraries);
             if (count > 0)
             {
                 visible.Add((entry, count));
@@ -159,46 +160,32 @@ public class CatalogController : ControllerBase
     }
 
     /// <summary>
-    /// Additionne les titres d'une entrée dans les seules bibliothèques visibles.
+    /// Énumère les bibliothèques que l'appelant a le droit de voir.
     /// </summary>
-    /// <remarks>
-    /// Une entrée agrégée avant la mise à jour ne porte aucune ventilation : sa provenance
-    /// est inconnue, pas vide. On la laisse alors passer avec son total d'origine plutôt que
-    /// de vider les rangées entre le redémarrage et le premier recalcul.
-    /// </remarks>
-    private static int CountVisible(CatalogEntry entry, IReadOnlyCollection<Guid>? visibleLibraries)
+    /// <returns>
+    /// Les identifiants des bibliothèques visibles, ou <see langword="null"/> si le filtrage ne
+    /// s'applique pas : clé d'API, ou compte qu'aucune règle ne restreint.
+    /// </returns>
+    private IReadOnlyCollection<Guid>? ResolveVisibleLibraries()
     {
-        if (entry.CountsByLibrary.Count == 0)
+        var claim = User.Claims.FirstOrDefault(c => string.Equals(c.Type, UserIdClaim, StringComparison.OrdinalIgnoreCase))?.Value;
+
+        // Une clé d'API n'est rattachée à aucun utilisateur et vaut administrateur : rien à filtrer.
+        if (!Guid.TryParse(claim, out var guid) || guid == Guid.Empty)
         {
-            return entry.ItemCount;
+            return null;
         }
 
-        // Pas d'utilisateur rattaché — une clé d'API, par exemple : rien à filtrer.
-        if (visibleLibraries is null)
-        {
-            return entry.ItemCount;
-        }
-
-        var total = 0;
-        foreach (var libraryId in visibleLibraries)
-        {
-            if (entry.CountsByLibrary.TryGetValue(libraryId, out var count))
-            {
-                total += count;
-            }
-        }
-
-        return total;
-    }
-
-    /// <summary>
-    /// Énumère les bibliothèques que cet utilisateur a le droit de voir.
-    /// </summary>
-    /// <param name="user">Utilisateur appelant, ou <see langword="null"/> pour une clé d'API.</param>
-    /// <returns>Les identifiants des bibliothèques visibles, ou <see langword="null"/> si le filtrage ne s'applique pas.</returns>
-    private IReadOnlyCollection<Guid>? ResolveVisibleLibraries(Jellyfin.Database.Implementations.Entities.User? user)
-    {
+        // Un jeton dont le compte est introuvable ne vaut pas une clé d'API : rien n'est publié.
+        var user = _userManager.GetUserById(guid);
         if (user is null)
+        {
+            return Array.Empty<Guid>();
+        }
+
+        // Sans restriction, le total du serveur est le sien, y compris pour une entrée
+        // agrégée avant la ventilation par bibliothèque.
+        if (!user.HasContentRestrictions())
         {
             return null;
         }
@@ -215,16 +202,6 @@ public class CatalogController : ControllerBase
             // Faute de pouvoir établir les droits, on ne publie rien plutôt que de publier trop.
             return Array.Empty<Guid>();
         }
-    }
-
-    private Jellyfin.Database.Implementations.Entities.User? ResolveUser()
-    {
-        var claim = User.Claims.FirstOrDefault(c => string.Equals(c.Type, UserIdClaim, StringComparison.OrdinalIgnoreCase))?.Value;
-
-        // Une clé d'API n'est rattachée à aucun utilisateur : la visibilité n'est alors pas filtrée.
-        return Guid.TryParse(claim, out var guid) && guid != Guid.Empty
-            ? _userManager.GetUserById(guid)
-            : null;
     }
 
     /// <summary>

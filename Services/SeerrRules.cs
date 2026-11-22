@@ -63,6 +63,19 @@ public static class SeerrRules
     /// <summary>« Non demandé » : état d'une saison que personne n'a demandée.</summary>
     public const string StateNotRequested = "not-requested";
 
+    /// <summary>
+    /// Statut de refus d'une requête Seerr, ou <c>null</c> si elle peut suivre son cours.
+    /// </summary>
+    /// <remarks>
+    /// Le refus des comptes restreints (403) passe avant l'examen de la requête (400) : sinon
+    /// l'un ou l'autre leur apprendrait quels titres figurent dans le Top publié.
+    /// </remarks>
+    /// <param name="showsAbsentTitles">Le compte voit les titres absents de la bibliothèque.</param>
+    /// <param name="requestIsValid">La requête désigne un titre publié, du bon type.</param>
+    /// <returns>403, 400, ou <c>null</c>.</returns>
+    public static int? RefusalStatus(bool showsAbsentTitles, bool requestIsValid)
+        => !showsAbsentTitles ? 403 : !requestIsValid ? 400 : null;
+
     // Statuts de média de Seerr (MediaStatus).
     private const int Unknown = 1;
     private const int Pending = 2;
@@ -79,6 +92,21 @@ public static class SeerrRules
     // Au-delà, une liste de saisons n'est plus une demande plausible.
     private const int MaxSeasons = 200;
     private const int MaxSeasonNumber = 10000;
+
+    /// <summary>
+    /// Dit si les demandes ont lieu d'être proposées : elles portent sur les titres absents du
+    /// Top mondial, donc rien à demander sans lui, ou s'il ne garde que les titres présents.
+    /// </summary>
+    /// <remarks>
+    /// Sans cette garde, décocher le Top mondial laissait les routes Seerr ouvertes sur son
+    /// dernier instantané, alors que la page de réglages montrait Seerr éteint.
+    /// </remarks>
+    /// <param name="seerrEnabled">La case des demandes Seerr.</param>
+    /// <param name="globalTopEnabled">La case du Top mondial.</param>
+    /// <param name="libraryOnly">« Ne garder que les titres présents ».</param>
+    /// <returns><see langword="true"/> si les demandes peuvent être proposées.</returns>
+    public static bool RequestsApply(bool seerrEnabled, bool globalTopEnabled, bool libraryOnly)
+        => seerrEnabled && globalTopEnabled && !libraryOnly;
 
     /// <summary>
     /// Indique si un type de média est l'un de ceux que Seerr connaît.
@@ -522,6 +550,103 @@ public static class SeerrRules
                 ? trimmed
                 : null;
     }
+
+    /// <summary>
+    /// Clé d'un titre dans l'ensemble des titres publiés : le type ET l'identifiant, car films et
+    /// séries sont numérotés séparément.
+    /// </summary>
+    /// <param name="mediaType"><c>movie</c> ou <c>tv</c>.</param>
+    /// <param name="tmdbId">Identifiant TMDB.</param>
+    /// <returns>La clé, par exemple <c>movie:603</c>.</returns>
+    public static string TitleKey(string mediaType, int tmdbId)
+        => mediaType + ":" + tmdbId.ToString(CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// Dit si un titre désigné par le navigateur figure dans le Top publié. Les routes Seerr
+    /// refusent (400) tout autre titre : elles ne servent pas de passerelle vers n'importe quelle
+    /// fiche de Seerr.
+    /// </summary>
+    /// <param name="published">Les clés des titres publiés (voir <see cref="TitleKey"/>).</param>
+    /// <param name="mediaType">Le type reçu.</param>
+    /// <param name="tmdbId">L'identifiant reçu.</param>
+    /// <returns><see langword="true"/> si le titre est publié.</returns>
+    public static bool IsPublished(HashSet<string> published, string? mediaType, int tmdbId)
+        => IsMediaType(mediaType) && tmdbId > 0 && published.Contains(TitleKey(mediaType!, tmdbId));
+
+    /// <summary>Longueur maximale du synopsis transmis au navigateur.</summary>
+    public const int MaxOverviewLength = 1200;
+
+    /// <summary>
+    /// Lit le synopsis dans la fiche d'un titre renvoyée par Seerr.
+    /// </summary>
+    /// <param name="mediaJson">La réponse de <c>/api/v1/movie/{id}</c> ou <c>/api/v1/tv/{id}</c>.</param>
+    /// <returns>Le synopsis, borné, ou <see langword="null"/> s'il est absent ou vide.</returns>
+    public static string? ReadOverview(string mediaJson)
+    {
+        using var document = JsonDocument.Parse(mediaJson);
+
+        if (document.RootElement.ValueKind != JsonValueKind.Object
+            || !document.RootElement.TryGetProperty("overview", out var element)
+            || element.ValueKind != JsonValueKind.String)
+        {
+            return null;
+        }
+
+        var text = element.GetString()?.Trim();
+        if (string.IsNullOrEmpty(text))
+        {
+            return null;
+        }
+
+        return text.Length <= MaxOverviewLength ? text : text[..MaxOverviewLength].TrimEnd() + "…";
+    }
+
+    /// <summary>
+    /// Ne garde d'une langue demandée que ce que Seerr peut recevoir sans danger.
+    /// </summary>
+    /// <param name="language">La langue envoyée par le navigateur, par exemple <c>fr</c> ou <c>pt-BR</c>.</param>
+    /// <returns>La langue, ou <see langword="null"/> si elle n'a pas la forme d'un code de langue.</returns>
+    public static string? NormalizeLanguage(string? language)
+    {
+        var value = (language ?? string.Empty).Trim();
+
+        if (value.Length is not (2 or 5)
+            || !char.IsAsciiLetterLower(value[0]) || !char.IsAsciiLetterLower(value[1]))
+        {
+            return null;
+        }
+
+        return value.Length == 2
+            ? value
+            : value[2] == '-' && char.IsAsciiLetterUpper(value[3]) && char.IsAsciiLetterUpper(value[4]) ? value : null;
+    }
+
+    /// <summary>
+    /// Adresse de la fiche d'un titre dans Seerr, vue du navigateur.
+    /// </summary>
+    /// <param name="publicUrl">Le réglage « adresse publique de Seerr ».</param>
+    /// <param name="mediaType"><c>movie</c> ou <c>tv</c>.</param>
+    /// <param name="tmdbId">Identifiant TMDB.</param>
+    /// <returns>L'adresse, ou <see langword="null"/> si le réglage est vide ou invalide.</returns>
+    public static string? PublicTitleUrl(string? publicUrl, string mediaType, int tmdbId)
+    {
+        var baseUrl = NormalizeBaseUrl(publicUrl);
+
+        return baseUrl is null || tmdbId <= 0 || !IsMediaType(mediaType)
+            ? null
+            : baseUrl + "/" + mediaType + "/" + tmdbId.ToString(CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>
+    /// Adresse de la fiche d'un titre sur TMDB.
+    /// </summary>
+    /// <param name="mediaType"><c>movie</c> ou <c>tv</c>.</param>
+    /// <param name="tmdbId">Identifiant TMDB.</param>
+    /// <returns>L'adresse, ou <see langword="null"/> si le type ou l'identifiant est invalide.</returns>
+    public static string? TmdbTitleUrl(string mediaType, int tmdbId)
+        => tmdbId <= 0 || !IsMediaType(mediaType)
+            ? null
+            : "https://www.themoviedb.org/" + mediaType + "/" + tmdbId.ToString(CultureInfo.InvariantCulture);
 
     // Une saison se demande tant que Seerr ne la connaît pas, ou qu'elle a été supprimée.
     private static bool IsRequestable(int status) => status == Unknown || status == Deleted;

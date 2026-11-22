@@ -34,6 +34,10 @@ public sealed class ScriptInjectionTask : IScheduledTask
 {
     private const string PluginId = "191bd290-1054-4b55-a137-46c72181266b";
 
+    // File Transformation garde ses enregistrements en mémoire jusqu'au redémarrage : la tâche,
+    // relancée quand les rangées sont rallumées, ne doit pas s'y enregistrer une seconde fois.
+    private static bool _registeredWithFileTransformation;
+
     private readonly IApplicationPaths _applicationPaths;
     private readonly IServerConfigurationManager _configurationManager;
     private readonly ILogger<ScriptInjectionTask> _logger;
@@ -77,15 +81,24 @@ public sealed class ScriptInjectionTask : IScheduledTask
             // rangée n'apparaît, alors que l'API du plugin répond parfaitement par ailleurs.
             ScriptTag.BaseUrl = ResolveBaseUrl();
 
-            var enabled = Plugin.Instance?.Configuration.EnableHomeRows ?? true;
-
-            if (!enabled)
+            // Le même interrupteur que le rappel File Transformation : il suit les réglages, et
+            // répond non dès la désinstallation, où la balise ne doit plus revenir sur le disque.
+            if (!IndexHtmlTransformer.RowsEnabled())
             {
                 RemoveFromDisk();
                 return Task.CompletedTask;
             }
 
-            if (!TryRegisterWithFileTransformation())
+            if (_registeredWithFileTransformation)
+            {
+                return Task.CompletedTask;
+            }
+
+            if (TryRegisterWithFileTransformation())
+            {
+                _registeredWithFileTransformation = true;
+            }
+            else
             {
                 InjectIntoDisk();
             }
@@ -203,6 +216,12 @@ public sealed class ScriptInjectionTask : IScheduledTask
         return parse.Invoke(null, new object[] { json });
     }
 
+    /// <summary>
+    /// Indique si le plugin File Transformation est chargé.
+    /// </summary>
+    /// <returns><see langword="true"/> s'il l'est.</returns>
+    internal static bool IsFileTransformationLoaded() => FindFileTransformationAssembly() is not null;
+
     private static Assembly? FindFileTransformationAssembly()
     {
         return AssemblyLoadContext.All
@@ -229,7 +248,7 @@ public sealed class ScriptInjectionTask : IScheduledTask
 
     private void UpdateIndexHtml(Func<string, string> transform, string successMessage)
     {
-        var path = FindIndexHtml();
+        var path = IndexHtmlFile.Find(_applicationPaths.WebPath, _applicationPaths.ProgramDataPath);
 
         if (path is null)
         {
@@ -239,21 +258,12 @@ public sealed class ScriptInjectionTask : IScheduledTask
 
         try
         {
-            var original = File.ReadAllText(path);
-            var updated = transform(original);
-
-            if (string.Equals(original, updated, StringComparison.Ordinal))
+            if (!IndexHtmlFile.Update(path, transform))
             {
                 _logger.LogDebug("index.html déjà à jour.");
                 return;
             }
 
-            // index.html est le point d'entrée de toute l'interface web : une coupure pendant
-            // l'écriture le laisserait tronqué et Jellyfin ne chargerait plus du tout. Le fichier
-            // temporaire est créé dans le même répertoire pour que le remplacement soit atomique.
-            var temporary = path + ".mediacarousel.tmp";
-            File.WriteAllText(temporary, updated);
-            File.Move(temporary, path, overwrite: true);
 #pragma warning disable CA2254 // Le message est un littéral choisi par l'appelant, pas une interpolation.
             _logger.LogInformation(successMessage, path);
 #pragma warning restore CA2254
@@ -269,18 +279,5 @@ public sealed class ScriptInjectionTask : IScheduledTask
             // Le remplacement a échoué : index.html reste dans son état d'origine.
             _logger.LogWarning(ex, "Écriture de {Path} impossible ; le fichier est inchangé.", path);
         }
-    }
-
-    private string? FindIndexHtml()
-    {
-        var candidates = new[]
-        {
-            Path.Combine(_applicationPaths.WebPath, "index.html"),
-            Path.Combine(_applicationPaths.ProgramDataPath, "jellyfin-web", "index.html"),
-            Path.Combine(AppContext.BaseDirectory, "jellyfin-web", "index.html"),
-            Path.Combine(AppContext.BaseDirectory, "web", "index.html")
-        };
-
-        return candidates.FirstOrDefault(File.Exists);
     }
 }

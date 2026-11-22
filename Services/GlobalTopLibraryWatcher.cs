@@ -85,6 +85,13 @@ public sealed class GlobalTopLibraryWatcher : IHostedService, IDisposable
 
     private void OnItemChanged(object? sender, ItemChangeEventArgs e)
     {
+        // Le contenu d'un plugin de chaîne n'est pas indexé par le rapprochement : chaque
+        // rafraîchissement d'un catalogue IPTV programmait sinon un rapprochement complet inutile.
+        if (e.Item is { } changed && changed.ChannelId != Guid.Empty && (Plugin.Instance?.Configuration.ExcludeChannelContent ?? true))
+        {
+            return;
+        }
+
         var mediaType = e.Item switch
         {
             Movie => SeerrRules.Movie,

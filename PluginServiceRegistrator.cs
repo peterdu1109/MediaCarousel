@@ -20,6 +20,7 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton<ICatalogStore, CatalogStore>();
 
         serviceCollection.AddSingleton<PlaybackReportingReader>();
+        serviceCollection.AddSingleton<ActivityStats>();
         serviceCollection.AddSingleton<LocalTopListBuilder>();
         serviceCollection.AddSingleton<GlobalTopListBuilder>();
         serviceCollection.AddSingleton<CatalogBuilder>();
@@ -34,10 +35,6 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
 
         // Garde en mémoire l'association des comptes et l'état des titres : un singleton.
         serviceCollection.AddSingleton<SeerrClient>();
-
-        // `GetDefaultTriggers()` n'est lu qu'à la première installation de la tâche : sans ce
-        // service, le réglage « intervalle de recalcul » n'avait plus aucun effet ensuite.
-        serviceCollection.AddHostedService<RefreshScheduleSynchronizer>();
 
         // Un titre du Top mondial qui arrive dans la bibliothèque — une demande Seerr servie —
         // y passe « présent » sans attendre le recalcul suivant.

@@ -161,7 +161,7 @@ public sealed class TmdbTrendingProvider : ITrendingProvider
 
         var httpClient = _httpClientFactory.CreateClient(NamedClient.Default);
         using var response = await httpClient.SendAsync(message, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
-        response.EnsureSuccessStatusCode();
+        TrendingFetch.EnsureSuccess(response);
 
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
         using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken).ConfigureAwait(false);

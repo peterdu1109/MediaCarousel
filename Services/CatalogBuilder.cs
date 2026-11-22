@@ -157,11 +157,7 @@ public sealed class CatalogBuilder
         int size,
         int minimumItems)
     {
-        var identities = QueryIdentities(kind, query, enableImages);
-        if (identities is null)
-        {
-            return CatalogSnapshot.Empty(kind);
-        }
+        var identities = QueryIdentities(query, enableImages);
 
         var clampedSize = Math.Clamp(size, 1, 100);
         var clampedMinimum = Math.Max(minimumItems, 1);
@@ -219,18 +215,13 @@ public sealed class CatalogBuilder
     /// <summary>
     /// Énumère les bibliothèques de premier niveau du serveur.
     /// </summary>
+    /// <remarks>
+    /// Aucune erreur n'est rattrapée ici ni dans les deux requêtes suivantes : une liste vide
+    /// rendue à la place produisait un catalogue partiel, ou vide, publié par-dessus le bon.
+    /// L'appelant garde alors le précédent et note l'échec au bilan.
+    /// </remarks>
     private IReadOnlyList<BaseItem> GetLibraries()
-    {
-        try
-        {
-            return _libraryManager.GetUserRootFolder().Children.ToArray();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Impossible d'énumérer les bibliothèques ; catalogues laissés en l'état.");
-            return Array.Empty<BaseItem>();
-        }
-    }
+        => _libraryManager.GetUserRootFolder().Children.ToArray();
 
     /// <summary>
     /// Renvoie les films et séries d'une bibliothèque.
@@ -240,53 +231,32 @@ public sealed class CatalogBuilder
     /// aucun <c>ItemFields</c> supplémentaire n'est nécessaire pour les lire.
     /// </remarks>
     private IReadOnlyList<BaseItem> GetLibraryItems(Guid libraryId)
-    {
-        try
+        => _libraryManager.GetItemList(new InternalItemsQuery
         {
-            return _libraryManager.GetItemList(new InternalItemsQuery
+            IncludeItemTypes = CountedTypes,
+            Recursive = true,
+            AncestorIds = new[] { libraryId },
+            EnableTotalRecordCount = false,
+            DtoOptions = new DtoOptions(false)
             {
-                IncludeItemTypes = CountedTypes,
-                Recursive = true,
-                AncestorIds = new[] { libraryId },
-                EnableTotalRecordCount = false,
-                DtoOptions = new DtoOptions(false)
-                {
-                    EnableImages = false,
-                    EnableUserData = false
-                }
-            });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Échec du balayage de la bibliothèque {LibraryId}.", libraryId);
-            return Array.Empty<BaseItem>();
-        }
-    }
+                EnableImages = false,
+                EnableUserData = false
+            }
+        });
 
-    private QueryResult<(BaseItem Item, ItemCounts ItemCounts)>? QueryIdentities(
-        CatalogKind kind,
+    private static QueryResult<(BaseItem Item, ItemCounts ItemCounts)> QueryIdentities(
         Func<InternalItemsQuery, QueryResult<(BaseItem Item, ItemCounts ItemCounts)>> query,
         bool enableImages)
-    {
-        try
+        => query(new InternalItemsQuery
         {
-            return query(new InternalItemsQuery
+            IncludeItemTypes = CountedTypes,
+            Recursive = true,
+            EnableTotalRecordCount = false,
+            DtoOptions = new DtoOptions(false)
             {
-                IncludeItemTypes = CountedTypes,
-                Recursive = true,
-                EnableTotalRecordCount = false,
-                DtoOptions = new DtoOptions(false)
-                {
-                    EnableImages = enableImages,
-                    EnableUserData = false
-                }
-            });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Échec de l'agrégation du catalogue {Kind}.", kind);
-            return null;
-        }
-    }
+                EnableImages = enableImages,
+                EnableUserData = false
+            }
+        });
 
 }

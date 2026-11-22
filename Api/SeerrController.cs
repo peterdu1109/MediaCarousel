@@ -4,8 +4,10 @@ using System.Globalization;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Jellyfin.Data;
 using JellyfinCarouselPlugin.Models;
 using JellyfinCarouselPlugin.Services;
+using MediaBrowser.Controller.Library;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -48,16 +50,19 @@ public class SeerrController : ControllerBase
 
     private readonly SeerrClient _seerr;
     private readonly ITopListStore _store;
+    private readonly IUserManager _userManager;
 
     /// <summary>
     /// Initialise une nouvelle instance de la classe <see cref="SeerrController"/>.
     /// </summary>
     /// <param name="seerr">Client Seerr.</param>
     /// <param name="store">Classements publiés, qui font office de liste blanche.</param>
-    public SeerrController(SeerrClient seerr, ITopListStore store)
+    /// <param name="userManager">Comptes, pour peser les restrictions de l'appelant.</param>
+    public SeerrController(SeerrClient seerr, ITopListStore store, IUserManager userManager)
     {
         _seerr = seerr;
         _store = store;
+        _userManager = userManager;
     }
 
     /// <summary>
@@ -78,6 +83,14 @@ public class SeerrController : ControllerBase
         if (!TryGetSettings(out var baseUrl, out var apiKey))
         {
             return StatusCode(StatusCodes.Status503ServiceUnavailable);
+        }
+
+        // Les titres absents ne sont pas montrés à un compte restreint ; il n'a donc rien à
+        // interroger. Seerr dirait sinon « disponible » d'un titre ajouté depuis le dernier
+        // recalcul, peut-être dans une bibliothèque qui lui est interdite.
+        if (!ShowsAbsentTitles())
+        {
+            return Ok(Array.Empty<SeerrStateDto>());
         }
 
         var published = PublishedTitles();
@@ -142,7 +155,15 @@ public class SeerrController : ControllerBase
             return StatusCode(StatusCodes.Status503ServiceUnavailable);
         }
 
-        if (item is null || !IsPublished(PublishedTitles(), item))
+        // Même règle que le classement : un compte restreint ne voit aucun titre absent, et son
+        // refus passe avant l'examen du titre (voir SeerrRules.RefusalStatus).
+        var refusal = SeerrRules.RefusalStatus(ShowsAbsentTitles(), item is not null && IsPublished(PublishedTitles(), item));
+        if (refusal is { } refusedStatus)
+        {
+            return StatusCode(refusedStatus);
+        }
+
+        if (item is null)
         {
             return BadRequest();
         }
@@ -226,6 +247,7 @@ public class SeerrController : ControllerBase
     [HttpPost("Options")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status502BadGateway)]
     public async Task<ActionResult<SeerrOptionsDto>> GetOptions(
@@ -237,7 +259,13 @@ public class SeerrController : ControllerBase
             return NotFound();
         }
 
-        if (item is null || !SeerrRules.IsMediaType(item.MediaType))
+        var refusal = SeerrRules.RefusalStatus(ShowsAbsentTitles(), item is not null && SeerrRules.IsMediaType(item.MediaType));
+        if (refusal is { } refusedStatus)
+        {
+            return StatusCode(refusedStatus);
+        }
+
+        if (item is null)
         {
             return BadRequest();
         }
@@ -279,6 +307,7 @@ public class SeerrController : ControllerBase
     [HttpPost("Seasons")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status502BadGateway)]
     [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
     public async Task<ActionResult<SeerrSeasonsDto>> GetSeasons(
@@ -290,9 +319,17 @@ public class SeerrController : ControllerBase
             return StatusCode(StatusCodes.Status503ServiceUnavailable);
         }
 
-        if (item is null
-            || !string.Equals(item.MediaType, SeerrRules.Tv, StringComparison.Ordinal)
-            || !IsPublished(PublishedTitles(), item))
+        var refusal = SeerrRules.RefusalStatus(
+            ShowsAbsentTitles(),
+            item is not null
+                && string.Equals(item.MediaType, SeerrRules.Tv, StringComparison.Ordinal)
+                && IsPublished(PublishedTitles(), item));
+        if (refusal is { } refusedStatus)
+        {
+            return StatusCode(refusedStatus);
+        }
+
+        if (item is null)
         {
             return BadRequest();
         }
@@ -322,6 +359,61 @@ public class SeerrController : ControllerBase
                 State = s.State,
                 Requestable = s.Requestable
             }).ToArray()
+        });
+    }
+
+    /// <summary>
+    /// Fiche d'un titre absent : synopsis et liens, pour décider avant de demander.
+    /// </summary>
+    /// <param name="item">Le titre, désigné par son type et son identifiant TMDB.</param>
+    /// <param name="language">Langue du navigateur, par exemple <c>fr</c> ; ignorée si invalide.</param>
+    /// <param name="cancellationToken">Jeton d'annulation.</param>
+    /// <returns>Le synopsis (s'il existe) et les liens.</returns>
+    [HttpPost("Details")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
+    public async Task<ActionResult<SeerrDetailsDto>> GetDetails(
+        [FromBody] SeerrItemDto? item,
+        [FromQuery] string? language,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetSettings(out var baseUrl, out var apiKey))
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable);
+        }
+
+        // Le refus des comptes restreints passe avant l'examen du titre : sinon un 400 ou un 403
+        // leur apprendrait quels titres figurent dans le Top publié.
+        var refusal = SeerrRules.RefusalStatus(ShowsAbsentTitles(), item is not null && IsPublished(PublishedTitles(), item));
+        if (refusal is { } refusedStatus)
+        {
+            return StatusCode(refusedStatus);
+        }
+
+        if (item is null)
+        {
+            return BadRequest();
+        }
+
+        var mediaType = item.MediaType!;
+        var (overview, _) = await _seerr.GetOverviewAsync(
+            baseUrl,
+            apiKey,
+            mediaType,
+            item.TmdbId,
+            SeerrRules.NormalizeLanguage(language),
+            cancellationToken).ConfigureAwait(false);
+
+        // Un synopsis introuvable ne prive pas des liens : la fiche s'ouvre quand même.
+        return Ok(new SeerrDetailsDto
+        {
+            MediaType = mediaType,
+            TmdbId = item.TmdbId,
+            Overview = overview,
+            SeerrUrl = SeerrRules.PublicTitleUrl(Plugin.Instance?.Configuration.SeerrPublicUrl, mediaType, item.TmdbId),
+            TmdbUrl = SeerrRules.TmdbTitleUrl(mediaType, item.TmdbId)
         });
     }
 
@@ -365,7 +457,7 @@ public class SeerrController : ControllerBase
 
     internal static bool IsConfigured(Configuration.PluginConfiguration? config)
         => config is not null
-            && config.EnableSeerrRequests
+            && SeerrRules.RequestsApply(config.EnableSeerrRequests, config.EnableGlobalTop, config.GlobalTopLibraryOnly)
             && SeerrRules.NormalizeBaseUrl(config.SeerrUrl) is not null
             && !string.IsNullOrWhiteSpace(config.SeerrApiKey);
 
@@ -410,12 +502,9 @@ public class SeerrController : ControllerBase
     }
 
     private static bool IsPublished(HashSet<string> published, SeerrItemDto item)
-        => SeerrRules.IsMediaType(item.MediaType)
-            && item.TmdbId > 0
-            && published.Contains(Key(item.MediaType!, item.TmdbId));
+        => SeerrRules.IsPublished(published, item.MediaType, item.TmdbId);
 
-    private static string Key(string mediaType, int tmdbId)
-        => mediaType + ":" + tmdbId.ToString(CultureInfo.InvariantCulture);
+    private static string Key(string mediaType, int tmdbId) => SeerrRules.TitleKey(mediaType, tmdbId);
 
     private static string? ErrorCode(SeerrFailure failure) => failure switch
     {
@@ -426,6 +515,24 @@ public class SeerrController : ControllerBase
         SeerrFailure.Offline => "offline",
         _ => "error"
     };
+
+    /// <summary>
+    /// Indique si l'appelant peut voir les titres absents, comme le fait le classement.
+    /// </summary>
+    /// <remarks>
+    /// Une clé d'API vaut administrateur ; un jeton dont le compte est introuvable ne voit rien.
+    /// </remarks>
+    private bool ShowsAbsentTitles()
+    {
+        var userId = ResolveUserId();
+        if (userId == Guid.Empty)
+        {
+            return true;
+        }
+
+        var user = _userManager.GetUserById(userId);
+        return user is not null && GlobalTopFallback.ShowsAbsentEntries(user.HasContentRestrictions());
+    }
 
     private Guid ResolveUserId()
     {
@@ -523,6 +630,27 @@ public sealed class SeerrFolderDto
 
     /// <summary>Obtient ou définit l'espace libre, en octets.</summary>
     public long? FreeSpace { get; set; }
+}
+
+/// <summary>
+/// La fiche d'un titre absent.
+/// </summary>
+public sealed class SeerrDetailsDto
+{
+    /// <summary>Obtient ou définit le type de média.</summary>
+    public string MediaType { get; set; } = string.Empty;
+
+    /// <summary>Obtient ou définit l'identifiant TMDB.</summary>
+    public int TmdbId { get; set; }
+
+    /// <summary>Obtient ou définit le synopsis, ou <see langword="null"/> s'il est inconnu.</summary>
+    public string? Overview { get; set; }
+
+    /// <summary>Obtient ou définit le lien vers Seerr, ou <see langword="null"/> sans adresse publique.</summary>
+    public string? SeerrUrl { get; set; }
+
+    /// <summary>Obtient ou définit le lien vers TMDB.</summary>
+    public string? TmdbUrl { get; set; }
 }
 
 /// <summary>

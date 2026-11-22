@@ -97,9 +97,10 @@ public class PluginConfiguration : BasePluginConfiguration
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Actif par défaut. Sur un serveur sans plugin de chaîne le réglage n'a aucun effet ;
-    /// sur un serveur qui en a un, l'ancien comportement était presque toujours subi plutôt
-    /// que voulu. Le basculer à <c>false</c> restaure le classement d'avant.
+    /// Toujours actif depuis la 4.5.1. La case a quitté la page de réglages en 4.5.0 ; un serveur
+    /// qui l'avait décochée gardait alors ces catalogues dans ses rangées sans pouvoir les en
+    /// retirer. Une valeur <c>false</c> enregistrée par une version antérieure est donc lue puis
+    /// ignorée. Sur un serveur sans plugin de chaîne, rien ne change.
     /// </para>
     /// <para>
     /// Un catalogue IPTV compte couramment plus de titres que toute la bibliothèque locale, et il
@@ -110,7 +111,11 @@ public class PluginConfiguration : BasePluginConfiguration
     /// les distingue en dehors de leur <c>ChannelId</c>.
     /// </para>
     /// </remarks>
-    public bool ExcludeChannelContent { get; set; } = true;
+    public bool ExcludeChannelContent
+    {
+        get => true;
+        set { /* lue pour la compatibilité du fichier, jamais appliquée */ }
+    }
 
     // ------------------------------------------------------------------
     // Top 10 global (base de données externe)
@@ -421,6 +426,15 @@ public class PluginConfiguration : BasePluginConfiguration
     public string SeerrUrl { get; set; } = string.Empty;
 
     /// <summary>
+    /// Obtient ou définit l'adresse de Seerr telle que les navigateurs l'atteignent.
+    /// </summary>
+    /// <remarks>
+    /// Distincte de <see cref="SeerrUrl"/>, qui est souvent une adresse interne. Vide : aucun
+    /// lien vers Seerr n'est proposé. Elle n'est transmise qu'avec la fiche d'un titre absent.
+    /// </remarks>
+    public string SeerrPublicUrl { get; set; } = string.Empty;
+
+    /// <summary>
     /// Obtient ou définit la clé d'API de Seerr. Elle n'est jamais transmise aux navigateurs.
     /// </summary>
     public string SeerrApiKey { get; set; } = string.Empty;
@@ -479,7 +493,12 @@ public class PluginConfiguration : BasePluginConfiguration
     /// <summary>
     /// Obtient ou définit le nom de la collection du Top global.
     /// </summary>
-    public string GlobalCollectionName { get; set; } = "Top 10 mondial";
+    /// <remarks>
+    /// Différent du titre de la rangée par défaut : identiques, la page de réglages annonçait un
+    /// doublon dès qu'on cochait « créer aussi une collection ». Une installation existante
+    /// garde le nom qu'elle a enregistré.
+    /// </remarks>
+    public string GlobalCollectionName { get; set; } = "Tendances mondiales";
 
     /// <summary>
     /// Obtient ou définit l'identifiant de la collection du Top local, mémorisé après création.

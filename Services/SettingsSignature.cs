@@ -9,9 +9,24 @@ namespace JellyfinCarouselPlugin.Services;
 public static class SettingsSignature
 {
     /// <summary>
-    /// Réglages que le recalcul écrit lui-même : les compter le relancerait sans fin.
+    /// Réglages qu'un calcul de rangée lit : seuls leurs changements justifient un recalcul.
+    /// Liste blanche — un réglage d'affichage (couleur, titres, ordre, Seerr) ou écrit par le
+    /// recalcul lui-même (identifiants de collection) n'en fait pas partie. Un réglage de calcul
+    /// ajouté à PluginConfiguration doit l'être ici, faute de quoi son changement attend le
+    /// recalcul planifié.
     /// </summary>
-    private static readonly string[] WrittenByRefresh = { "LocalCollectionId", "GlobalCollectionId" };
+    private static readonly string[] Computed =
+    {
+        "EnableLocalTop", "LocalTopSize", "LocalTopMediaKind", "LocalTopWindowDays",
+        "MaxPlaysCountedPerUser", "CandidatesPerUser", "ExcludedUserIds", "ExcludedLibraryIds",
+        "ExcludeChannelContent", "EnableGlobalTop", "GlobalTopProvider", "GlobalTopApiKey",
+        "GlobalTopMediaKind", "GlobalTopFeed", "GlobalTopSize", "GlobalTopLibraryOnly",
+        "GlobalTopSplitByType", "MetadataLanguage", "EnableStudioRow", "StudioRowSize",
+        "MinItemsPerStudio", "EnableGenreRows", "GenreRowCount", "MinItemsPerGenre",
+        "EnableNeverPlayedRow", "NeverPlayedRowSize", "NeverPlayedMinRating",
+        "EnableReturningRow", "ReturningRowDays", "ReturningRowSize", "EnableAllTimeRow",
+        "AllTimeRowSize", "SyncCollections", "LocalCollectionName", "GlobalCollectionName"
+    };
 
     /// <summary>
     /// Calcule l'empreinte de réglages sérialisés.
@@ -25,12 +40,15 @@ public static class SettingsSignature
             return string.Empty;
         }
 
-        var copy = (JsonObject)settings.DeepClone();
-        foreach (var key in WrittenByRefresh)
+        var kept = new JsonObject();
+        foreach (var key in Computed)
         {
-            copy.Remove(key);
+            if (settings.TryGetPropertyValue(key, out var value))
+            {
+                kept[key] = value?.DeepClone();
+            }
         }
 
-        return copy.ToJsonString();
+        return kept.ToJsonString();
     }
 }

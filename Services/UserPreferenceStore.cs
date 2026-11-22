@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Globalization;
 using System.IO;
 using System.Text.Json;
@@ -69,6 +70,26 @@ public sealed class UserPreferenceStore
     }
 
     /// <summary>
+    /// Compte, parmi les comptes donnés, ceux qui ont enregistré leurs propres choix.
+    /// </summary>
+    /// <remarks>
+    /// Le fichier garde les choix des comptes supprimés : les compter tous pouvait afficher
+    /// « 5 / 4 » sur la page de réglages.
+    /// </remarks>
+    /// <param name="userIds">Les comptes à examiner.</param>
+    /// <returns>Le nombre de comptes personnalisés.</returns>
+    public int Count(IEnumerable<Guid> userIds)
+    {
+        ArgumentNullException.ThrowIfNull(userIds);
+
+        lock (_lock)
+        {
+            var entries = Load();
+            return userIds.Count(id => entries.ContainsKey(Key(id)));
+        }
+    }
+
+    /// <summary>
     /// Enregistre les préférences d'un compte.
     /// </summary>
     /// <remarks>
@@ -106,6 +127,27 @@ public sealed class UserPreferenceStore
         }
     }
 
+    /// <summary>
+    /// Efface les choix de tous les comptes : chacun suit de nouveau les réglages du serveur.
+    /// </summary>
+    /// <returns>Le nombre de comptes dont les choix ont été effacés.</returns>
+    public int ClearAll()
+    {
+        lock (_lock)
+        {
+            var entries = Load();
+            var count = entries.Count;
+
+            if (count > 0)
+            {
+                entries.Clear();
+                Write(entries);
+            }
+
+            return count;
+        }
+    }
+
     private static string Key(Guid userId) => userId.ToString("N", CultureInfo.InvariantCulture);
 
     private static string? GetPath()
@@ -137,13 +179,34 @@ public sealed class UserPreferenceStore
             catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
             {
                 // Un fichier illisible ne doit pas priver tout le serveur de ses rangées :
-                // chacun retombe sur les valeurs de l'administrateur.
+                // chacun retombe sur les valeurs de l'administrateur. Il est mis de côté avant
+                // tout : le premier compte à enregistrer réécrivait le fichier, et les choix de
+                // tous les autres étaient perdus pour de bon.
                 _logger.LogWarning(ex, "Préférences utilisateur illisibles, elles sont ignorées.");
+                SetAside(path);
             }
         }
 
         _entries ??= new Dictionary<string, UserRowPreferences>(StringComparer.OrdinalIgnoreCase);
         return _entries;
+    }
+
+    /// <summary>
+    /// Copie un fichier illisible à côté de lui, pour qu'une écriture ne l'efface pas.
+    /// </summary>
+    private void SetAside(string path)
+    {
+        var copy = path + ".illisible-" + DateTime.UtcNow.ToString("yyyyMMddHHmmss", CultureInfo.InvariantCulture);
+
+        try
+        {
+            File.Copy(path, copy, overwrite: false);
+            _logger.LogWarning("Copie conservée dans {Copy}.", copy);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _logger.LogError(ex, "Impossible de mettre de côté {Path}.", path);
+        }
     }
 
     /// <summary>

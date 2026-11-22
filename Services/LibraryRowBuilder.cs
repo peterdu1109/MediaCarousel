@@ -87,10 +87,19 @@ public sealed class LibraryRowBuilder
             }
         }
 
-        // Sur-échantillonnage : la plupart des mieux notés ont déjà été vus.
+        var libraries = LibraryFilter.AllowedLibraryIds(_libraryManager, excludedLibraries);
+        if (libraries.Length == 0)
+        {
+            return new TopListSnapshot(TopListKind.NeverPlayed, "Jellyfin", Array.Empty<TopListEntry>());
+        }
+
+        // Sur-échantillonnage : la plupart des mieux notés ont déjà été vus. La restriction
+        // aux bibliothèques est faite par la requête : filtrés après la limite, des films
+        // IPTV ou d'une bibliothèque exclue pouvaient occuper toutes les places.
         var candidates = _libraryManager.GetItemList(new InternalItemsQuery
         {
             IncludeItemTypes = new[] { BaseItemKind.Movie },
+            AncestorIds = libraries,
             IsFolder = false,
             Recursive = true,
             MinCommunityRating = config.NeverPlayedMinRating,
@@ -137,9 +146,18 @@ public sealed class LibraryRowBuilder
         var days = Math.Clamp(config.ReturningRowDays, 1, 365);
         var excludedLibraries = LibraryFilter.ParseGuids(config.ExcludedLibraryIds);
 
+        var libraries = LibraryFilter.AllowedLibraryIds(_libraryManager, excludedLibraries);
+        if (libraries.Length == 0)
+        {
+            return new TopListSnapshot(TopListKind.ReturningSeries, "Jellyfin", Array.Empty<TopListEntry>());
+        }
+
+        // Restreint par la requête : un catalogue IPTV, dont les dates d'ajout sont toujours
+        // récentes, occupait sinon les mille places avant le filtre et vidait la rangée.
         var episodes = _libraryManager.GetItemList(new InternalItemsQuery
         {
             IncludeItemTypes = new[] { BaseItemKind.Episode },
+            AncestorIds = libraries,
             IsFolder = false,
             Recursive = true,
             MinDateCreated = DateTime.UtcNow.AddDays(-days),

@@ -4,7 +4,9 @@ using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
 using JellyfinCarouselPlugin.Configuration;
+using JellyfinCarouselPlugin.ScheduledTasks;
 using MediaBrowser.Model.Plugins;
+using MediaBrowser.Model.Tasks;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
@@ -26,20 +28,28 @@ public sealed class RefreshOnSettingsChange : IHostedService, IDisposable
     private static readonly TimeSpan BusyRetry = TimeSpan.FromSeconds(15);
 
     private readonly TopListRefreshService _refreshService;
+    private readonly ITaskManager _taskManager;
     private readonly ILogger<RefreshOnSettingsChange> _logger;
     private readonly Timer _timer;
+    private readonly CancellationTokenSource _stopping = new();
     private readonly object _lock = new();
     private EventHandler<BasePluginConfiguration>? _handler;
     private string? _signature;
+    private bool _homeRowsEnabled;
 
     /// <summary>
     /// Initialise une nouvelle instance de la classe <see cref="RefreshOnSettingsChange"/>.
     /// </summary>
     /// <param name="refreshService">Service de recalcul.</param>
+    /// <param name="taskManager">Gestionnaire des tâches planifiées, pour relancer l'intégration.</param>
     /// <param name="logger">Journal.</param>
-    public RefreshOnSettingsChange(TopListRefreshService refreshService, ILogger<RefreshOnSettingsChange> logger)
+    public RefreshOnSettingsChange(
+        TopListRefreshService refreshService,
+        ITaskManager taskManager,
+        ILogger<RefreshOnSettingsChange> logger)
     {
         _refreshService = refreshService;
+        _taskManager = taskManager;
         _logger = logger;
         _timer = new Timer(OnTimer, null, Timeout.Infinite, Timeout.Infinite);
     }
@@ -63,10 +73,12 @@ public sealed class RefreshOnSettingsChange : IHostedService, IDisposable
 
             _handler = (_, configuration) => OnChanged(configuration as PluginConfiguration ?? plugin.Configuration);
             plugin.ConfigurationChanged += _handler;
+            _refreshService.RunStarting += OnRunStarting;
 
             lock (_lock)
             {
                 _signature = Signature(plugin.Configuration);
+                _homeRowsEnabled = plugin.Configuration.EnableHomeRows;
             }
         }
         catch (Exception ex)
@@ -86,14 +98,28 @@ public sealed class RefreshOnSettingsChange : IHostedService, IDisposable
             _handler = null;
         }
 
+        _refreshService.RunStarting -= OnRunStarting;
         _timer.Change(Timeout.Infinite, Timeout.Infinite);
+
+        // Un recalcul lancé par un enregistrement s'interrompt à l'arrêt du serveur
+        // au lieu de tenir le processus jusqu'au bout des appels externes.
+        _stopping.Cancel();
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Un recalcul part avec les derniers réglages : celui qui attendait n'a plus lieu d'être.
+    /// </summary>
+    private void OnRunStarting(object? sender, EventArgs e)
+    {
+        _timer.Change(Timeout.Infinite, Timeout.Infinite);
     }
 
     /// <inheritdoc />
     public void Dispose()
     {
         _timer.Dispose();
+        _stopping.Dispose();
     }
 
     private static string Signature(PluginConfiguration configuration)
@@ -101,6 +127,8 @@ public sealed class RefreshOnSettingsChange : IHostedService, IDisposable
 
     private void OnChanged(PluginConfiguration configuration)
     {
+        ReintegrateIfNeeded(configuration.EnableHomeRows);
+
         string signature;
 
         try
@@ -130,6 +158,29 @@ public sealed class RefreshOnSettingsChange : IHostedService, IDisposable
         _timer.Change(Delay, Timeout.InfiniteTimeSpan);
     }
 
+    private void ReintegrateIfNeeded(bool enabled)
+    {
+        lock (_lock)
+        {
+            if (!ScriptTag.NeedsReintegration(_homeRowsEnabled, enabled))
+            {
+                return;
+            }
+
+            _homeRowsEnabled = enabled;
+        }
+
+        try
+        {
+            _taskManager.QueueScheduledTask<ScriptInjectionTask>();
+            _logger.LogInformation("Rangées {State:l} : intégration à la page d'accueil relancée.", enabled ? "rallumées" : "coupées");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Intégration à la page d'accueil non relancée : elle le sera au prochain démarrage.");
+        }
+    }
+
     private void OnTimer(object? state)
     {
         if (_refreshService.IsRefreshing)
@@ -145,7 +196,11 @@ public sealed class RefreshOnSettingsChange : IHostedService, IDisposable
     {
         try
         {
-            await _refreshService.RefreshAsync(null, CancellationToken.None).ConfigureAwait(false);
+            await _refreshService.RefreshAsync(null, _stopping.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (_stopping.IsCancellationRequested)
+        {
+            _logger.LogInformation("Recalcul lancé par l'enregistrement des réglages interrompu par l'arrêt du serveur.");
         }
         catch (Exception ex)
         {

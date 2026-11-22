@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+
 namespace JellyfinCarouselPlugin.Api;
 
 /// <summary>
@@ -139,4 +142,26 @@ public sealed class ClientOptionsDto
     /// qualité et dossier racine.
     /// </summary>
     public bool SeerrAdvanced { get; set; }
+
+    /// <summary>
+    /// Obtient ou définit les rangées que l'administrateur affiche, par nom de case
+    /// (<c>ShowLocalRow</c>…).
+    /// </summary>
+    /// <remarks>
+    /// Le panneau « Mes rangées » ne propose que celles-là : une rangée coupée par
+    /// l'administrateur n'est plus recalculée, un compte qui la rallumait recevait un
+    /// classement figé, parfois vieux de plusieurs mois.
+    /// </remarks>
+    public IReadOnlyList<string> ServerRows { get; set; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Obtient ou définit les bibliothèques auxquelles le script restreint ses propres requêtes
+    /// (genres, « Parce que tu as regardé »). Vide : aucune restriction.
+    /// </summary>
+    /// <remarks>
+    /// Rempli seulement quand l'administrateur exclut des bibliothèques : ces rangées
+    /// interrogent <c>/Items</c> directement et montraient sinon les titres exclus. Seules
+    /// figurent les bibliothèques que le compte appelant voit.
+    /// </remarks>
+    public IReadOnlyList<string> LibraryIds { get; set; } = Array.Empty<string>();
 }

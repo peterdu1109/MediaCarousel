@@ -84,6 +84,8 @@ public sealed class SeerrClient
     private static readonly TimeSpan UserHit = TimeSpan.FromMinutes(10);
     private static readonly TimeSpan UserMiss = TimeSpan.FromMinutes(1);
     private static readonly TimeSpan StateLifetime = TimeSpan.FromMinutes(1);
+    private static readonly TimeSpan OverviewLifetime = TimeSpan.FromHours(1);
+    private static readonly TimeSpan OfflineLifetime = TimeSpan.FromSeconds(45);
     private static readonly TimeSpan SettingsLifetime = TimeSpan.FromMinutes(10);
     private static readonly TimeSpan ServersLifetime = TimeSpan.FromMinutes(5);
 
@@ -91,6 +93,8 @@ public sealed class SeerrClient
     private readonly ILogger<SeerrClient> _logger;
     private readonly ConcurrentDictionary<Guid, (int? Id, DateTime At)> _users = new();
     private readonly ConcurrentDictionary<string, (string State, DateTime At)> _states = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, (string? Overview, DateTime At)> _overviews = new(StringComparer.Ordinal);
+    private readonly OfflineMemory _offline = new(OfflineLifetime);
     private (string BaseUrl, bool PartialRequests, bool SpecialEpisodes, DateTime At)? _settings;
     private readonly ConcurrentDictionary<string, (IReadOnlyList<SeerrServer> Servers, DateTime At)> _servers = new(StringComparer.Ordinal);
 
@@ -128,6 +132,13 @@ public sealed class SeerrClient
             return SeerrOutcome.Ok(cached.State);
         }
 
+        // Un Seerr muet coûte son délai complet à chaque titre : après un échec de connexion, les
+        // lectures suivantes échouent aussitôt pendant quelques secondes (voir OfflineMemory).
+        if (_offline.IsOffline(baseUrl, DateTime.UtcNow))
+        {
+            return SeerrOutcome.Fail(SeerrFailure.Offline);
+        }
+
         // Les épisodes spéciaux ne comptent, pour une série, que si Seerr les accepte.
         var specials = string.Equals(mediaType, SeerrRules.Tv, StringComparison.Ordinal)
             && (await GetSettingsAsync(baseUrl, apiKey, cancellationToken).ConfigureAwait(false)).SpecialEpisodes;
@@ -141,6 +152,7 @@ public sealed class SeerrClient
             cancellationToken).ConfigureAwait(false);
 
         var failure = Classify(status, body);
+        NoteReachability(baseUrl, failure);
         if (failure != SeerrFailure.None)
         {
             return SeerrOutcome.Fail(failure);
@@ -160,6 +172,66 @@ public sealed class SeerrClient
 
         _states[key] = (state, DateTime.UtcNow);
         return SeerrOutcome.Ok(state);
+    }
+
+    /// <summary>
+    /// Lit le synopsis d'un titre dans Seerr.
+    /// </summary>
+    /// <remarks>
+    /// Seerr renvoie le texte dans la langue demandée, celle du navigateur ; sans elle, dans la
+    /// sienne. Gardé une heure : un synopsis ne change pas, et chaque ouverture de fiche
+    /// ne doit pas coûter un appel à TMDB via Seerr.
+    /// </remarks>
+    /// <param name="baseUrl">Adresse de Seerr.</param>
+    /// <param name="apiKey">Clé d'API.</param>
+    /// <param name="mediaType"><c>movie</c> ou <c>tv</c>.</param>
+    /// <param name="tmdbId">Identifiant TMDB.</param>
+    /// <param name="language">Langue souhaitée, déjà validée, ou <see langword="null"/>.</param>
+    /// <param name="cancellationToken">Jeton d'annulation.</param>
+    /// <returns>Le synopsis (absent s'il est vide), ou la raison de l'échec.</returns>
+    public async Task<(string? Overview, SeerrFailure Failure)> GetOverviewAsync(
+        string baseUrl,
+        string apiKey,
+        string mediaType,
+        int tmdbId,
+        string? language,
+        CancellationToken cancellationToken)
+    {
+        var key = StateKey(mediaType, tmdbId) + "|" + (language ?? string.Empty);
+
+        if (_overviews.TryGetValue(key, out var cached) && DateTime.UtcNow - cached.At < OverviewLifetime)
+        {
+            return (cached.Overview, SeerrFailure.None);
+        }
+
+        if (_offline.IsOffline(baseUrl, DateTime.UtcNow))
+        {
+            return (null, SeerrFailure.Offline);
+        }
+
+        var url = baseUrl + "/api/v1/" + mediaType + "/" + tmdbId.ToString(CultureInfo.InvariantCulture)
+            + (language is null ? string.Empty : "?language=" + Uri.EscapeDataString(language));
+
+        var (status, body) = await SendAsync(HttpMethod.Get, url, apiKey, null, null, cancellationToken)
+            .ConfigureAwait(false);
+
+        var failure = Classify(status, body);
+        NoteReachability(baseUrl, failure);
+        if (failure != SeerrFailure.None)
+        {
+            return (null, failure);
+        }
+
+        try
+        {
+            var overview = SeerrRules.ReadOverview(body!);
+            _overviews[key] = (overview, DateTime.UtcNow);
+            return (overview, SeerrFailure.None);
+        }
+        catch (JsonException)
+        {
+            return (null, SeerrFailure.Error);
+        }
     }
 
     /// <summary>
@@ -471,6 +543,20 @@ public sealed class SeerrClient
         catch (JsonException)
         {
             return (false, false);
+        }
+    }
+
+    // Seul un Seerr qui ne répond pas est retenu ; un refus de clé ou un titre inconnu prouvent
+    // au contraire qu'il répond, et effacent le souvenir d'une panne.
+    private void NoteReachability(string baseUrl, SeerrFailure failure)
+    {
+        if (failure == SeerrFailure.Offline)
+        {
+            _offline.RecordFailure(baseUrl, DateTime.UtcNow);
+        }
+        else
+        {
+            _offline.Clear();
         }
     }
 

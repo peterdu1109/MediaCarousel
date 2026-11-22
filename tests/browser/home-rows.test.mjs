@@ -68,6 +68,7 @@ const stub = () => {
           AllowUserPreferences: window.__allowPrefs === true,
           RowOrder: window.__rowOrder,
           ManageNativeSections: window.__manageNatives === true,
+          LibraryIds: window.__libraryIds || [],
           HideNativeSections: window.__hideNative === true,
           LocalRowTitle: 'Top 10 sur ce serveur', GlobalRowTitle: 'Top 10 mondial',
           GlobalSplit: window.__globalSplit === true,
@@ -137,8 +138,15 @@ const stub = () => {
           return Promise.resolve({
             Items: window.__noHistory
               ? []
+              : window.__seedEpisode
+              ? [{ Id: 'ep1', Name: 'Episode 3', Type: 'Episode', SeriesId: 'ser1' }]
               : [{ Id: 'seed1', Name: 'Blade <Runner>', Genres: ['Science-fiction', 'Thriller', 'Drame'] }]
           });
+        }
+
+        // La serie d'un episode regarde : ses genres servent de depart.
+        if (q.get('Ids') === 'ser1') {
+          return Promise.resolve({ Items: [{ Id: 'ser1', Name: 'Serie <Test>', Type: 'Series', Genres: ['Drame', 'Mystere', 'Crime'] }] });
         }
 
         // Titres partageant les genres du film de depart.
@@ -166,6 +174,21 @@ const stub = () => {
 };
 
 await page.evaluate(stub);
+// Compte les observateurs encore actifs : une rangee de genre retiree avant d'avoir ete vue
+// gardait le sien (audit du 2026-10-24).
+await page.evaluate(() => {
+  const Natif = window.IntersectionObserver;
+  window.__observateursActifs = 0;
+  window.IntersectionObserver = function (cb, opts) {
+    const o = new Natif(cb, opts);
+    let actif = false;
+    const observe = o.observe.bind(o);
+    const disconnect = o.disconnect.bind(o);
+    o.observe = (el) => { if (!actif) { actif = true; window.__observateursActifs++; } observe(el); };
+    o.disconnect = () => { if (actif) { actif = false; window.__observateursActifs--; } disconnect(); };
+    return o;
+  };
+});
 await page.evaluate(script);
 await page.waitForFunction(() => document.querySelectorAll('.mc-row').length === 10, { timeout: 8000 });
 
@@ -308,6 +331,21 @@ await page.evaluate(() => {
               + '<div class="verticalSection section1"></div>';
 });
 await page.waitForFunction(() => document.querySelectorAll('.mc-row').length === 10, { timeout: 8000 });
+// Deux reconstructions de plus : les observateurs des rangees disparues sont relaches.
+for (let tour = 0; tour < 2; tour++) {
+  await page.evaluate(() => {
+    const c = document.querySelector('#homeTab .homeSectionsContainer');
+    c.innerHTML = '<div class="verticalSection section0"><div class="card" data-type="CollectionFolder">Films</div></div>'
+                + '<div class="verticalSection section1"></div>';
+  });
+  await page.waitForFunction(() => document.querySelectorAll('.mc-row').length === 10, { timeout: 8000 });
+}
+await page.waitForTimeout(400);
+const observateurs = await page.evaluate(() => ({
+  actifs: window.__observateursActifs,
+  // Une rangee de genre encore en silhouettes attend son observateur ; les autres n'en ont plus.
+  enAttente: Array.from(document.querySelectorAll('.mc-row')).filter(r => r.querySelector('.mc-skeleton')).length
+}));
 const afterRebuild = await page.evaluate(() => document.querySelectorAll('.mc-row').length);
 
 // PAUSE 12.1 — en quittant l'accueil, jellyfin-web 12.1 appelle pause() sur chaque
@@ -349,6 +387,27 @@ await injection.evaluate(stub);
 await injection.evaluate(script);
 await injection.waitForFunction(() => document.querySelectorAll('.mc-row').length === 10, { timeout: 8000 });
 
+// D19 : le texte du bouton « Enregistrer » suit la luminance de l'accent choisi (noir sur jaune
+// ou cyan clair, blanc sur le violet par defaut), jamais un blanc fixe.
+const surAccent = {};
+for (const couleur of ['#ffeb3b', '#00e5ff', '#775BF4', '#102a43', '#fe0']) {
+  const pageAccent = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  pageAccent.on('pageerror', e => errors.push('pageerror(accent): ' + e.message));
+  await pageAccent.addInitScript((c) => { window.__accent = c; }, couleur);
+  await pageAccent.goto('file://' + path.join(here, 'home.html'));
+  await pageAccent.evaluate(stub);
+  await pageAccent.evaluate(script);
+  await pageAccent.waitForFunction(() => document.querySelectorAll('.mc-row').length === 10, { timeout: 8000 });
+  surAccent[couleur] = await pageAccent.evaluate(() => {
+    const css = document.getElementById('mc-styles').textContent;
+    return {
+      jeton: getComputedStyle(document.querySelector('.mc-row')).getPropertyValue('--mc-on-accent').trim(),
+      regle: /\.mc-prefs-save\{[^}]*color:var\(--mc-on-accent\)/.test(css)
+    };
+  });
+  await pageAccent.close();
+}
+
 const accent = await injection.evaluate(() => {
   const row = document.querySelector('.mc-row');
   return {
@@ -358,6 +417,24 @@ const accent = await injection.evaluate(() => {
   };
 });
 await injection.close();
+
+// AUDIT 2026-11 : bibliotheques exclues. Les rangees qui interrogent /Items elles-memes
+// (genres, « Parce que ») se restreignent alors aux bibliotheques publiees, une requete par
+// bibliotheque ; sans exclusion, elles gardent une seule requete.
+const scoped = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+scoped.on('pageerror', e => errors.push('pageerror(scoped): ' + e.message));
+await scoped.addInitScript(() => {
+  window.__libraryIds = ['libA', 'libB'];
+});
+await scoped.goto('file://' + path.join(here, 'home.html'));
+await scoped.evaluate(stub);
+await scoped.evaluate(script);
+await scoped.waitForFunction(() => document.querySelectorAll('.mc-row').length === 10, { timeout: 8000 });
+await scoped.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+await scoped.waitForTimeout(900);
+const scopedCalls = await scoped.evaluate(() => window.__calls.filter(c => c.startsWith('Items?')));
+await scoped.close();
+const unscopedCalls = await page.evaluate(() => window.__calls.filter(c => c.startsWith('Items?')));
 
 // Troisieme passage : un theme charge APRES nos styles, comme le Custom CSS de Jellyfin.
 const themed = await browser.newPage({ viewport: { width: 1280, height: 900 } });
@@ -497,6 +574,30 @@ const freshRows = await fresh.evaluate(() => ({
     .filter(t => !t.textContent.trim()).length
 }));
 await fresh.close();
+
+// « Parce que tu as regarde » : seuls des titres pas encore vus sont proposes (IsPlayed=false),
+// et le dernier titre vu peut etre un episode, dont la serie sert alors de depart.
+const requetesBecause = await page.evaluate(() => window.__calls.filter(c => c.startsWith('Items?') && c.includes('Genres=')));
+const depuisSerie = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+depuisSerie.on('pageerror', e => errors.push('pageerror(depuis serie): ' + e.message));
+await depuisSerie.addInitScript(() => { window.__seedEpisode = true; });
+await depuisSerie.goto('file://' + path.join(here, 'home.html'));
+await depuisSerie.evaluate(stub);
+await depuisSerie.evaluate(script);
+await depuisSerie.waitForFunction(() => document.querySelectorAll('.mc-row').length === 10, { timeout: 8000 });
+const becauseSerie = await depuisSerie.evaluate(() => {
+  const appels = window.__calls.filter(c => c.startsWith('Items?'));
+  const voisins = appels.find(c => c.includes('Genres='));
+  const q = voisins ? new URLSearchParams(voisins.split('?')[1]) : null;
+  return {
+    titre: Array.from(document.querySelectorAll('.mc-row .sectionTitle-cards')).map(t => t.textContent)
+      .find(t => t.indexOf('Parce que') === 0),
+    exclut: q ? q.get('ExcludeItemIds') : null,
+    genres: q ? q.get('Genres') : null,
+    nonVus: q ? q.get('IsPlayed') : null
+  };
+});
+await depuisSerie.close();
 
 // Ordre configure : le rendu doit le suivre, ignorer les identifiants inconnus et
 // ajouter en fin les rangees absentes de la liste.
@@ -739,7 +840,11 @@ await prefsPage.waitForFunction(() => document.querySelectorAll('.mc-row').lengt
 const prefs = await prefsPage.evaluate(() => ({
   boutons: document.querySelectorAll('.mc-prefs-open').length,
   surNotreRangee: !!document.querySelector('.mc-row .mc-row-header .mc-prefs-open'),
-  panneauAvant: document.querySelectorAll('.mc-prefs').length
+  panneauAvant: document.querySelectorAll('.mc-prefs').length,
+  // D11 : la roue est une icone dessinee, pas un emoji dont l'aspect change d'un telephone a l'autre.
+  roueSvg: !!document.querySelector('.mc-prefs-open svg'),
+  roueEmoji: /[⚙]/.test(document.querySelector('.mc-prefs-open').textContent),
+  css: document.getElementById('mc-styles').textContent
 }));
 
 // Ouverture, puis une ligne par rangee ordonnee.
@@ -1284,9 +1389,14 @@ const serveurParCompte = () => {
           LocalRowSize: 10, RankNumberScale: 100, AllowUserPreferences: true,
           HighlightColor: window.__user === 'A' ? '#ff0000' : '#775BF4'
         };
+        // Comme UserPreferenceRules.Apply : un compte masque, il ne rallume pas.
+        // Le vrai serveur envoie chaque case, cochee ou non.
+        bascules.forEach((b) => { if (o[b] === undefined) { o[b] = false; } });
+        o.ServerRows = bascules.filter((b) => o[b] === true);
+        if (window.__adminTitre) { o.LocalRowTitle = window.__adminTitre; }
         const choix = window.__prefs[window.__user];
         if (choix) {
-          bascules.forEach((b) => { if (choix[b] != null) { o[b] = choix[b]; } });
+          bascules.forEach((b) => { if (choix[b] != null) { o[b] = o[b] === true && choix[b]; } });
           if (choix.RankNumberScale != null && choix.RankNumberScale >= 40) {
             o.RankNumberScale = Math.min(choix.RankNumberScale, 100);
           }
@@ -1408,6 +1518,36 @@ if (toutMasque.boutons === 1) {
   rangeesRevenues = await culDeSac.evaluate(() => document.querySelectorAll('.mc-ranked').length);
 }
 await culDeSac.close();
+
+// AUDIT 2026-10-24 — le panneau ne propose que les rangees du serveur, et n'enregistre une
+// rangee que masquee : enregistree a vrai, une rangee coupee puis rallumee par
+// l'administrateur ne revenait jamais chez ce compte.
+const panneauServeur = await pageAudit();
+await panneauServeur.waitForSelector('.mc-prefs-open');
+await panneauServeur.click('.mc-prefs-open');
+const rangeesProposees = await panneauServeur.evaluate(() =>
+  Array.from(document.querySelectorAll('.mc-prefs li')).map(li => li.dataset.row));
+await panneauServeur.click('.mc-prefs-save');
+await panneauServeur.waitForFunction(() => window.__prefs.A, { timeout: 5000 });
+const enregistreSansRangee = await panneauServeur.evaluate(() =>
+  Object.keys(window.__prefs.A).filter(k => /^Show/.test(k)));
+await panneauServeur.close();
+
+// REGLAGES — gardes toute la session, un changement de l'administrateur n'arrivait jamais
+// sur une appli TV restee ouverte. Ils se relisent apres CACHE_TTL, a la navigation suivante.
+const reglagesFrais = await pageAudit({ horloge: true });
+await reglagesFrais.clock.runFor(2000);
+await reglagesFrais.waitForSelector('.mc-ranked', { timeout: 5000 }).catch(() => {});
+await reglagesFrais.evaluate(() => { window.__adminTitre = 'Nouveau titre du serveur'; });
+await reglagesFrais.clock.runFor(6 * 60 * 1000);
+await reglagesFrais.evaluate(() => {
+  document.querySelectorAll('.mc-row').forEach(r => r.remove());
+  document.querySelector('.homeSectionsContainer').appendChild(document.createElement('div'));
+});
+await reglagesFrais.clock.runFor(3000);
+const titreApresDelai = await reglagesFrais.evaluate(() =>
+  Array.from(document.querySelectorAll('.mc-row [id^=mc-row-title]')).map(e => e.textContent).join('|'));
+await reglagesFrais.close();
 
 // BOUCLE — constate en prod le 2026-09-27 : la build 10.11 sur Jellyfin 12.1 repondait 500 a
 // chaque liste, et chaque accueil ouvert relancait ses requetes a CHAQUE mutation de la page,
@@ -1589,7 +1729,10 @@ const serveurSeerr = () => {
         ] : [
           { Id: 0, Name: 'Radarr', Is4k: false, IsDefault: true, ActiveProfileId: 4, ActiveDirectory: '/films',
             Profiles: [{ Id: 4, Name: 'HD-1080p' }], RootFolders: [{ Path: '/films', FreeSpace: 1099511627776 }] }
-        ] });
+        ].concat(window.__deuxServeurs ? [
+          { Id: 1, Name: 'Radarr 4K', Is4k: true, IsDefault: false, ActiveProfileId: 9, ActiveDirectory: '/films-4k',
+            Profiles: [{ Id: 9, Name: 'Ultra-HD' }, { Id: 10, Name: 'Remux' }], RootFolders: [{ Path: '/films-4k', FreeSpace: null }] }
+        ] : []) });
       }
       if (route === 'MediaCarousel/Seerr/Seasons') {
         if (window.__refusSaisons) {
@@ -1605,6 +1748,16 @@ const serveurSeerr = () => {
             { Number: 4, Name: null, Year: null, Episodes: 9, State: 'not-requested', Requestable: true }
           ]
         }), 60));
+      }
+      if (route === 'MediaCarousel/Seerr/Details') {
+        if (window.__refusFiche) {
+          return Promise.reject({ status: 502, json: () => Promise.resolve({ Error: 'offline' }) });
+        }
+        return Promise.resolve({
+          MediaType: corps.MediaType, TmdbId: corps.TmdbId, Overview: window.__synopsisLong ? Array(60).join('Un voleur entre dans les reves. ') : 'Un voleur entre dans les reves.',
+          SeerrUrl: window.__sansLienSeerr ? null : 'https://seer.example.org/' + corps.MediaType + '/' + corps.TmdbId,
+          TmdbUrl: 'https://www.themoviedb.org/' + corps.MediaType + '/' + corps.TmdbId
+        });
       }
       if (route === 'MediaCarousel/Seerr/Request') {
         return new Promise((resolve, reject) => setTimeout(() => {
@@ -1629,6 +1782,7 @@ async function pageSeerr(reglages = {}) {
   vue.on('pageerror', e => errors.push('pageerror(seerr): ' + e.message));
   await vue.goto('file://' + path.join(here, 'home.html'));
   await vue.evaluate((r) => { Object.assign(window, r); }, reglages);
+  if (reglages.__lang) await vue.evaluate((l) => { document.documentElement.lang = l; }, reglages.__lang);
   await vue.evaluate(serveurSeerr);
   await vue.evaluate(script);
   await vue.waitForSelector('.mc-ranked');
@@ -1791,7 +1945,7 @@ const fenetre = await saisons.evaluate(() => {
     interrupteurs: toggles.length > 0 && toggles.every(t => t.classList.contains('mc-seerr-toggle')
       && getComputedStyle(t).appearance === 'none' && getComputedStyle(t).width === '40px'),
     fondEntete: getComputedStyle(d.querySelector('.mc-seerr-head')).backgroundImage,
-    titreDegrade: getComputedStyle(d.querySelector('h2')).backgroundImage.indexOf('linear-gradient') !== -1,
+    titreAccent: getComputedStyle(d.querySelector('h2')).color === 'rgb(119, 91, 244)',
     capitales: getComputedStyle(pastille).textTransform === 'uppercase',
     avancees: d.querySelectorAll('.mc-seerr-advanced').length,
     demandes: window.__appels.filter(a => a.route === 'MediaCarousel/Seerr/Request').length
@@ -1807,6 +1961,8 @@ const toutCoche = await saisons.evaluate(() =>
   Array.from(document.querySelectorAll('.mc-seerr-pick:checked')).map(b => b.value).join(','));
 await saisons.click('.mc-seerr-send');
 await saisons.waitForFunction(() => !document.querySelector('.mc-seerr-backdrop'));
+// La region vive du message est remplie 60 ms apres son insertion (lecteurs d'ecran) : on l'attend.
+await saisons.waitForFunction(() => ((document.querySelector('.mc-toast') || {}).textContent || '').length > 0);
 const apresSaisons = await saisons.evaluate(() => {
   const demande = window.__appels.filter(a => a.route === 'MediaCarousel/Seerr/Request').pop();
   const b = document.querySelector('.mc-seerr[data-tmdb="66732"]');
@@ -1947,6 +2103,97 @@ const demandeFilm = await avancee.evaluate(() => ({
 }));
 await avancee.close();
 
+// FICHE — le bouton « i » d'un titre absent ouvre le synopsis et les liens, sans rien demander.
+const fiche = await pageSeerr();
+await fiche.waitForFunction(etatSeerr('27205', 'request'));
+await fiche.click('.mc-info[data-tmdb="27205"]');
+await fiche.waitForSelector('.mc-seerr-link');
+const ficheVue = await fiche.evaluate(() => {
+  const d = document.querySelector('.mc-seerr-dialog');
+  return {
+    titre: d.querySelector('h2').textContent, resume: d.querySelector('.mc-seerr-overview').textContent,
+    liens: Array.from(d.querySelectorAll('.mc-seerr-link')).map(a => ({
+      href: a.getAttribute('href'), cible: a.getAttribute('target'), rel: a.getAttribute('rel') })),
+    demandes: window.__appels.filter(a => a.route === 'MediaCarousel/Seerr/Request').length,
+    envoyer: !!d.querySelector('.mc-seerr-send'), bouton: document.querySelector('.mc-info[data-tmdb="27205"]').getAttribute('aria-label')
+  };
+});
+await fiche.click('.mc-seerr-cancel');
+await fiche.waitForFunction(() => !document.querySelector('.mc-seerr-backdrop'));
+// La fenetre des saisons d'une serie montre aussi le synopsis.
+await fiche.click('.mc-seerr[data-tmdb="66732"]');
+await fiche.waitForSelector('.mc-seerr-dialog .mc-seerr-pick');
+const resumeSerie = await fiche.evaluate(() => {
+  const o = document.querySelector('.mc-seerr-dialog .mc-seerr-overview');
+  return { texte: o.textContent, cache: o.hidden };
+});
+await fiche.close();
+const sansLien = await pageSeerr({ __sansLienSeerr: true });
+await sansLien.waitForFunction(etatSeerr('27205', 'request'));
+await sansLien.click('.mc-info[data-tmdb="27205"]');
+await sansLien.waitForSelector('.mc-seerr-link');
+const liensSansSeerr = await sansLien.evaluate(() =>
+  Array.from(document.querySelectorAll('.mc-seerr-link')).map(a => a.textContent));
+await sansLien.close();
+const fichePanne = await pageSeerr({ __refusFiche: true });
+await fichePanne.waitForFunction(etatSeerr('27205', 'request'));
+await fichePanne.click('.mc-info[data-tmdb="27205"]');
+await fichePanne.waitForFunction(() => (document.querySelector('.mc-seerr-overview') || {}).textContent
+  === 'Le résumé n\'a pas pu être chargé.');
+const fichePanneVue = await fichePanne.evaluate(() => ({
+  fermer: !!document.querySelector('.mc-seerr-cancel'), liens: document.querySelectorAll('.mc-seerr-link').length }));
+// Contraste : le texte blanc de chaque etat du bouton atteint le seuil AA (4,5:1).
+const contrastes = await fichePanne.evaluate(() => {
+  const luminance = (rgb) => {
+    const [r, g, b] = rgb.match(/\d+/g).slice(0, 3).map(Number).map((v) => {
+      const c = v / 255;
+      return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+    });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  const ligne = document.querySelector('.mc-row');
+  return ['request', 'pending', 'processing', 'partial', 'available', 'blocked', 'error'].map((ton) => {
+    const bouton = document.createElement('button');
+    bouton.className = 'mc-seerr';
+    bouton.setAttribute('data-tone', ton);
+    ligne.appendChild(bouton);
+    const fond = getComputedStyle(bouton).backgroundColor;
+    ligne.removeChild(bouton);
+    return { ton, rapport: Math.round(1.05 / (luminance(fond) + 0.05) * 100) / 100 };
+  });
+});
+const contrastesFiche = await fichePanne.evaluate(() => {
+  const canaux = (c) => (c.match(/[\d.]+/g) || []).map(Number);
+  const lin = (v) => { const c = v / 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+  const lum = (c) => 0.2126 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.0722 * lin(c[2]);
+  const poser = (fond, c) => { const a = c.length > 3 ? c[3] : 1; return [0, 1, 2].map((k) => c[k] * a + fond[k] * (1 - a)); };
+  const rapport = (x, y) => Math.round((Math.max(lum(x), lum(y)) + 0.05) / (Math.min(lum(x), lum(y)) + 0.05) * 100) / 100;
+  const fondDe = (el) => {
+    const chaine = [];
+    for (let n = el; n; n = n.parentElement) chaine.unshift(canaux(getComputedStyle(n).backgroundColor));
+    return chaine.reduce((fond, c) => (c.length ? poser(fond, c) : fond), [0, 0, 0]);
+  };
+  const fenetre = document.createElement('div');
+  fenetre.className = 'mc-seerr-dialog';
+  fenetre.innerHTML = '<div class="mc-seerr-season"><span class="mc-seerr-season-episodes">8</span>'
+    + '<span class="mc-seerr-season-state" data-state="requested">Demande</span></div>';
+  document.body.appendChild(fenetre);
+  const episodes = fenetre.querySelector('.mc-seerr-season-episodes');
+  const pastille = fenetre.querySelector('.mc-seerr-season-state');
+  const res = {
+    episodes: rapport(canaux(getComputedStyle(episodes).color), fondDe(episodes)),
+    demande: rapport(canaux(getComputedStyle(pastille).color), fondDe(pastille))
+  };
+  fenetre.remove();
+  return res;
+});
+const survolFiltre = await fichePanne.evaluate(() => {
+  const b = document.querySelector('.mc-seerr[data-tmdb="27205"]');
+  return b ? getComputedStyle(b).filter : 'absent';
+});
+const sourceScript = fs.readFileSync(path.join(here, '..', '..', 'Web', 'media-carousel.js'), 'utf8');
+await fichePanne.close();
+
 // Options illisibles : la section reste cachee, et la demande part sans elles.
 const sansOptions = await pageSeerr({ __avance: true, __refusOptions: true });
 await sansOptions.waitForFunction(etatSeerr('27205', 'request'));
@@ -1999,11 +2246,536 @@ const etatAuRetour = await memoire.evaluate(() =>
   document.querySelector('.mc-seerr[data-tmdb="27205"]').getAttribute('data-state'));
 await memoire.close();
 
+// ---------------------------------------------------------------------------------------
+// Appli TV (mesure sur une TV Samsung, Tizen 9, appli Jellyfin empaquetee).
+// La classe `layout-tv` est posee avant le script, comme le fait jellyfin-web en mode TV.
+// La police de la TV dessine ses chiffres a 84 unites de haut (79 sur le PC) : on la simule
+// par la mesure du canevas. Retour de la telecommande : code 10009 (Tizen).
+const touche = (vue, code, cle) => vue.evaluate(([c, k]) => {
+  const e = new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true });
+  Object.defineProperty(e, 'keyCode', { get: () => c });
+  (document.activeElement || document.body).dispatchEvent(e);
+  return e.defaultPrevented;
+}, [code, cle]);
+const enTv = async (vue) => {
+  await vue.addInitScript(() => {
+    const mesure = CanvasRenderingContext2D.prototype.measureText;
+    CanvasRenderingContext2D.prototype.measureText = function (t) {
+      const m = mesure.call(this, t);
+      return /108px/.test(this.font) ? { width: m.width, actualBoundingBoxAscent: 84 } : m;
+    };
+    window.__routes = [];
+    window.Emby = { Page: { show: (chemin) => { window.__routes.push(chemin); return Promise.resolve(); } } };
+  });
+};
+
+const tvPrefs = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+tvPrefs.on('pageerror', e => errors.push('pageerror(tv): ' + e.message));
+await enTv(tvPrefs);
+await tvPrefs.addInitScript(() => { window.__allowPrefs = true; });
+await tvPrefs.goto('file://' + path.join(here, 'home.html'));
+await tvPrefs.evaluate(() => document.documentElement.classList.add('layout-tv'));
+await tvPrefs.evaluate(stub);
+await tvPrefs.evaluate(script);
+await tvPrefs.waitForSelector('.mc-ranked');
+const tvCartes = await tvPrefs.evaluate(() => {
+  const carte = document.querySelector('.mc-ranked');
+  const lien = carte.querySelector('a.itemAction');
+  carte.focus();
+  return {
+    carteFocalisee: document.activeElement === carte,
+    focusable: carte.classList.contains('focusable') && carte.getAttribute('tabindex') === '0',
+    lienHorsParcours: lien.getAttribute('tabindex') === '-1',
+    nom: carte.getAttribute('aria-label') === lien.getAttribute('aria-label'),
+    corps: parseFloat(getComputedStyle(document.querySelector('.mc-rank text')).fontSize)
+  };
+});
+const okSurCarte = await touche(tvPrefs, 13, 'Enter');
+const routeOk = await tvPrefs.evaluate(() => ({ routes: window.__routes.slice(), hash: location.hash }));
+// Le bouton de l'en-tete sort du parcours ; le panneau s'ouvre depuis une tuile au bout de
+// la rangee (mesure sur une box Android TV et une TV Samsung : le petit bouton attrapait le
+// focus en descendant depuis les bibliotheques).
+const tvRoue = await tvPrefs.evaluate(() => {
+  const tuiles = document.querySelectorAll('.mc-strip .mc-prefs-tile');
+  const bande = tuiles[0] && tuiles[0].parentNode;
+  return {
+    enTete: document.querySelector('.mc-row-header .mc-prefs-open').getAttribute('tabindex'),
+    tuiles: tuiles.length, auBout: !!bande && bande.lastElementChild === tuiles[0]
+  };
+});
+// Ouverture du panneau a la telecommande : focus sur le premier reglage, dans un conteneur.
+await tvPrefs.focus('.mc-prefs-tile');
+await tvPrefs.keyboard.press('Enter');
+await tvPrefs.waitForSelector('.mc-prefs');
+const tvPanneau = await tvPrefs.evaluate(() => ({
+  conteneur: document.querySelector('.mc-prefs').classList.contains('focuscontainer'),
+  premier: document.activeElement === document.querySelector('.mc-prefs input[type=checkbox]'),
+  coche: document.activeElement.checked
+}));
+// Chaque reglage du panneau se voit de loin a la telecommande, curseur compris.
+const tvCadres = await tvPrefs.evaluate(() => {
+  const cadre = (el) => { el.focus(); const s = getComputedStyle(el); return s.outlineStyle + ' ' + s.outlineWidth + ' ' + s.outlineColor; };
+  const curseur = document.getElementById('mc-prefs-scale');
+  const fleche = document.querySelector('.mc-prefs .mc-prefs-down');
+  const res = {
+    curseurAtteignable: curseur.classList.contains('focusable'),
+    curseur: cadre(curseur), fleche: cadre(fleche),
+    ligne: getComputedStyle(fleche.closest('li')).backgroundColor,
+    enregistrer: cadre(document.querySelector('.mc-prefs-save'))
+  };
+  document.querySelector('.mc-prefs input[type=checkbox]').focus();
+  return res;
+});
+const okCase = await touche(tvPrefs, 13, 'Enter');
+const caseApres = await tvPrefs.evaluate(() => document.activeElement.checked);
+const retourPanneau = await touche(tvPrefs, 10009, '');
+const apresRetour = await tvPrefs.evaluate(() => ({
+  panneau: document.querySelectorAll('.mc-prefs-backdrop').length,
+  focus: document.activeElement === document.querySelector('.mc-prefs-tile')
+}));
+// Fermee par la touche Retour d'une TV Samsung, la fenetre a rendu son etape d'historique.
+await tvPrefs.waitForTimeout(300);
+const etapeRendue = await tvPrefs.evaluate(() => !(history.state && history.state.mcDialog));
+// Appli Android TV : Retour n'arrive pas comme une touche, l'appli revient en arriere dans
+// l'historique (mesure sur une box Freebox Pop). L'ouverture a pris une etape : le retour ferme.
+await tvPrefs.focus('.mc-prefs-tile');
+await tvPrefs.keyboard.press('Enter');
+await tvPrefs.waitForSelector('.mc-prefs');
+const etapePrise = await tvPrefs.evaluate(() => !!(history.state && history.state.mcDialog));
+await tvPrefs.evaluate(() => history.back());
+await tvPrefs.waitForTimeout(400);
+const retourAndroid = await tvPrefs.evaluate(() => ({
+  panneau: document.querySelectorAll('.mc-prefs-backdrop').length,
+  focus: document.activeElement === document.querySelector('.mc-prefs-tile'),
+  hash: location.hash
+}));
+
+// Sur ordinateur : un clic passe par le routeur, un clic modifie garde le lien.
+const routeur = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+routeur.on('pageerror', e => errors.push('pageerror(routeur): ' + e.message));
+await routeur.addInitScript(() => {
+  window.__routes = [];
+  window.Emby = { Page: { show: (chemin) => { window.__routes.push(chemin); return Promise.resolve(); } } };
+});
+await routeur.goto('file://' + path.join(here, 'home.html'));
+await routeur.evaluate(stub);
+await routeur.evaluate(script);
+await routeur.waitForSelector('.mc-ranked a.itemAction');
+const bureau = await routeur.evaluate(() => {
+  const lien = document.querySelector('.mc-ranked a.itemAction');
+  const clic = (o) => {
+    const e = new MouseEvent('click', Object.assign({ bubbles: true, cancelable: true }, o));
+    lien.dispatchEvent(e);
+    return e.defaultPrevented;
+  };
+  const simple = clic({});
+  const modifie = clic({ ctrlKey: true });
+  const carte = lien.closest('.card');
+  return {
+    simple, modifie, routes: window.__routes.slice(), href: lien.getAttribute('href'),
+    pasDeTabindex: !carte.hasAttribute('tabindex') && !lien.hasAttribute('tabindex'),
+    corps: parseFloat(getComputedStyle(document.querySelector('.mc-rank text')).fontSize)
+  };
+});
+
+// Fenetre Seerr a la telecommande : conteneur de focus, OK coche, Retour ferme.
+const tvSeerr = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+tvSeerr.on('pageerror', e => errors.push('pageerror(tv seerr): ' + e.message));
+await enTv(tvSeerr);
+await tvSeerr.goto('file://' + path.join(here, 'home.html'));
+await tvSeerr.evaluate(() => document.documentElement.classList.add('layout-tv'));
+await tvSeerr.evaluate(serveurSeerr);
+await tvSeerr.evaluate(script);
+await tvSeerr.waitForFunction(etatSeerr('66732', 'request'));
+// Le titre absent : sa carte prend le focus, son bouton non ; OK sur la carte ouvre la demande.
+const tvAbsent = await tvSeerr.evaluate(() => {
+  const bouton = document.querySelector('.mc-seerr[data-tmdb="66732"]');
+  const carte = bouton.closest('.card');
+  carte.focus();
+  return {
+    carte: document.activeElement === carte && carte.classList.contains('focusable')
+      && carte.getAttribute('tabindex') === '0',
+    bouton: bouton.getAttribute('tabindex')
+  };
+});
+const okAbsent = await touche(tvSeerr, 13, 'Enter');
+// Une serie s'ouvre en deux etapes a la telecommande : le synopsis, puis les saisons.
+await tvSeerr.waitForSelector('.mc-seerr-next');
+await tvSeerr.focus('.mc-seerr-next');
+await tvSeerr.keyboard.press('Enter');
+await tvSeerr.waitForSelector('.mc-seerr-dialog .mc-seerr-pick');
+await tvSeerr.focus('.mc-seerr-pick');
+const tvFenetre = await tvSeerr.evaluate(() => ({
+  conteneur: document.querySelector('.mc-seerr-dialog').classList.contains('focuscontainer'),
+  coche: document.activeElement.checked
+}));
+await touche(tvSeerr, 13, 'Enter');
+const saisonCochee = await tvSeerr.evaluate(() => document.activeElement.checked);
+const retourSeerr = await touche(tvSeerr, 10009, '');
+const apresRetourSeerr = await tvSeerr.evaluate(() => ({
+  fenetre: document.querySelectorAll('.mc-seerr-backdrop').length,
+  focus: document.activeElement === document.querySelector('.mc-seerr[data-tmdb="66732"]').closest('.card'),
+  demandes: window.__appels.filter(a => a.route === 'MediaCarousel/Seerr/Request').length
+}));
+
+// TV, serie sans demandes partielles : a l'ouverture, le focus ne doit pas tomber sur « Demander »
+// (action definitive, a un OK de l'envoi) ; et un OK maintenu (touche repetee) ne rouvre ni ne
+// declenche rien : seul l'appui initial agit.
+const tvEntiere = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+tvEntiere.on('pageerror', e => errors.push('pageerror(tv entiere): ' + e.message));
+await enTv(tvEntiere);
+await tvEntiere.goto('file://' + path.join(here, 'home.html'));
+await tvEntiere.evaluate(() => { document.documentElement.classList.add('layout-tv'); window.__partiel = false; });
+await tvEntiere.evaluate(serveurSeerr);
+await tvEntiere.evaluate(script);
+await tvEntiere.waitForFunction(etatSeerr('66732', 'request'));
+const reperage = () => {
+  const carte = document.querySelector('.mc-seerr[data-tmdb="66732"]').closest('.card');
+  carte.focus();
+  const envoi = (repeat) => {
+    const e = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true, repeat });
+    Object.defineProperty(e, 'keyCode', { get: () => 13 });
+    carte.dispatchEvent(e);
+  };
+  window.__okCarte = envoi;
+};
+await tvEntiere.evaluate(reperage);
+await tvEntiere.evaluate(() => window.__okCarte(true));
+await tvEntiere.waitForTimeout(300);
+const toucheRepetee = await tvEntiere.evaluate(() => ({
+  fenetres: document.querySelectorAll('.mc-seerr-backdrop').length,
+  appels: window.__appels.filter(a => a.route === 'MediaCarousel/Seerr/Seasons').length
+}));
+await tvEntiere.evaluate(() => window.__okCarte(false));
+await tvEntiere.waitForSelector('.mc-seerr-next');
+await tvEntiere.focus('.mc-seerr-next');
+await tvEntiere.keyboard.press('Enter');
+await tvEntiere.waitForSelector('.mc-seerr-dialog .mc-seerr-pick');
+await tvEntiere.waitForTimeout(300);
+const focusEntiere = await tvEntiere.evaluate(() => ({
+  classe: document.activeElement.className,
+  surEnvoi: !!document.activeElement.closest('.mc-seerr-send')
+}));
+await tvEntiere.close();
+
+// TV : pas de bouton « i », la fiche s'ouvre sur OK quand le titre est deja demande ; elle reste
+// fermee pour un titre disponible ; la fenetre de demande porte les liens avant de demander.
+const tvFiche = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+tvFiche.on('pageerror', e => errors.push('pageerror(tv fiche): ' + e.message));
+await enTv(tvFiche);
+// Un titre « partiellement disponible » (Interstellar) : il doit s'ouvrir comme un titre demande.
+await tvFiche.addInitScript(() => {
+  window.__etats = {
+    'movie:27205': 'request', 'tv:1399': 'request-missing', 'tv:87108': 'available', 'movie:550': null,
+    'movie:157336': 'partial', 'tv:66732': 'request', 'tv:95396': 'pending'
+  };
+});
+await tvFiche.goto('file://' + path.join(here, 'home.html'));
+await tvFiche.evaluate(() => document.documentElement.classList.add('layout-tv'));
+await tvFiche.evaluate(serveurSeerr);
+await tvFiche.evaluate(script);
+await tvFiche.waitForFunction(etatSeerr('95396', 'pending'));
+await tvFiche.waitForFunction(etatSeerr('87108', 'available'));
+await tvFiche.waitForFunction(etatSeerr('157336', 'partial'));
+const okSur = async (tmdb) => {
+  await tvFiche.evaluate((t) => document.querySelector('.mc-seerr[data-tmdb="' + t + '"]').closest('.card').focus(), tmdb);
+  await touche(tvFiche, 13, 'Enter');
+  await tvFiche.waitForTimeout(500);
+  const etat = await tvFiche.evaluate(() => {
+    const f = document.querySelector('.mc-seerr-backdrop');
+    return {
+      fenetre: !!f, liens: f ? f.querySelectorAll('.mc-seerr-link').length : 0,
+      synopsis: f ? f.querySelector('.mc-seerr-overview').textContent : '',
+      envoyer: f ? !!f.querySelector('.mc-seerr-send') : false,
+      suite: f ? !!f.querySelector('.mc-seerr-next') : false
+    };
+  });
+  await touche(tvFiche, 10009, '');
+  await tvFiche.waitForTimeout(200);
+  etat.retour = await tvFiche.evaluate((t) => document.activeElement === document.querySelector('.mc-seerr[data-tmdb="' + t + '"]').closest('.card')
+    && !document.querySelector('.mc-seerr-backdrop'), tmdb);
+  return etat;
+};
+const ficheDemandee = await okSur('95396');
+const ficheDisponible = await okSur('87108');
+const fichePartielle = await okSur('157336');
+const ficheAvantDemande = await okSur('66732');
+const etapeSerie = await (async () => {
+  await tvFiche.evaluate(() => document.querySelector('.mc-seerr[data-tmdb="66732"]').closest('.card').focus());
+  await touche(tvFiche, 13, 'Enter');
+  await tvFiche.waitForSelector('.mc-seerr-next', { timeout: 4000 });
+  await tvFiche.waitForTimeout(500);
+  const premiere = await tvFiche.evaluate(() => ({ synopsis: document.querySelector('.mc-seerr-overview').textContent, envoyer: !!document.querySelector('.mc-seerr-send') }));
+  await tvFiche.focus('.mc-seerr-next');
+  await tvFiche.keyboard.press('Enter');
+  await tvFiche.waitForSelector('.mc-seerr-pick', { timeout: 4000 });
+  await tvFiche.waitForTimeout(500);
+  const seconde = await tvFiche.evaluate(() => { const o = document.querySelector('.mc-seerr-overview'); return { saisons: document.querySelectorAll('.mc-seerr-pick').length, synopsis: o ? (o.hidden ? '' : o.textContent) : '', envoyer: !!document.querySelector('.mc-seerr-send') }; });
+  await touche(tvFiche, 10009, '');
+  await tvFiche.waitForTimeout(300);
+  seconde.retour = await tvFiche.evaluate(() => !document.querySelector('.mc-seerr-backdrop') && document.activeElement.classList.contains('card'));
+  return { premiere, seconde };
+})();
+const demandesAvant = await tvFiche.evaluate(() => window.__appels.filter(a => a.route === 'MediaCarousel/Seerr/Request').length);
+const ficheFilmADemander = await okSur('27205');
+const demandesApres = await tvFiche.evaluate(() => window.__appels.filter(a => a.route === 'MediaCarousel/Seerr/Request').length);
+const envoiFilm = await (async () => {
+  await tvFiche.evaluate(() => document.querySelector('.mc-seerr[data-tmdb="27205"]').closest('.card').focus());
+  await touche(tvFiche, 13, 'Enter');
+  await tvFiche.waitForSelector('.mc-seerr-next', { timeout: 4000 });
+  const avant = await tvFiche.evaluate(() => window.__appels.filter(a => a.route === 'MediaCarousel/Seerr/Request').length);
+  await tvFiche.focus('.mc-seerr-next');
+  await tvFiche.keyboard.press('Enter');
+  await tvFiche.waitForTimeout(600);
+  return tvFiche.evaluate((n) => ({
+    demandes: window.__appels.filter(a => a.route === 'MediaCarousel/Seerr/Request').length - n,
+    fermee: !document.querySelector('.mc-seerr-backdrop'),
+    libelle: null
+  }), avant);
+})();
+
+// TV : un titre long et un synopsis long ne cachent rien (titre sur deux lignes, premiere case visible).
+const longTitre = 'Les chroniques extraordinaires et peu connues du royaume lointain de Westeros et au-dela';
+const longSynopsis = Array.from({ length: 180 }, (_, i) => 'mot' + i).join(' ');
+await tvFiche.setViewportSize({ width: 1280, height: 720 });
+const mesureFiche = async (tmdb) => {
+  await tvFiche.evaluate((t) => document.querySelector('.mc-seerr[data-tmdb="' + t + '"]').closest('.card').focus(), tmdb);
+  await touche(tvFiche, 13, 'Enter');
+  await tvFiche.waitForSelector('.mc-seerr-overview:not([hidden])', { timeout: 4000 });
+  await tvFiche.waitForTimeout(900);
+  const m = await tvFiche.evaluate(([titre, synopsis]) => {
+    const f = document.querySelector('.mc-seerr-backdrop');
+    const sub = f.querySelector('.mc-seerr-subtitle'), head = f.querySelector('.mc-seerr-head');
+    const body = f.querySelector('.mc-seerr-body');
+    sub.textContent = titre;
+    f.querySelector('.mc-seerr-title').textContent = titre;
+    f.querySelector('.mc-seerr-overview').textContent = synopsis;
+    const dedans = (el) => {
+      const b = el.getBoundingClientRect(), c = body.getBoundingClientRect();
+      return b.top >= c.top - 1 && b.bottom <= c.bottom + 1;
+    };
+    const premiere = f.querySelector('.mc-seerr-body input:not([disabled])');
+    return {
+      titreCoupe: sub.scrollWidth > sub.clientWidth + 1,
+      titreRogne: sub.getBoundingClientRect().bottom > head.getBoundingClientRect().bottom + 1
+        || f.querySelector('.mc-seerr-title').getBoundingClientRect().bottom > head.getBoundingClientRect().bottom + 1,
+      premiereCase: premiere ? dedans(premiere) : null,
+      envoyerVisible: (() => { const e = f.querySelector('.mc-seerr-send'); if (!e) return null; const b = e.getBoundingClientRect(); return b.bottom <= window.innerHeight && b.top >= 0; })()
+    };
+  }, [longTitre, longSynopsis]);
+  await touche(tvFiche, 10009, '');
+  await tvFiche.waitForTimeout(200);
+  return m;
+};
+const tvLongFiche = await mesureFiche('95396');
+const tvLongDemande = await mesureFiche('27205');
+await tvFiche.close();
+
+// LANGUE — `lang` de <html> : anglais pour toute langue autre que le francais, francais si
+// l'attribut est absent ou en `fr` (avec region). Meme fixture, memes gestes que plus haut.
+const enSeerr = await pageSeerr({ __lang: 'en' });
+await enSeerr.waitForFunction(etatSeerr('27205', 'request'));
+const enBouton = await enSeerr.evaluate(() => {
+  const b = document.querySelector('.mc-seerr[data-tmdb="27205"]');
+  const i = document.querySelector('.mc-info[data-tmdb="27205"]');
+  return {
+    texte: b.textContent, nom: b.getAttribute('aria-label'),
+    absent: document.querySelector('.mc-unavailable .cardText-secondary').textContent,
+    fiche: i && i.getAttribute('title'), ficheNom: i && i.getAttribute('aria-label')
+  };
+});
+await enSeerr.waitForFunction(etatSeerr('66732', 'request'));
+await enSeerr.click('.mc-seerr[data-tmdb="66732"]');
+await enSeerr.waitForSelector('.mc-seerr-dialog .mc-seerr-pick');
+await enSeerr.click('.mc-seerr-send');
+const enFenetre = await enSeerr.evaluate(() => {
+  const d = document.querySelector('.mc-seerr-dialog');
+  return {
+    titre: d.querySelector('h2').textContent, envoyer: d.querySelector('.mc-seerr-send').textContent,
+    annuler: d.querySelector('.mc-seerr-cancel').textContent,
+    message: d.querySelector('.mc-seerr-message').textContent,
+    etats: Array.from(d.querySelectorAll('.mc-seerr-season-state')).map(e => e.textContent),
+    noms: Array.from(d.querySelectorAll('.mc-seerr-season-name')).map(e => e.textContent),
+    episodes: Array.from(d.querySelectorAll('.mc-seerr-season-episodes')).map(e => e.textContent)
+  };
+});
+await enSeerr.close();
+
+const enRefus = await pageSeerr({ __lang: 'en-GB', __refus: 404 });
+await enRefus.waitForFunction(etatSeerr('27205', 'request'));
+await enRefus.click('.mc-seerr[data-tmdb="27205"]');
+await enRefus.waitForFunction(etatSeerr('27205', 'user-not-found'));
+const enErreur = await enRefus.evaluate(() => {
+  const b = document.querySelector('.mc-seerr[data-tmdb="27205"]');
+  return { texte: b.textContent, titre: b.getAttribute('title') };
+});
+await enRefus.close();
+
+const autreLangue = await pageSeerr({ __lang: 'de-DE' });
+await autreLangue.waitForFunction(etatSeerr('27205', 'request'));
+const deTexte = await autreLangue.evaluate(() => document.querySelector('.mc-seerr[data-tmdb="27205"]').textContent);
+await autreLangue.close();
+const frRegion = await pageSeerr({ __lang: 'fr-CA' });
+await frRegion.waitForFunction(etatSeerr('27205', 'request'));
+const frTexte = await frRegion.evaluate(() => document.querySelector('.mc-seerr[data-tmdb="27205"]').textContent);
+await frRegion.close();
+
+const enPrefs = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+enPrefs.on('pageerror', e => errors.push('pageerror(prefs en): ' + e.message));
+await enPrefs.addInitScript(() => { window.__allowPrefs = true; });
+await enPrefs.goto('file://' + path.join(here, 'home.html'));
+await enPrefs.evaluate(() => { document.documentElement.lang = 'en'; });
+await enPrefs.evaluate(stub);
+await enPrefs.evaluate(script);
+await enPrefs.waitForFunction(() => document.querySelectorAll('.mc-row').length === 10, { timeout: 8000 });
+const enOuverture = await enPrefs.evaluate(() => {
+  const o = document.querySelector('.mc-prefs-open');
+  return { titre: o.title, nom: o.getAttribute('aria-label') };
+});
+await enPrefs.click('.mc-prefs-open');
+const enPanneau = await enPrefs.evaluate(() => {
+  const p = document.querySelector('.mc-prefs');
+  const premiere = p.querySelector('li');
+  return {
+    titre: p.querySelector('h2').textContent,
+    boutons: ['.mc-prefs-save', '.mc-prefs-reset', '.mc-prefs-close'].map(s => p.querySelector(s).textContent),
+    etiquettes: Array.from(p.querySelectorAll('.mc-prefs-field label')).map(l => l.textContent),
+    indice: p.querySelector('.mc-prefs-hint').textContent,
+    rangee: premiere.querySelector('span').textContent,
+    afficher: premiere.querySelector('input').getAttribute('aria-label'),
+    monter: premiere.querySelector('.mc-prefs-up').getAttribute('aria-label')
+  };
+});
+await enPrefs.close();
+
+// TV : la liste systeme d'Android (blanche, impossible a colorer) est remplacee par une liste aux
+// couleurs de la fenetre pour le serveur, le profil et le dossier.
+const tvListe = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+tvListe.on('pageerror', e => errors.push('pageerror(tv liste): ' + e.message));
+await enTv(tvListe);
+await tvListe.addInitScript(() => { window.__avance = true; window.__deuxServeurs = true; });
+await tvListe.goto('file://' + path.join(here, 'home.html'));
+await tvListe.evaluate(() => document.documentElement.classList.add('layout-tv'));
+await tvListe.evaluate(serveurSeerr);
+await tvListe.evaluate(script);
+await tvListe.waitForFunction(etatSeerr('27205', 'request'));
+await tvListe.evaluate(() => document.querySelector('.mc-seerr[data-tmdb="27205"]').closest('.card').focus());
+await touche(tvListe, 13, 'Enter');
+await tvListe.waitForSelector('.mc-seerr-next');
+await tvListe.focus('.mc-seerr-next');
+await tvListe.keyboard.press('Enter');
+await tvListe.waitForSelector('.mc-seerr-choice');
+await tvListe.waitForTimeout(400);
+const listeAvant = await tvListe.evaluate(() => ({
+  boutons: document.querySelectorAll('.mc-seerr-choice').length,
+  natifCache: getComputedStyle(document.querySelector('.mc-seerr-server')).display === 'none',
+  texte: document.querySelector('.mc-seerr-field .mc-seerr-choice').textContent,
+  listeOuverte: !!document.querySelector('.mc-seerr-choices:not([hidden])')
+}));
+await tvListe.click('.mc-seerr-field .mc-seerr-choice');
+await tvListe.waitForSelector('.mc-seerr-choices:not([hidden]) .mc-seerr-opt');
+const listeOuverte = await tvListe.evaluate(() => {
+  const o = Array.from(document.querySelectorAll('.mc-seerr-choices:not([hidden]) .mc-seerr-opt'));
+  const fond = getComputedStyle(document.querySelector('.mc-seerr-choices:not([hidden])')).backgroundColor;
+  return { options: o.map(x => x.textContent), choisie: o.map(x => x.getAttribute('aria-selected')), fond, focus: document.activeElement.className };
+});
+const listeFocus = await tvListe.evaluate(() => {
+  const o = Array.from(document.querySelectorAll('.mc-seerr-choices:not([hidden]) .mc-seerr-opt'));
+  const choisie = o.find(x => x.getAttribute('aria-selected') === 'true');
+  const autre = o.find(x => x !== choisie);
+  const avant = getComputedStyle(autre).backgroundColor;
+  autre.focus();
+  const style = getComputedStyle(autre);
+  return { avant, apres: style.backgroundColor, accent: getComputedStyle(choisie).backgroundColor,
+    coche: getComputedStyle(choisie, '::before').content, contour: style.outlineWidth };
+});
+await tvListe.click('.mc-seerr-choices:not([hidden]) .mc-seerr-opt:nth-child(2)');
+await tvListe.waitForTimeout(300);
+const listeChoix = await tvListe.evaluate(() => ({
+  valeur: document.querySelector('.mc-seerr-server').value,
+  texte: document.querySelector('.mc-seerr-field .mc-seerr-choice').textContent,
+  fermee: !document.querySelector('.mc-seerr-choices:not([hidden])'),
+  profil: document.querySelectorAll('.mc-seerr-field')[1].querySelector('.mc-seerr-choice').textContent,
+  profils: document.querySelector('.mc-seerr-profile').options.length,
+  focus: document.activeElement.className
+}));
+// Retour (historique d'Android TV) : ferme la liste, pas la fenetre.
+await tvListe.click('.mc-seerr-field .mc-seerr-choice');
+await tvListe.waitForSelector('.mc-seerr-choices:not([hidden])');
+await tvListe.evaluate(() => window.history.back());
+await tvListe.waitForTimeout(400);
+const retourListe = await tvListe.evaluate(() => ({
+  fenetre: !!document.querySelector('.mc-seerr-backdrop'), liste: !!document.querySelector('.mc-seerr-choices:not([hidden])')
+}));
+// Retour d'une TV Samsung (touche 10009) : meme chose, puis la fenetre se ferme au Retour suivant.
+await tvListe.click('.mc-seerr-field .mc-seerr-choice');
+await tvListe.waitForSelector('.mc-seerr-choices:not([hidden])');
+await touche(tvListe, 10009, '');
+await tvListe.waitForTimeout(300);
+const touchesListe = await tvListe.evaluate(() => ({
+  fenetre: !!document.querySelector('.mc-seerr-backdrop'), liste: !!document.querySelector('.mc-seerr-choices:not([hidden])')
+}));
+await touche(tvListe, 10009, '');
+await tvListe.waitForTimeout(300);
+const fermeApres = await tvListe.evaluate(() => !document.querySelector('.mc-seerr-backdrop'));
+await tvListe.close();
+
+// Synopsis plus haut que la fenetre : il prend le focus, Bas/Haut font defiler le corps par pages,
+// en bout de course la touche passe a la navigation (essai demande par Elie, 2026-11-21).
+const tvLong = await browser.newPage({ viewport: { width: 960, height: 540 } });
+await enTv(tvLong);
+await tvLong.addInitScript(() => { window.__synopsisLong = true; window.__etats = { 'movie:27205': 'request' }; });
+await tvLong.goto('file://' + path.join(here, 'home.html'));
+await tvLong.evaluate(() => document.documentElement.classList.add('layout-tv'));
+await tvLong.evaluate(serveurSeerr);
+await tvLong.evaluate(script);
+await tvLong.waitForFunction(etatSeerr('27205', 'request'));
+await tvLong.evaluate(() => document.querySelector('.mc-seerr[data-tmdb="27205"]').closest('.card').focus());
+await touche(tvLong, 13, 'Enter');
+await tvLong.waitForSelector('.mc-seerr-overview[tabindex]', { timeout: 4000 });
+await tvLong.waitForTimeout(400);
+const longAvant = await tvLong.evaluate(() => {
+  const b = document.querySelector('.mc-seerr-body');
+  return { focus: document.activeElement.className, haut: b.scrollTop, deborde: b.scrollHeight > b.clientHeight };
+});
+const longHors = await tvLong.evaluate(() => {
+  const b = document.createElement('button'); b.className = 'emby-tab-button'; document.body.appendChild(b);
+  b.focus();
+  return !!document.activeElement.closest('.mc-seerr-backdrop');
+});
+const longBas = await touche(tvLong, 40, 'ArrowDown');
+const longApres = await tvLong.evaluate(() => document.querySelector('.mc-seerr-body').scrollTop);
+for (let i = 0; i < 40; i++) { await touche(tvLong, 40, 'ArrowDown'); }
+const longFin = await tvLong.evaluate(() => {
+  const b = document.querySelector('.mc-seerr-body');
+  return { bout: b.scrollTop >= b.scrollHeight - b.clientHeight - 1, focus: document.activeElement.className };
+});
+const longBoutRepris = await touche(tvLong, 40, 'ArrowDown');
+await tvLong.close();
+
 await browser.close();
 
 let failed = 0;
 const check = (name, ok, got) => { console.log((ok ? 'OK    ' : 'ECHEC ') + name + (ok ? '' : '  -> ' + JSON.stringify(got))); if (!ok) failed++; };
 
+check('TV: liste -> option focalisee se distingue de la choisie (fond, barre, sans trait blanc) et la choisie porte une coche',
+  listeFocus.apres !== listeFocus.avant && listeFocus.apres !== listeFocus.accent && listeFocus.contour === '0px'
+    && listeFocus.coche.indexOf('✓') !== -1, listeFocus);
+check('TV: synopsis long -> prend le focus au depart', longAvant.deborde && longAvant.focus.includes('mc-seerr-overview') && longAvant.haut === 0, longAvant);
+check('TV: un focus envoye hors de la fenetre y revient (tvfocus.js envoie Haut sur la barre du haut)', longHors === true, longHors);
+check('TV: synopsis long -> Bas fait defiler le corps et garde la touche', longBas === true && longApres > 0, { longBas, longApres });
+check('TV: synopsis long -> on atteint la fin, puis la touche est rendue a la navigation',
+  longFin.bout && longBoutRepris === false, { longFin, longBoutRepris });
+check('AUDIT: exclusions -> chaque requete Items porte une bibliotheque autorisee',
+  scopedCalls.length > 0 && scopedCalls.every(c => /ParentId=lib[AB]/.test(c)), scopedCalls);
+check('AUDIT: exclusions -> les deux bibliotheques sont interrogees pour les genres',
+  scopedCalls.some(c => c.includes('GenreIds=') && c.includes('ParentId=libA'))
+    && scopedCalls.some(c => c.includes('GenreIds=') && c.includes('ParentId=libB')), scopedCalls);
+check('AUDIT: exclusions -> « Parce que » et son film de depart restreints',
+  scopedCalls.some(c => c.includes('IsPlayed=true') && c.includes('ParentId=libA'))
+    && scopedCalls.some(c => c.includes('Genres=') && c.includes('ParentId=libB')), scopedCalls);
+check('AUDIT: sans exclusion, aucune restriction ajoutee',
+  unscopedCalls.length > 0 && unscopedCalls.every(c => !c.includes('ParentId=')), unscopedCalls);
 check('10 rangees sous les bibliotheques',
   JSON.stringify(result.order) === JSON.stringify(
     ['section0','mc-row','mc-row','mc-row','mc-row','mc-row','mc-row','mc-row','mc-row','mc-row','mc-row','section1','section2','section3']), result.order);
@@ -2030,7 +2802,14 @@ check('logo de studio affiche', result.studioLogo === true, result.studioLogo);
 check('studio sans logo : repli sur le nom', result.studioFallbackName === 1 && result.studioEscaped === 'Studio <sans logo>', result);
 check('rangee de genre remplie', result.genreCards === 6, result.genreCards);
 check('genre vide : message explicite', result.genreEmptyMessage === 'Aucun titre dans ce genre.', result.genreEmptyMessage);
+check('GENRES: les observateurs des rangees disparues sont relaches',
+  observateurs.actifs === observateurs.enAttente, observateurs);
 check('chargement differe des genres (3 requetes, pas plus)', genreCallsAtRest === 3, genreCallsAtRest);
+check('BECAUSE: la demande ne porte que sur des titres pas encore vus',
+  requetesBecause.length === 1 && new URLSearchParams(requetesBecause[0].split('?')[1]).get('IsPlayed') === 'false', requetesBecause);
+check('BECAUSE: un episode regarde fait partir la rangee de sa serie (titre, exclusion, deux genres, non vus)',
+  becauseSerie.titre === 'Parce que tu as regardé Serie <Test>' && becauseSerie.exclut === 'ser1'
+  && becauseSerie.genres === 'Drame|Mystere' && becauseSerie.nonVus === 'false', becauseSerie);
 check('BECAUSE: deux requetes, pas plus', becauseCallsAtRest === 2, becauseCallsAtRest);
 check('BECAUSE: aucune rangee pour un compte sans historique',
   !freshRows.titles.some(t => t.indexOf('Parce que') === 0), freshRows.titles);
@@ -2242,8 +3021,8 @@ check('CLAIR: sur page claire, seule la teinte change — la geometrie tient',
 
 check('CSS: la feuille produit bien des regles', styling.ruleCount > 25, styling.ruleCount);
 check('CSS: accolades equilibrees', styling.bracesBalanced === true, styling.bracesBalanced);
-check('CSS: seuls les points de rupture de comportement subsistent (plus aucun de taille)',
-  styling.mediaCount === 3, styling.mediaCount);
+check('CSS: seuls les points de rupture de comportement subsistent (survol, mouvement reduit, contraste, contraste force ; plus aucun de taille)',
+  styling.mediaCount === 4, styling.mediaCount);
 
 // Jellyfin RETRECIT ses cartes a certains paliers pour en montrer davantage :
 // une echelle strictement croissante n'a plus de sens. Ce qui doit tenir, a chaque
@@ -2333,7 +3112,15 @@ check('BARRE: le banc a bien une barre de defilement classique', barreClassique.
 check('BARRE: la bande n est pas etiree sous la barre de defilement',
   barreClassique.etiree === '' && barreClassique.pageDeborde === false, barreClassique);
 check('DOC: chaque variable du README existe dans le script', variablesFantomes.length === 0, variablesFantomes);
-check('DOC: le README contient bien un exemple de Custom CSS', exempleReadme.length > 0, exempleReadme);
+// Sur cette branche, le README renvoie au README principal : lui seul porte la documentation
+// et l'exemple de Custom CSS, verifies sur main contre le meme script. Une copie ici a deja
+// envoye des serveurs Jellyfin 12 vers le mauvais depot. Depuis le 2026-10-18, le catalogue
+// de main sert les deux lignes (Jellyfin choisit la version faite pour lui) : c'est la seule
+// adresse a donner.
+check('DOC: le README renvoie au README principal et donne le catalogue unique',
+  readme.includes('github.com/peterdu1109/MediaCarousel#readme')
+    && readme.includes('https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/manifest.json'),
+  readme.slice(0, 200));
 check('DOC: l exemple du README garde les affiches a la taille native',
   Math.abs(exempleApplique.afficheClassee - exempleApplique.afficheNative) < 0.5, exempleApplique);
 check('DOC: l exemple du README laisse le chiffre visible',
@@ -2355,7 +3142,7 @@ check('SEERR: un film en attente l attend, en ambre, sans action',
     && seerrVu.filmEnAttente.fond === 'rgb(180, 83, 9)', seerrVu.filmEnAttente);
 check('SEERR: une serie partiellement disponible propose « Demander manquant », en vert, cliquable',
   seerrVu.serieManquante.texte === 'Demander manquant' && seerrVu.serieManquante.inerte === 'false'
-    && seerrVu.serieManquante.popup === 'dialog' && seerrVu.serieManquante.fond === 'rgb(76, 164, 108)',
+    && seerrVu.serieManquante.popup === 'dialog' && seerrVu.serieManquante.fond === 'rgb(53, 122, 80)',
   seerrVu.serieManquante);
 check('SEERR: une serie dont tout est demande attend, sans action — plus de « Demander » trompeur',
   seerrVu.serieEnAttente.texte === 'En attente d\'approbation' && seerrVu.serieEnAttente.inerte === 'true'
@@ -2363,7 +3150,7 @@ check('SEERR: une serie dont tout est demande attend, sans action — plus de «
 check('SEERR: une serie annonce le choix des saisons, pas un film',
   seerrVu.serieADemander.popup === 'dialog' && seerrVu.demander.popup === null, [seerrVu.serieADemander, seerrVu.demander]);
 check('SEERR: un titre disponible le dit, en vert',
-  seerrVu.disponible.texte === 'Disponible' && seerrVu.disponible.fond === 'rgb(22, 163, 74)'
+  seerrVu.disponible.texte === 'Disponible' && seerrVu.disponible.fond === 'rgb(21, 128, 61)'
     && seerrVu.disponible.inerte === 'true', seerrVu.disponible);
 check('SEERR: un etat illisible masque le bouton plutot que d afficher une erreur',
   seerrVu.illisible.etat === 'loading' && seerrVu.illisible.visible === 'hidden', seerrVu.illisible);
@@ -2412,8 +3199,8 @@ check('SAISONS: nom, specials, annee et episodes',
   fenetre.lignes[0].nom === 'Épisodes spéciaux' && fenetre.lignes[2].nom === 'Stranger Things 2'
     && fenetre.lignes[3].nom === 'Saison 3' && fenetre.lignes[3].annee === '2019' && fenetre.lignes[3].episodes === '8 ép.'
     && fenetre.lignes[4].annee === '' && fenetre.lignes[4].episodes === '9 ép.', fenetre.lignes);
-check('SAISONS: la fenetre de Jellyfin Enhanced — interrupteurs, titre en degrade, pastilles en capitales',
-  fenetre.interrupteurs && fenetre.titreDegrade && fenetre.capitales, fenetre);
+check('SAISONS: la fenetre de Jellyfin Enhanced — interrupteurs, titre a la couleur d accent, pastilles en capitales',
+  fenetre.interrupteurs && fenetre.titreAccent && fenetre.capitales, fenetre);
 check('SAISONS: l en-tete est illustre par l affiche du titre, deja relayee',
   fenetre.fondEntete.indexOf('st.jpg') !== -1, fenetre.fondEntete);
 check('SAISONS: sans options avancees proposees, pas de section', fenetre.avancees === 0, fenetre.avancees);
@@ -2423,7 +3210,7 @@ check('SAISONS: « Tout selectionner » et le bouton des demandes partielles',
   fenetre.tout === true && fenetre.envoyer === 'Demander', fenetre);
 check('SAISONS: le focus entre dans la fenetre, sur la premiere case', fenetre.focus === true, fenetre.focus);
 check('SAISONS: rien de coche, rien ne part, et la fenetre le dit',
-  sansChoix.demandes === 0 && sansChoix.message === 'Veuillez sélectionner au moins une saison', sansChoix);
+  sansChoix.demandes === 0 && sansChoix.message === 'Sélectionne au moins une saison', sansChoix);
 check('SAISONS: « Tout selectionner » laisse les specials de cote', toutCoche === '3,4', toutCoche);
 check('SAISONS: la demande part avec les saisons cochees',
   apresSaisons.corps && apresSaisons.corps.MediaType === 'tv' && apresSaisons.corps.TmdbId === 66732
@@ -2454,6 +3241,28 @@ check('AVANCEES: changer de serveur propose ses propres profils et dossiers',
 check('AVANCEES: la demande porte le serveur, le profil et le dossier choisis',
   demandeAvancee.ServerId === 0 && demandeAvancee.ProfileId === 6 && demandeAvancee.RootFolder === '/series2'
     && demandeAvancee.Seasons.join(',') === '3,4', demandeAvancee);
+check('FICHE: titre, resume, deux liens ouverts hors de la page, rien demande',
+  ficheVue.titre === 'Inception' && ficheVue.resume === 'Un voleur entre dans les reves.' && !ficheVue.envoyer
+    && ficheVue.demandes === 0 && ficheVue.liens.length === 2
+    && ficheVue.liens.every(l => l.cible === '_blank' && l.rel === 'noopener noreferrer'), ficheVue);
+check('CONTRASTE: le nombre d episodes d une saison atteint 4,5:1', contrastesFiche.episodes >= 4.5, contrastesFiche);
+check('CONTRASTE: la pastille « Demande » d une saison atteint 4,5:1', contrastesFiche.demande >= 4.5, contrastesFiche);
+check('CONTRASTE: le survol du bouton Seerr n eclaircit plus le blanc (pas de filter)',
+  !/brightness\(1\.12\)/.test(sourceScript), survolFiltre);
+check('SAISONS: un repli flex precede la grille (Chromium 56 ignore grid)',
+  sourceScript.indexOf("'.mc-seerr-season{display:flex;align-items:center;display:grid;") >= 0, null);
+check('CONTRASTE: chaque etat du bouton Seerr atteint 4,5:1 en blanc',
+  contrastes.length === 7 && contrastes.every(c => c.rapport >= 4.5), contrastes);
+check('FICHE: les liens sont Seerr puis TMDB',
+  ficheVue.liens[0].href === 'https://seer.example.org/movie/27205'
+    && ficheVue.liens[1].href === 'https://www.themoviedb.org/movie/27205', ficheVue.liens);
+check('FICHE: le bouton i porte le nom du titre', /Inception/.test(ficheVue.bouton), ficheVue.bouton);
+check('FICHE: la fenetre de demande d une serie n a plus de synopsis hors TV (le bouton i le donne)',
+  resumeSerie.texte === '' && resumeSerie.cache === true, resumeSerie);
+check('FICHE: sans adresse publique, seul le lien TMDB reste',
+  liensSansSeerr.length === 1 && liensSansSeerr[0] === 'Voir sur TMDB', liensSansSeerr);
+check('FICHE: une panne de Seerr laisse la fenetre fermable, sans lien',
+  fichePanneVue.fermer && fichePanneVue.liens === 0, fichePanneVue);
 check('AVANCEES: un film ouvre sa fenetre, sans saisons, pret a partir',
   fenetreFilm.titre === 'Demander un film' && fenetreFilm.saisons === 0 && fenetreFilm.envoiActif
     && fenetreFilm.dossier === '/films (1 TB)', fenetreFilm);
@@ -2467,6 +3276,147 @@ check('SEERR: plus de 20 titres partent en plusieurs lots',
   JSON.stringify(lotsDecoupes) === '[20,5]', lotsDecoupes);
 check('SEERR: un retour sur l accueil montre aussitot l etat connu', etatAuRetour === 'request', etatAuRetour);
 
+check('TV: la carte prend le focus, son lien sort du parcours', tvCartes.carteFocalisee && tvCartes.focusable
+  && tvCartes.lienHorsParcours && tvCartes.nom, tvCartes);
+check('TV: OK sur une carte ouvre la fiche par le routeur, sans quitter la page',
+  okSurCarte === true && routeOk.routes.length === 1 && routeOk.routes[0].indexOf('#/details?id=') === 0
+    && routeOk.hash === '', routeOk);
+check('TV: police aux chiffres plus hauts, chiffre ramene a la hauteur de l affiche',
+  Math.abs(tvCartes.corps - 101.6) < 0.2, tvCartes.corps);
+check('BUREAU: chiffre au corps d origine', bureau.corps === 108, bureau.corps);
+check('BUREAU: un clic ouvre la fiche par le routeur, un clic modifie garde le lien',
+  bureau.simple === true && bureau.modifie === false && bureau.routes.length === 1
+    && bureau.routes[0] === bureau.href, bureau);
+check('BUREAU: les cartes gardent leur balisage (pas de tabindex)', bureau.pasDeTabindex, bureau);
+check('TV: le panneau garde le focus et le pose sur le premier reglage',
+  tvPanneau.conteneur && tvPanneau.premier, tvPanneau);
+check('TV: le curseur de taille est atteignable a la telecommande', tvCadres.curseurAtteignable, tvCadres);
+check('TV: cadre blanc epais sur le reglage choisi, ligne eclairee',
+  ['curseur', 'fleche', 'enregistrer'].every(k => tvCadres[k] === 'solid 3px rgb(255, 255, 255)')
+    && tvCadres.ligne !== 'rgba(0, 0, 0, 0)', tvCadres);
+check('TV: OK coche une case du panneau', okCase === true && caseApres === !tvPanneau.coche, { okCase, caseApres });
+check('TV: la roue sort du parcours, une tuile au bout de la rangee ouvre le panneau',
+  tvRoue.enTete === '-1' && tvRoue.tuiles === 1 && tvRoue.auBout, tvRoue);
+check('TV: Retour ferme le panneau, le focus revient a la tuile',
+  retourPanneau === true && apresRetour.panneau === 0 && apresRetour.focus, apresRetour);
+check('TV: Retour Samsung rend l etape d historique prise a l ouverture', etapeRendue === true, etapeRendue);
+check('ANDROID TV: Retour (retour d historique) ferme le panneau, focus sur la tuile, page gardee',
+  etapePrise === true && retourAndroid.panneau === 0 && retourAndroid.focus && retourAndroid.hash === '',
+  { etapePrise, retourAndroid });
+check('TV: la fenetre Seerr garde le focus, OK coche une saison',
+  tvFenetre.conteneur && saisonCochee === !tvFenetre.coche, { tvFenetre, saisonCochee });
+check('TV: titre absent, la carte prend le focus et OK ouvre la demande',
+  tvAbsent.carte && tvAbsent.bouton === '-1' && okAbsent === true, { tvAbsent, okAbsent });
+check('TV: Retour ferme la fenetre Seerr sans rien demander, focus rendu a la carte',
+  retourSeerr === true && apresRetourSeerr.fenetre === 0 && apresRetourSeerr.focus
+    && apresRetourSeerr.demandes === 0, apresRetourSeerr);
+
+check('TV: serie sans demandes partielles, le focus de la fenetre est sur Annuler, pas sur « Demander »',
+  !focusEntiere.surEnvoi && focusEntiere.classe === 'mc-seerr-cancel', focusEntiere);
+check("TV: un OK maintenu (touche repetee) sur une carte n'ouvre rien",
+  toucheRepetee.fenetres === 0 && toucheRepetee.appels === 0, toucheRepetee);
+
+check('TV: OK sur un titre deja demande ouvre la fiche (synopsis, sans lien), sans envoyer ; Retour rend le focus',
+  ficheDemandee.fenetre && ficheDemandee.liens === 0 && ficheDemandee.synopsis !== '' && !ficheDemandee.envoyer && ficheDemandee.retour, ficheDemandee);
+check("TV: le titre d'une serie long passe sur deux lignes, sans etre coupe ni rogne (fiche)",
+  tvLongFiche.titreCoupe === false && tvLongFiche.titreRogne === false, tvLongFiche);
+check('TV: un synopsis long ne pousse pas la premiere case hors de la fenetre de demande',
+  tvLongDemande.premiereCase !== false && tvLongDemande.envoyerVisible !== false && tvLongDemande.titreRogne === false, tvLongDemande);
+check('TV: OK sur un titre partiellement disponible ouvre la fiche, sans envoyer ; Retour rend le focus',
+  fichePartielle.fenetre && fichePartielle.liens === 0 && fichePartielle.synopsis !== '' && !fichePartielle.envoyer && fichePartielle.retour, fichePartielle);
+check("TV: OK sur un titre disponible n'ouvre rien",
+  !ficheDisponible.fenetre, ficheDisponible);
+check('TV: une serie a demander s ouvre en deux etapes : synopsis et bouton pour choisir les saisons, sans envoi',
+  ficheAvantDemande.fenetre && ficheAvantDemande.suite && !ficheAvantDemande.envoyer && ficheAvantDemande.synopsis !== '' && ficheAvantDemande.liens === 0, ficheAvantDemande);
+check('TV: la deuxieme etape montre les saisons sans repeter le synopsis ; Retour rend le focus a la carte',
+  etapeSerie.seconde.saisons > 0 && etapeSerie.seconde.synopsis === '' && etapeSerie.seconde.envoyer && etapeSerie.seconde.retour, etapeSerie);
+check('TV: OK sur un film a demander ouvre la fiche (synopsis, bouton Demander), sans rien envoyer',
+  ficheFilmADemander.fenetre && ficheFilmADemander.suite && !ficheFilmADemander.envoyer && ficheFilmADemander.synopsis !== ''
+    && demandesApres === demandesAvant && ficheFilmADemander.retour,
+  { ficheFilmADemander, demandesAvant, demandesApres });
+check('TV: « Demander » dans la fiche d un film (sans options avancees) envoie la demande et ferme la fenetre',
+  envoiFilm.demandes === 1 && envoiFilm.fermee, envoiFilm);
+check('AUDIT: le panneau ne propose que les rangees affichees par le serveur',
+  rangeesProposees.filter(id => id.indexOf('native:') !== 0).join(',') === 'local', rangeesProposees);
+check('AUDIT: enregistrer sans rien masquer n ecrit aucune rangee', enregistreSansRangee.length === 0, enregistreSansRangee);
+check('AUDIT: les reglages du serveur se relisent apres le delai du cache',
+  /Nouveau titre du serveur/.test(titreApresDelai), titreApresDelai);
+// LANGUE — assertions.
+check('LANGUE: lang="en", le bouton Seerr, son nom accessible, la fiche et la carte absente',
+  enBouton.texte === 'Request' && /^Request: \S/.test(enBouton.nom)
+    && enBouton.absent === 'Not in library' && enBouton.fiche === 'Details'
+    && /^Details: /.test(enBouton.ficheNom), enBouton);
+check('LANGUE: lang="en", la fenetre de demande et son message de saison manquante',
+  enFenetre.titre === 'Request a series' && enFenetre.envoyer === 'Request' && enFenetre.annuler === 'Cancel'
+    && enFenetre.message === 'Please select at least one season'
+    && enFenetre.noms.some(n => /^Season \d+$/.test(n)) && enFenetre.etats.length > 0
+    && enFenetre.etats.every(e => ['Not requested', 'Requested', 'Processing', 'Partial', 'Available', 'Blocked'].includes(e))
+    && enFenetre.episodes.every(e => / ep\.$/.test(e)), enFenetre);
+check('LANGUE: lang="en-GB", l erreur Seerr et son infobulle en anglais',
+  enErreur.texte === 'User not found' && /^This account does not exist in Seerr/.test(enErreur.titre), enErreur);
+check('LANGUE: une autre langue (de) donne l anglais, fr-CA garde le francais',
+  deTexte === 'Request' && frTexte === 'Demander', { deTexte, frTexte });
+check('LANGUE: lang="en", le panneau Mes rangees',
+  enOuverture.titre === 'Customize my rows' && enOuverture.nom === 'Customize my rows'
+    && enPanneau.titre === 'My rows' && enPanneau.boutons.join('|') === 'Save|Reset|Close'
+    && enPanneau.etiquettes.join('|') === 'Accent color|Number size|Hide Jellyfin sections'
+    && /^These choices only apply to this account\./.test(enPanneau.indice)
+    && enPanneau.rangee === 'Server top' && enPanneau.afficher === 'Show: Server top'
+    && enPanneau.monter === 'Move up: Server top', { enOuverture, enPanneau });
+
+// Chaque cle de L10N existe dans les deux langues, et chaque cle employee par le script
+// (t('...'), label/hint des etats, etats de saison, ligne du panneau) est definie.
+{
+  // Les fins de ligne dependent du poste (git autocrlf) : le test ne doit pas en dependre.
+  const source = fs.readFileSync(path.join(repo, 'Web', 'media-carousel.js'), 'utf8').split('\r\n').join('\n');
+  const debut = source.indexOf('var L10N = {');
+  const fin = source.indexOf('\n    };\n', debut) + 7;
+  const table = new Function(source.slice(debut, fin) + '; return L10N;')();
+  const fr = Object.keys(table.fr), en = Object.keys(table.en);
+  const manquantes = fr.filter(k => !(k in table.en)).concat(en.filter(k => !(k in table.fr)));
+  const vides = fr.concat(en).filter(k => !table.fr[k] && !table.en[k]);
+  const utilisees = new Set();
+  for (const m of source.matchAll(/\bt\('([^']+)'/g)) utilisees.add(m[1]);
+  for (const m of source.matchAll(/\b(?:label|hint): '((?:state|season)\.[^']+)'/g)) utilisees.add(m[1]);
+  for (const m of source.matchAll(/^\s+(?:'[a-z-]+'|[a-z]+): 'season\.([a-z-]+)',?$/gm)) utilisees.add('season.' + m[1]);
+  const indefinies = [...utilisees].filter(k => !(k in table.fr) && !/^row\.$/.test(k));
+  const placeholders = fr.filter(k => (table.fr[k].match(/\{\d+\}/g) || []).sort().join() !== (table.en[k].match(/\{\d+\}/g) || []).sort().join());
+  check('LANGUE: chaque cle existe en francais et en anglais, memes arguments',
+    manquantes.length === 0 && vides.length === 0 && placeholders.length === 0 && fr.length > 90, { manquantes, vides, placeholders });
+  check('LANGUE: toute cle employee par le script est definie', utilisees.size > 60 && indefinies.length === 0, indefinies);
+  // Le francais tutoie partout (decision d'Elie, 2026-11-15) : aucun vouvoiement dans la table.
+  const vouvoiement = fr.filter(k => /\b(vous|votre|vos|veuillez)\b/i.test(table.fr[k]));
+  check('LANGUE: le francais tutoie partout, aucun « vous » ni « Veuillez »', vouvoiement.length === 0, vouvoiement);
+}
+
+check('ACCENT: texte noir sur un accent clair (jaune, cyan, #fe0), blanc sur un accent sombre',
+  surAccent['#ffeb3b'].jeton === '#000' && surAccent['#00e5ff'].jeton === '#000' && surAccent['#fe0'].jeton === '#000'
+  && surAccent['#775BF4'].jeton === '#fff' && surAccent['#102a43'].jeton === '#fff', surAccent);
+check('ACCENT: le bouton Enregistrer lit ce jeton', Object.values(surAccent).every(v => v.regle), surAccent);
+// D8 : un seul violet. Les teintes fixes du plugin cedent la place a l'accent choisi.
+const teintesFixes = ['#8b5cf6', '#4f46e5', '#7c3aed', '#c084fc', '#3b82f6'].filter(c => prefs.css.toLowerCase().indexOf(c) !== -1);
+check('ACCENT: plus de violet ou de bleu fixe dans la fenetre de demande (un seul accent)', teintesFixes.length === 0, teintesFixes);
+check('ACCENT: titre, cases cochees et bouton Demander suivent l accent',
+  /\.mc-seerr-title\{[^}]*color:var\(--mc-accent\)/.test(prefs.css)
+  && /\.mc-seerr-toggle:checked\{background:var\(--mc-accent\)/.test(prefs.css)
+  && /\.mc-seerr-send,\.mc-seerr-foot \.mc-seerr-next\{[^}]*background:var\(--mc-accent\);[^}]*color:var\(--mc-on-accent\)/.test(prefs.css), 'regles');
+// D11 : lisibilite et finitions.
+check('D11: un interrupteur eteint est cerne (visible sur le fond de la fenetre)',
+  /\.mc-seerr-toggle\{[^}]*box-shadow:inset 0 0 0 2px #94a3b8/.test(prefs.css), 'anneau');
+check('D11: contraste force : le titre n est plus un texte transparent, interrupteur et pastilles ont un contour systeme',
+  prefs.css.indexOf('text-fill-color:transparent') === -1 && /forced-colors:active[^@]*\.mc-seerr-toggle/.test(prefs.css), 'forced-colors');
+check('D11: le panneau Mes rangees a le rayon et le flou de la fenetre de demande',
+  /\.mc-prefs\{[^}]*border-radius:16px/.test(prefs.css) && /\.mc-prefs-backdrop\{[^}]*backdrop-filter:blur\(8px\)/.test(prefs.css), 'prefs');
+check('D11: la roue des reglages est une icone dessinee, pas un emoji', prefs.roueSvg && !prefs.roueEmoji, { svg: prefs.roueSvg, emoji: prefs.roueEmoji });
+check('TV LISTE: le serveur, le profil et le dossier ont une liste a nous ; la liste native est cachee',
+  listeAvant.boutons === 3 && listeAvant.natifCache && listeAvant.texte === 'Radarr' && !listeAvant.listeOuverte, listeAvant);
+check('TV LISTE: OK deplie la liste (toutes les options, la courante marquee, fond sombre)',
+  listeOuverte.options.join('|') === 'Radarr|Radarr 4K' && listeOuverte.choisie.join('|') === 'true|false'
+  && listeOuverte.fond !== 'rgba(0, 0, 0, 0)' && listeOuverte.fond !== 'rgb(255, 255, 255)', listeOuverte);
+check('TV LISTE: choisir une option change le serveur, ferme la liste et met a jour le profil',
+  listeChoix.valeur === '1' && listeChoix.texte === 'Radarr 4K' && listeChoix.fermee && listeChoix.profil === 'Ultra-HD' && listeChoix.profils === 2, listeChoix);
+check('TV LISTE: Retour (historique) ferme la liste sans fermer la fenetre', retourListe.fenetre && !retourListe.liste, retourListe);
+check('TV LISTE: Retour (touche 10009) ferme la liste, puis la fenetre au suivant', touchesListe.fenetre && !touchesListe.liste && fermeApres, { touchesListe, fermeApres });
 check('aucune erreur js', errors.length === 0, errors);
 
 console.log(failed === 0 ? '\nTous les tests passent.' : '\n' + failed + ' echec(s).');

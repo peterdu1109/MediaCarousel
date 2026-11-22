@@ -124,6 +124,21 @@ public class UserPreferencesController : ControllerBase
         return NoContent();
     }
 
+    /// <summary>
+    /// Efface les choix de tous les comptes, depuis la page de réglages.
+    /// </summary>
+    /// <remarks>
+    /// Réservé aux administrateurs : c'est la seule route qui touche aux choix d'autrui. Elle
+    /// sert à imposer un nouvel accueil à tout le monde, comme « écraser les réglages
+    /// personnels » de Jellyfin Enhanced.
+    /// </remarks>
+    /// <response code="200">Le nombre de comptes remis aux réglages du serveur.</response>
+    /// <returns>Le nombre de comptes concernés.</returns>
+    [HttpDelete("UserPreferences/All")]
+    [Authorize(Policy = "RequiresElevation")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public ActionResult<int> DeleteAllPreferences() => Ok(_store.ClearAll());
+
     private static bool AreAllowed() => Plugin.Instance?.Configuration.AllowUserPreferences ?? false;
 
     private Guid ResolveUserId()

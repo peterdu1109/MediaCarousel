@@ -1,8 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Jellyfin.Data;
+using JellyfinCarouselPlugin.Configuration;
 using JellyfinCarouselPlugin.Models;
 using JellyfinCarouselPlugin.Services;
 using MediaBrowser.Controller.Dto;
@@ -212,6 +215,12 @@ public class TopListsController : ControllerBase
             SeerrAdvanced = SeerrController.IsAdvanced(config)
         };
 
+        var claim = User.Claims
+            .FirstOrDefault(c => string.Equals(c.Type, UserIdClaim, StringComparison.OrdinalIgnoreCase))?.Value;
+        var hasOwn = Guid.TryParse(claim, out var own);
+
+        options.LibraryIds = ScopedLibraryIds(config, ResolveUser(null));
+
         // Les réglages de l'administrateur ne sont qu'un défaut dès que la personnalisation
         // est ouverte : ce que ce compte a choisi passe par-dessus, le reste suit le serveur.
         // La fusion a lieu ici pour que le rendu n'ait rien à savoir de tout cela.
@@ -220,10 +229,7 @@ public class TopListsController : ControllerBase
             return Ok(options);
         }
 
-        var claim = User.Claims
-            .FirstOrDefault(c => string.Equals(c.Type, UserIdClaim, StringComparison.OrdinalIgnoreCase))?.Value;
-
-        return Guid.TryParse(claim, out var own)
+        return hasOwn
             ? Ok(UserPreferenceRules.Apply(options, _preferences.Get(own)))
             : Ok(options);
     }
@@ -236,12 +242,21 @@ public class TopListsController : ControllerBase
     /// bibliothèque et ne doit pas maintenir la requête HTTP ouverte.
     /// </remarks>
     /// <response code="204">Le recalcul a été lancé.</response>
-    /// <returns>Un statut sans contenu.</returns>
+    /// <response code="409">Un recalcul est déjà en cours : cet appel n'en lance pas un second.</response>
+    /// <returns>Un statut sans contenu, ou un conflit.</returns>
     [HttpPost("Top/Refresh")]
     [Authorize(Policy = "RequiresElevation")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public ActionResult RefreshTopLists()
     {
+        // RefreshAsync ignore l'appel quand un recalcul tourne : sans ce refus, la page
+        // annonçait « lancé » pour un passage qui n'avait pas eu lieu.
+        if (_refreshService.IsRefreshing)
+        {
+            return Conflict();
+        }
+
         _ = Task.Run(async () =>
         {
             try
@@ -263,11 +278,25 @@ public class TopListsController : ControllerBase
         // demandée est tirée de celle qui existe : la rangée ne disparaît plus.
         var snapshot = GlobalTopFallback.For(kind, _store.Get);
         var user = ResolveUser(userId);
+
+        // Un jeton dont le compte est introuvable ne vaut pas une clé d'API : sans utilisateur,
+        // rien ne serait filtré. Rien n'est publié.
+        if (user is null && HasUserClaim())
+        {
+            return new TopListResponseDto
+            {
+                Kind = snapshot.Kind.ToString(),
+                Source = snapshot.Source,
+                GeneratedUtc = snapshot.GeneratedUtc,
+                Items = Array.Empty<TopListItemDto>()
+            };
+        }
         var take = Math.Clamp(limit ?? snapshot.Entries.Count, 0, 100);
 
         var items = new List<TopListItemDto>(Math.Min(take, snapshot.Entries.Count));
         var libraryItems = new List<BaseItem>();
         var libraryTargets = new List<TopListItemDto>();
+        var showAbsent = GlobalTopFallback.ShowsAbsentEntries(user is not null && user.HasContentRestrictions());
 
         foreach (var entry in snapshot.Entries)
         {
@@ -277,13 +306,21 @@ public class TopListsController : ControllerBase
             }
 
             BaseItem? item = null;
+            if (!entry.IsInLibrary && !showAbsent)
+            {
+                continue;
+            }
+
             if (entry.IsInLibrary)
             {
                 item = _libraryManager.GetItemById(entry.ItemId);
 
-                // L'élément a pu être supprimé, ou être invisible pour cet utilisateur
-                // (contrôle parental, bibliothèque non autorisée) : on l'omet du classement.
-                if (item is null || (user is not null && !item.IsVisible(user)))
+                // L'élément a pu être supprimé, ou être invisible pour cet utilisateur : on
+                // l'omet du classement. `IsVisibleStandalone` et non `IsVisible` : ce dernier ne
+                // pèse que la classification et les étiquettes, pas l'accès à la bibliothèque.
+                // Un compte limité à « Films » recevait sinon les titres des autres
+                // bibliothèques (banc, suite `droits`, 2026-11-01).
+                if (item is null || (user is not null && !item.IsVisibleStandalone(user)))
                 {
                     continue;
                 }
@@ -297,8 +334,10 @@ public class TopListsController : ControllerBase
                 TmdbId = entry.TmdbId,
                 ImdbId = entry.ImdbId,
                 // Relayée par le plugin : sans cela, chaque navigateur irait chercher
-                // l'affiche chez TMDB et lui livrerait son adresse IP.
-                PosterUrl = PosterProxy.ToLocalUrl(entry.PosterUrl),
+                // l'affiche chez TMDB et lui livrerait son adresse IP. Absents seulement :
+                // un titre présent s'affiche avec les images de Jellyfin, et le relais ne
+                // sert plus son affiche (voir PosterProxy.IsRelayed).
+                PosterUrl = entry.IsInLibrary ? null : PosterProxy.ToLocalUrl(entry.PosterUrl),
                 MediaType = entry.MediaType
             };
 
@@ -345,23 +384,46 @@ public class TopListsController : ControllerBase
         };
     }
 
+    /// <summary>
+    /// Donne les bibliothèques auxquelles le script doit restreindre ses requêtes.
+    /// </summary>
+    /// <remarks>
+    /// Vide sans exclusion : le script garde alors une seule requête par rangée.
+    /// </remarks>
+    private string[] ScopedLibraryIds(PluginConfiguration config, Jellyfin.Database.Implementations.Entities.User? user)
+    {
+        var excluded = LibraryFilter.ParseGuids(config.ExcludedLibraryIds);
+        if (excluded.Count == 0)
+        {
+            return Array.Empty<string>();
+        }
+
+        // Les bibliothèques ouvertes à ce compte, comme `CatalogController` : `IsVisible` sur
+        // une bibliothèque ne pèse pas l'accès, et publierait celles qui lui sont interdites.
+        var libraries = user is null
+            ? _libraryManager.GetUserRootFolder().Children
+            : _libraryManager.GetUserRootFolder().GetChildren(user, includeLinkedChildren: true);
+
+        return libraries
+            .Where(library => !excluded.Contains(library.Id))
+            .Select(library => library.Id.ToString("N", CultureInfo.InvariantCulture))
+            .ToArray();
+    }
+
+    private bool HasUserClaim()
+    {
+        var claim = User.Claims.FirstOrDefault(c => string.Equals(c.Type, UserIdClaim, StringComparison.OrdinalIgnoreCase))?.Value;
+        return RequestUser.FromClaim(claim).HasValue;
+    }
+
     private Jellyfin.Database.Implementations.Entities.User? ResolveUser(Guid? userId)
     {
         var claim = User.Claims.FirstOrDefault(c => string.Equals(c.Type, UserIdClaim, StringComparison.OrdinalIgnoreCase))?.Value;
 
-        // Le jeton prime TOUJOURS sur le paramètre. L'inverse laissait un compte standard
-        // demander le classement « pour » un administrateur : le filtrage de visibilité
-        // s'appliquait alors au compte nommé et non à l'appelant, qui recevait les titres,
-        // années et affiches des bibliothèques dont il est pourtant exclu.
-        if (Guid.TryParse(claim, out var own) && own != Guid.Empty)
-        {
-            return _userManager.GetUserById(own);
-        }
-
-        // Aucun utilisateur dans le jeton : c'est un appel par clé d'API, qui vaut déjà
-        // administrateur. Le paramètre lui sert alors à choisir le point de vue du filtrage.
-        return userId.HasValue && userId.Value != Guid.Empty
-            ? _userManager.GetUserById(userId.Value)
+        // Le jeton prime toujours sur le paramètre (EXG-057) : la règle et sa raison sont
+        // dans `RequestUser`, où les tests la tiennent.
+        return RequestUser.Choose(claim, userId) is { } id
+            ? _userManager.GetUserById(id)
             : null;
     }
 

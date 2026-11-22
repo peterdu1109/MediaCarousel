@@ -42,7 +42,12 @@
     var EMPTY_RETRY_DELAY = 2000;
 
     var cache = {};
+    var HOME_CONTAINER_CLASS = 'homeSectionsContainer';
     var options = null;
+    // Les réglages se relisent eux aussi après CACHE_TTL : gardés toute la session, un
+    // changement de l'administrateur, ou un choix fait sur un autre appareil, n'arrivait
+    // jamais sur une appli TV restée ouverte.
+    var optionsTime = 0;
     // Compte auquel appartiennent `cache` et `options` : voir scopeMemoryToUser().
     var memoryUser = null;
     // Demandes à Seerr : proposées ou non par le serveur, et dernier état connu de chaque
@@ -268,6 +273,34 @@
         return Math.min(100, Math.max(40, Math.round(value))) / 100;
     }
 
+    /**
+     * Texte lisible sur la couleur d'accent : noir ou blanc, celui qui contraste le plus
+     * (luminance relative WCAG). Un blanc fixe devenait illisible sur un accent clair, jaune
+     * ou cyan par exemple. Valeur déjà validée par safeAccent : #rgb, #rgba, #rrggbb ou #rrggbbaa.
+     */
+    function onAccent(hex) {
+        var h = String(hex).slice(1);
+
+        if (h.length === 3 || h.length === 4) {
+            h = h.charAt(0) + h.charAt(0) + h.charAt(1) + h.charAt(1) + h.charAt(2) + h.charAt(2);
+        }
+
+        if (h.length < 6) {
+            return '#fff';
+        }
+
+        var lum = [0, 2, 4].map(function (i) {
+            var c = parseInt(h.substr(i, 2), 16) / 255;
+            return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+        });
+        var l = 0.2126 * lum[0] + 0.7152 * lum[1] + 0.0722 * lum[2];
+
+        // Le blanc reste le choix tant qu'il tient le seuil AA (4,5:1) : c'est le rendu d'origine,
+        // et le violet par défaut est presque à égalité avec le noir. Contraste du blanc :
+        // 1,05 / (l + 0,05).
+        return 1.05 / (l + 0.05) >= 4.5 ? '#fff' : '#000';
+    }
+
     function buildCss(accent, rankScale) {
         var scale = rankScale || DEFAULT_RANK_SCALE;
 
@@ -278,6 +311,7 @@
                contours de focus disparaissaient — invisibles à la télécommande. */
             '.mc-row,.mc-prefs-backdrop,.mc-seerr-backdrop{',
             '--mc-accent:' + safeAccent(accent) + ';',
+            '--mc-on-accent:' + onAccent(safeAccent(accent)) + ';',
             /* Repris du thème quand il l'expose ; sinon la valeur de `.padded-left`. */
             '--mc-side-padding:var(--sidePadding,3.3%);',
             '--mc-ease:cubic-bezier(.22,.61,.36,1);--mc-dur:.28s;',
@@ -447,7 +481,7 @@
                garantit sous tous les thèmes, et le défaut ne se voit qu'à ce moment-là. */
             '.mc-row .mc-rank text{font-family:"Noto Sans",-apple-system,BlinkMacSystemFont,',
             '"Segoe UI",Roboto,Helvetica,Arial,sans-serif;',
-            'font-size:108px;font-weight:900;',
+            'font-size:' + rankFontSize() + 'px;font-weight:900;',
             'font-variant-numeric:tabular-nums;font-feature-settings:"tnum";}',
 
             /* Chiffre evide : contour seul, sans remplissage. Il n'est plus pose SUR
@@ -494,16 +528,31 @@
             '@keyframes mc-spin{to{transform:rotate(360deg);}}',
             '.mc-row .mc-seerr[aria-disabled="true"]{cursor:default;}',
             '.mc-row .mc-seerr[aria-disabled="false"]:hover{transform:translate3d(0,-2px,0);',
-            'box-shadow:0 4px 12px rgba(90,63,184,.4);filter:brightness(1.12);}',
+            'box-shadow:0 4px 12px rgba(90,63,184,.4);}',
             /* Un anneau blanc cerné de noir : lisible sur n'importe quelle affiche. */
             '.mc-row .mc-seerr:focus{outline:none;box-shadow:0 0 0 2px #fff,0 0 0 4px rgba(0,0,0,.7);}',
+            /* Carte d'un titre absent choisie à la télécommande : son bouton est ce que OK
+               actionne, il se montre et se marque comme un bouton choisi. */
+            '.layout-tv .mc-row .card:focus .mc-seerr-zone{opacity:1;}',
+            '.layout-tv .mc-row .card:focus .mc-seerr{box-shadow:0 0 0 3px #fff;}',
             '.mc-row .mc-seerr:focus:not(:focus-visible){box-shadow:none;}',
-            /* Les couleurs de Jellyfin Enhanced, état par état. */
+            /* Les teintes de Jellyfin Enhanced, état par état ; les deux verts sont assombris (blanc
+               dessus : 5,2:1 et 5,0:1, contre 3,1:1 et 3,3:1 à l'origine) pour atteindre le seuil
+               AA de 4,5:1 d'un texte de cette taille. */
+            /* Bouton « fiche » : en haut à droite de l'affiche, dans le même voile que « Demander ». */
+            '.mc-row .mc-info{position:absolute;top:6%;right:6%;pointer-events:auto;box-sizing:border-box;',
+            'width:2.6em;height:2.6em;margin:0;padding:0;border:0;border-radius:50%;font:inherit;font-size:.8em;',
+            'font-weight:700;line-height:2.6em;text-align:center;color:#fff;background:rgba(0,0,0,.62);cursor:pointer;}',
+            /* Zone tactile d'environ 45 px (le bouton en fait 31) : un cadre invisible déborde. */
+            '.mc-row .mc-info::after{content:"";position:absolute;left:-7px;right:-7px;top:-7px;bottom:-7px;}',
+            '.mc-row .mc-info:hover{background:rgba(0,0,0,.88);}',
+            '.mc-row .mc-info:focus{outline:none;box-shadow:0 0 0 2px #fff,0 0 0 4px rgba(0,0,0,.7);}',
+            '.mc-row .mc-info:focus:not(:focus-visible){box-shadow:none;}',
             '.mc-row .mc-seerr[data-tone="request"]{background:#5a3fb8;}',
             '.mc-row .mc-seerr[data-tone="pending"]{background:#b45309;}',
             '.mc-row .mc-seerr[data-tone="processing"]{background:#581c87;}',
-            '.mc-row .mc-seerr[data-tone="partial"]{background:#4ca46c;}',
-            '.mc-row .mc-seerr[data-tone="available"]{background:#16a34a;}',
+            '.mc-row .mc-seerr[data-tone="partial"]{background:#357a50;}',
+            '.mc-row .mc-seerr[data-tone="available"]{background:#15803d;}',
             '.mc-row .mc-seerr[data-tone="blocked"]{background:#78350f;}',
             '.mc-row .mc-seerr[data-tone="error"]{background:#dc3545;}',
 
@@ -524,22 +573,22 @@
             '.mc-seerr-dialog:focus{outline:none;}',
             '.mc-seerr-head{position:relative;flex:0 0 auto;box-sizing:border-box;height:8em;',
             'padding:24px;padding:min(24px,5vw);',
-            'overflow:hidden;border-radius:16px 16px 0 0;background-color:#1e293b;',
-            'background-image:linear-gradient(45deg,#3b82f6,#8b5cf6);background-size:cover;background-position:center;}',
+            'overflow:hidden;border-radius:16px 16px 0 0;background-color:var(--mc-accent);',
+            'background-size:cover;background-position:center;}',
             '.mc-seerr-head::before{content:"";position:absolute;left:0;top:0;right:0;bottom:0;',
             'background:rgba(0,0,0,.8);-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px);}',
             '.mc-seerr-title{position:relative;margin:0 0 6px;font-size:1.8rem;font-weight:700;line-height:1.2;',
-            'color:#8b5cf6;background:linear-gradient(45deg,#3b82f6,#8b5cf6);-webkit-background-clip:text;',
-            'background-clip:text;-webkit-text-fill-color:transparent;}',
+            'color:var(--mc-accent);}',
             '.mc-seerr-subtitle{position:relative;margin:0;font-size:1.4rem;font-weight:500;',
             'color:rgba(255,255,255,.9);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}',
             /* Sur un écran étroit, marges et colonnes se resserrent : `min()` plutôt qu'un point
                de rupture, la valeur de Jellyfin Enhanced d'abord pour les moteurs qui l'ignorent. */
             '.mc-seerr-body{flex:1 1 auto;overflow-y:auto;padding:24px;padding:min(24px,5vw);}',
-            '.mc-seerr-seasons{display:grid;grid-row-gap:4px;margin-bottom:24px;}',
+            '.mc-seerr-seasons{display:block;display:grid;grid-row-gap:4px;margin-bottom:24px;}',
             /* `1fr` : la colonne du nom ne descend jamais sous son plus long mot ; sur un écran
                étroit, c'est la pastille qui passe sur deux lignes. */
-            '.mc-seerr-season{display:grid;grid-template-columns:40px 1fr auto auto;',
+            /* Repli flex : Chromium 56 (Tizen 4) ignore `grid`, la déclaration suivante l'écrase ailleurs. */
+            '.mc-seerr-season{display:flex;align-items:center;display:grid;grid-template-columns:40px 1fr auto auto;',
             'grid-column-gap:16px;grid-column-gap:min(16px,3vw);align-items:center;',
             'padding:16px 20px;padding:16px min(20px,4vw);border-radius:12px;cursor:pointer;',
             'background:rgba(30,41,59,.4);border:1px solid rgba(51,65,85,.3);',
@@ -554,31 +603,42 @@
             '.mc-seerr-all-label{font-size:.95rem;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:#cbd5e1;}',
             '.mc-seerr-toggle{-webkit-appearance:none;appearance:none;position:relative;box-sizing:border-box;',
             'width:40px;min-width:40px;height:22px;margin:0;border:0;border-radius:999px;cursor:pointer;',
-            'background:rgba(71,85,105,.6);transition:background-color .2s ease;}',
+            /* Éteint : un anneau clair, sans quoi l'interrupteur se confond avec le fond (1,5:1). */
+            'background:rgba(71,85,105,.6);box-shadow:inset 0 0 0 2px #94a3b8;transition:background-color .2s ease;}',
             '.mc-seerr-toggle::before{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;',
             'border-radius:50%;background:#fff;transition:transform .2s ease;}',
-            '.mc-seerr-toggle:checked{background:#4f46e5;}',
+            '.mc-seerr-toggle:checked{background:var(--mc-accent);box-shadow:none;}',
             '.mc-seerr-toggle:checked::before{transform:translateX(18px);}',
             '.mc-seerr-toggle:disabled{opacity:.4;cursor:not-allowed;}',
             '.mc-seerr-toggle:focus{outline:2px solid rgba(59,130,246,.8);outline-offset:2px;}',
             '.mc-seerr-toggle:focus:not(:focus-visible){outline:none;}',
             /* Sans le `min-width:0` de Jellyfin Enhanced : c'est lui qui laisse, sur un écran
                étroit, un mot long déborder sur la colonne des épisodes. */
-            '.mc-seerr-season-info{display:flex;flex-direction:column;}',
+            '.mc-seerr-season-info{display:flex;flex-direction:column;flex:1 1 auto;}',
             '.mc-seerr-season-name{font-size:1rem;font-weight:600;color:#e2e8f0;}',
             '.mc-seerr-season-year{margin-top:4px;font-size:.875rem;color:#94a3b8;}',
             '.mc-seerr-season-episodes{min-width:70px;min-width:min(70px,11vw);text-align:right;font-size:.875rem;',
-            'font-weight:500;color:#64748b;}',
+            'font-weight:500;color:#94a3b8;}',
             '.mc-seerr-season-state{box-sizing:border-box;min-width:110px;min-width:min(110px,22vw);',
             'padding:6px 12px;border-radius:20px;',
             'text-align:center;font-size:.75rem;font-weight:700;letter-spacing:.5px;text-transform:uppercase;',
             'color:#818cf8;background:rgba(99,102,241,.15);border:1px solid rgba(99,102,241,.3);}',
             '.mc-seerr-season-state[data-state="requested"],.mc-seerr-season-state[data-state="processing"]{',
-            'color:#a855f7;background:rgba(147,51,234,.15);border-color:rgba(147,51,234,.3);}',
+            'color:var(--mc-on-accent);background:var(--mc-accent);border-color:transparent;}',
             '.mc-seerr-season-state[data-state="available"],.mc-seerr-season-state[data-state="partial"]{',
             'color:#4ade80;background:rgba(34,197,94,.15);border-color:rgba(34,197,94,.3);}',
             '.mc-seerr-season-state[data-state="blocked"]{color:#f87171;background:rgba(239,68,68,.15);',
             'border-color:rgba(239,68,68,.3);}',
+            '.mc-seerr-overview{margin:0 0 1em;line-height:1.5;white-space:pre-line;color:#e2e8f0;}',
+            '.mc-seerr-overview[hidden]{display:none;}',
+            /* Pas de `gap` : les liens se séparent par des marges. */
+            '.mc-seerr-links{margin:0 0 .4em;}',
+            '.mc-seerr-link{display:inline-block;margin:0 12px 8px 0;padding:10px 18px;border-radius:8px;',
+            'color:#fff;background:rgba(71,85,105,.8);border:1px solid rgba(148,163,184,.2);text-decoration:none;',
+            'font-size:.875rem;font-weight:600;}',
+            '.mc-seerr-link:hover{background:rgba(71,85,105,1);}',
+            '.mc-seerr-link:focus{outline:2px solid var(--mc-accent);outline-offset:2px;}',
+            '.mc-seerr-link:focus:not(:focus-visible){outline:none;}',
             '.mc-seerr-dialog .mc-seerr-note{margin:.6em 0;font-size:.9em;color:#94a3b8;}',
             '.mc-seerr-advanced{margin-top:1em;padding-top:1em;border-top:1px solid rgba(148,163,184,.1);}',
             '.mc-seerr-advanced[hidden]{display:none;}',
@@ -602,11 +662,14 @@
             'background:rgba(15,23,42,.3);border-top:1px solid rgba(51,65,85,.3);}',
             '.mc-seerr-foot button{min-width:120px;margin-left:12px;padding:12px 24px;border:0;border-radius:8px;',
             'font:inherit;font-size:.875rem;font-weight:600;cursor:pointer;transition:transform .2s ease;}',
-            '.mc-seerr-foot .mc-seerr-send{color:#fff;background:linear-gradient(135deg,#4f46e5,#7c3aed);',
-            'box-shadow:0 4px 12px rgba(79,70,229,.3);}',
-            '.mc-seerr-foot .mc-seerr-send:hover:not([disabled]){background:linear-gradient(135deg,#4338ca,#6d28d9);',
+            '.mc-seerr-foot .mc-seerr-send,.mc-seerr-foot .mc-seerr-next{background:var(--mc-accent);color:var(--mc-on-accent);',
+            'box-shadow:0 4px 12px rgba(0,0,0,.3);}',
+            '.mc-seerr-foot .mc-seerr-send:hover:not([disabled]),.mc-seerr-foot .mc-seerr-next:hover{box-shadow:inset 0 0 0 999px rgba(0,0,0,.18),0 4px 12px rgba(0,0,0,.3);',
             'transform:translate3d(0,-1px,0);}',
             '.mc-seerr-foot .mc-seerr-send[disabled]{opacity:.6;cursor:not-allowed;}',
+            /* Contraste forcé de Windows : couleurs système, contours visibles. */
+            '@media (forced-colors:active){.mc-seerr-title{color:CanvasText;}',
+            '.mc-seerr-toggle,.mc-seerr-season-state{border:1px solid CanvasText;forced-color-adjust:auto;}}',
             '.mc-seerr-foot .mc-seerr-cancel{color:#e2e8f0;background:rgba(71,85,105,.8);',
             'border:1px solid rgba(148,163,184,.2);}',
             '.mc-seerr-foot .mc-seerr-cancel:hover{background:rgba(71,85,105,1);}',
@@ -641,17 +704,27 @@
                `emby-checkbox` attendent d'être enregistrés par le client, ce qui n'est
                garanti sur aucune page. Tout est donc en HTML nu, stylé ici.
                ------------------------------------------------------------------ */
-            '.mc-prefs-open{margin-left:auto;border:0;background:transparent;color:inherit;',
+            /* Zone tactile d'au moins 44 px sans changer la mise en page : un cadre invisible déborde. */
+            '.mc-prefs-open{position:relative;margin-left:auto;border:0;background:transparent;color:inherit;',
             'cursor:pointer;font-size:1.1em;line-height:1;padding:.2em .4em;border-radius:4px;',
             'opacity:.55;transition:opacity var(--mc-dur) var(--mc-ease);}',
+            '.mc-prefs-open::after{content:"";position:absolute;left:-12px;right:-12px;top:-12px;bottom:-12px;}',
             '.mc-prefs-open:hover,.mc-prefs-open:focus{opacity:1;}',
             '.mc-row.mc-prefs-only .sectionTitle{opacity:.6;font-size:1em;}',
             '.mc-prefs-open:focus{outline:2px solid var(--mc-accent);outline-offset:2px;}',
+            /* Pas de `gap` (Tizen) : des marges. */
+            '.mc-row .mc-prefs-tile{flex:0 0 auto;align-self:center;width:var(--mc-poster-width,10em);',
+            'margin:0 0 0 1em;padding:1em .6em;border:0;border-radius:8px;cursor:pointer;',
+            'background:rgba(255,255,255,.08);color:#fff;font:inherit;text-align:center;line-height:1.3;}',
+            '.mc-row .mc-prefs-tile-icon{display:block;font-size:2.4em;margin-bottom:.3em;opacity:.8;}',
+            '.mc-row .mc-prefs-tile:focus{outline:3px solid #fff;outline-offset:2px;',
+            'background:rgba(255,255,255,.18);}',
 
             '.mc-prefs-backdrop{position:fixed;left:0;right:0;top:0;bottom:0;z-index:10000;',
             'background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;',
-            'padding:1em;}',
-            '.mc-prefs{background:#1c1c1f;color:#fff;border-radius:8px;padding:1.2em;',
+            '-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);padding:1em;}',
+            '.layout-tv .mc-prefs-backdrop{-webkit-backdrop-filter:none;backdrop-filter:none;}',
+            '.mc-prefs{background:#1c1c1f;color:#fff;border-radius:16px;padding:1.2em;',
             'width:100%;max-width:420px;max-height:86vh;overflow-y:auto;',
             'box-shadow:0 12px 40px rgba(0,0,0,.6);}',
             '.mc-prefs h2{margin:0 0 .2em;font-size:1.2em;}',
@@ -673,11 +746,42 @@
             '.mc-prefs .mc-prefs-actions{display:flex;flex-wrap:wrap;margin-top:1.2em;}',
             '.mc-prefs .mc-prefs-actions button{margin-right:.5em;margin-top:.4em;border:0;',
             'border-radius:4px;padding:.55em 1em;cursor:pointer;font-size:.95em;}',
-            '.mc-prefs .mc-prefs-save{background:var(--mc-accent);color:#fff;}',
+            '.mc-prefs .mc-prefs-save{background:var(--mc-accent);color:var(--mc-on-accent);}',
             '.mc-prefs .mc-prefs-reset,.mc-prefs .mc-prefs-close{',
             'background:rgba(255,255,255,.12);color:#fff;}',
             '.mc-prefs .mc-prefs-actions button:focus{outline:2px solid var(--mc-accent);',
             'outline-offset:2px;}',
+            /* À la télécommande, le réglage sélectionné doit se voir de loin. Mesuré sur une TV
+               Samsung : les cases, les flèches, la couleur et le curseur n'avaient que le trait
+               bleu d'un pixel du navigateur, et le cadre violet d'« Enregistrer » se fondait
+               dans son fond violet. Un cadre blanc épais partout, et la ligne de la rangée
+               choisie éclairée. Même chose dans la fenêtre de demande à Seerr. */
+            '.layout-tv .mc-prefs li:focus-within{background:rgba(255,255,255,.12);border-radius:4px;}',
+            /* TV : la télécommande ne fait pas défiler la fenêtre. Un titre long passe sur deux
+               lignes (l'en-tête grandit au besoin). */
+            '.layout-tv .mc-seerr-head{height:auto;min-height:8em;}',
+            '.layout-tv .mc-seerr-subtitle{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;',
+            '-webkit-box-orient:vertical;}',
+            /* Liste à nous à la télécommande : la liste d'Android est blanche et ne se colore pas. */
+            '.layout-tv .mc-seerr-field select{display:none;}',
+            '.mc-seerr-choice{position:relative;box-sizing:border-box;width:100%;padding:12px 40px 12px 16px;',
+            'text-align:left;font:inherit;color:#e2e8f0;background:#0f172a;border:1px solid rgba(71,85,105,.8);',
+            'border-radius:8px;cursor:pointer;}',
+            '.mc-seerr-choice::after{content:"";position:absolute;right:16px;top:50%;margin-top:-3px;',
+            'border:6px solid transparent;border-top-color:#94a3b8;border-bottom:0;}',
+            '.mc-seerr-choices{margin-top:4px;max-height:40vh;overflow-y:auto;background:#0f172a;',
+            'border:1px solid rgba(71,85,105,.8);border-radius:8px;}',
+            '.mc-seerr-choices[hidden]{display:none;}',
+            '.mc-seerr-opt{display:block;box-sizing:border-box;width:100%;margin:0;padding:12px 16px;border:0;',
+            'text-align:left;font:inherit;color:#e2e8f0;background:transparent;cursor:pointer;}',
+            '.mc-seerr-opt[aria-selected="true"]{background:var(--mc-accent);color:var(--mc-on-accent);}',
+            '.layout-tv .mc-prefs input:focus,.layout-tv .mc-prefs button:focus,',
+            '.layout-tv .mc-seerr-dialog input:focus,.layout-tv .mc-seerr-dialog select:focus,',
+            '.layout-tv .mc-seerr-dialog button:focus{outline:3px solid #fff!important;outline-offset:2px;}',
+            /* Focus d'une option : fond clair, texte sombre (le plus net à 3 m), choisie ou non ; la coche dit le choix. */
+            '.layout-tv .mc-seerr-dialog .mc-seerr-opt:focus{outline:0!important;background:#f8fafc;color:#0f172a;font-weight:600;}',
+            '.layout-tv .mc-seerr-opt[aria-selected="true"]::before{content:"\\2713\\00a0";}',
+            '.layout-tv .mc-seerr-overview[tabindex]:focus{outline:3px solid #fff;outline-offset:4px;}',
 
             /* Flèches de défilement : confort souris, masquées au clavier et au tactile. */
             '.mc-row .mc-arrow{position:absolute;top:0;bottom:0;width:3.2vw;min-width:34px;max-width:72px;',
@@ -696,8 +800,8 @@
             /* Repli clavier : jellyfin-web ne stylise le focus que sur les cartes
                marquées `show-focus`, posées uniquement en mode téléviseur. */
             '.mc-row .card:focus{outline:none;}',
-            '.mc-row .card:focus .cardScalable{outline:3px solid var(--mc-accent);outline-offset:3px;}',
-            '.mc-row .card:focus:not(:focus-visible) .cardScalable{outline:none;}',
+            '.mc-row .card:not(.show-focus):focus .cardScalable{outline:3px solid var(--mc-accent);outline-offset:3px;}',
+            '.mc-row .card:not(.show-focus):focus:not(:focus-visible) .cardScalable{outline:none;}',
 
             /* Fond clair, détecté en JS sur la couleur réelle de la page : les blancs
                translucides du chiffre y sont invisibles, tout passe en sombre. */
@@ -785,9 +889,21 @@
         // manque, ni s'ajouter au logo d'un studio comme un second libellé.
         inner += opts.decoration || '';
 
+        // À la télécommande, c'est la CARTE qui prend le focus, comme les cartes natives :
+        // Jellyfin et les thèmes ne dessinent le cadre de sélection que sur `.card:focus`.
+        // Mesuré sur une TV Samsung, le focus posé sur le lien intérieur ne montrait rien.
+        // Le lien sort alors du parcours ; OK sur la carte l'ouvre (voir wireTvCards()).
+        // Un titre absent n'a pas de lien mais peut porter le bouton de demande à Seerr : la
+        // carte prend alors le focus de la même façon, et OK actionne le bouton (voir
+        // wireCardLinks()). Mesuré sur une box Android TV et une TV Samsung : posé seul sur
+        // l'affiche, ce petit bouton attrapait le focus en descendant depuis la rangée du
+        // dessus, à la place de la carte.
+        var tvStop = (!!opts.href || !!opts.tvAction) && layoutCardClass() === ' show-focus';
+
         var body = opts.href
             ? '<a href="' + escapeHtml(opts.href) + '" data-action="link" class="' + imageClasses
-                + ' itemAction"' + style + ' aria-label="' + escapeHtml(label) + '">' + inner + '</a>'
+                + ' itemAction"' + style + ' aria-label="' + escapeHtml(label) + '"'
+                + (tvStop ? ' tabindex="-1"' : '') + '>' + inner + '</a>'
             : '<div class="' + imageClasses + '"' + style + '>' + inner + '</div>';
 
         // Une seconde ligne vide plutôt qu'absente : deux cartes voisines dont l'une
@@ -851,7 +967,8 @@
         }
 
         return '<div class="card ' + shape + 'Card' + layoutCardClass() + ' card-withuserdata'
-            + (opts.cardClass ? ' ' + opts.cardClass : '') + '"'
+            + (opts.cardClass ? ' ' + opts.cardClass : '') + (tvStop ? ' focusable' : '') + '"'
+            + (tvStop ? ' tabindex="0" aria-label="' + escapeHtml(label) + '"' : '')
             + (opts.ariaHidden ? ' aria-hidden="true"' : ' role="listitem"')
             + (opts.itemId ? ' data-id="' + escapeHtml(opts.itemId) + '"' : '')
             + (opts.serverId ? ' data-serverid="' + escapeHtml(opts.serverId) + '"' : '')
@@ -891,6 +1008,44 @@
         return 8 + String(rank).length * 62;
     }
 
+    // Hauteur des chiffres, au-dessus de la ligne de base, dans la police du PC où le rendu
+    // a été validé (Noto Sans graissé à 900, corps 108) : 79 unités du repère.
+    var RANK_DIGIT_ASCENT = 79;
+    var rankFontCache = null;
+
+    /**
+     * Corps du chiffre, ramené à la hauteur validée quand la police de l'appareil dessine
+     * ses chiffres plus haut.
+     *
+     * Le repère du chiffre est resserré sur la hauteur des chiffres du PC. Une télévision
+     * Samsung (Tizen 9) n'a pas Noto Sans et retombe sur sa propre police, dont les chiffres
+     * montent à 84 unités : mesuré sur la TV, le haut du chiffre dépassait alors l'affiche
+     * d'une vingtaine de pixels et venait mordre sur le titre de la rangée. On mesure donc
+     * la police réellement utilisée, et on ne fait jamais que réduire.
+     */
+    function rankFontSize() {
+        if (rankFontCache !== null) {
+            return rankFontCache;
+        }
+
+        rankFontCache = 108;
+
+        try {
+            var context = document.createElement('canvas').getContext('2d');
+            context.font = '900 108px "Noto Sans",-apple-system,BlinkMacSystemFont,'
+                + '"Segoe UI",Roboto,Helvetica,Arial,sans-serif';
+            var ascent = context.measureText('0123456789').actualBoundingBoxAscent;
+
+            if (ascent > RANK_DIGIT_ASCENT + 1) {
+                rankFontCache = Math.round(108 * RANK_DIGIT_ASCENT / ascent * 10) / 10;
+            }
+        } catch (error) {
+            // Sans mesure possible, le corps d'origine.
+        }
+
+        return rankFontCache;
+    }
+
     /**
      * Largeur d'une carte classée, en multiples de la largeur d'affiche.
      *
@@ -928,17 +1083,18 @@
             name: name,
             // Un titre que la source externe classe mais que le serveur n'a pas : la
             // seconde ligne le dit, plutôt qu'un lien mort ou une carte muette.
-            secondary: inLibrary ? (year ? String(year) : '') : 'Absent de la bibliothèque',
+            secondary: inLibrary ? (year ? String(year) : '') : t('rank.absent'),
             imageUrl: inLibrary ? imageUrl(item, 'Primary', 400) : posterUrl(entry.PosterUrl),
             href: inLibrary ? routeUrl(item) : null,
             itemId: inLibrary ? item.Id : null,
             serverId: inLibrary ? (item.ServerId || serverId()) : null,
             itemType: inLibrary ? item.Type : null,
             isFolder: inLibrary && item.IsFolder,
-            ariaLabel: 'Numéro ' + entry.Rank + ' : ' + name + (year ? ' (' + year + ')' : '')
-                + (inLibrary ? '' : ' — absent de la bibliothèque'),
+            ariaLabel: t('rank.aria', [entry.Rank, name]) + (year ? ' (' + year + ')' : '')
+                + (inLibrary ? '' : t('rank.absentSuffix')),
             cardClass: 'mc-ranked' + (inLibrary ? '' : ' mc-unavailable'),
             overlay: inLibrary ? '' : seerrButton(entry),
+            tvAction: !inLibrary && !!seerrButton(entry),
             beside: rankBadge(entry.Rank),
             besideFactor: rankCardFactor(entry.Rank, rankScale)
         });
@@ -1016,41 +1172,265 @@
      */
     var SEERR_STATES = {
         loading: { label: '', tone: 'request' },
-        request: { label: 'Demander', tone: 'request', icon: 'file_download', acts: 'movie tv' },
-        'request-more': { label: 'Demander plus', tone: 'request', icon: 'file_download', acts: 'tv' },
-        'request-missing': { label: 'Demander manquant', tone: 'partial', icon: 'file_download', acts: 'tv' },
-        sending: { label: 'Demande en cours', tone: 'request', spinner: true },
-        pending: { label: 'En attente d\'approbation', tone: 'pending', icon: 'pending' },
-        requested: { label: 'Demandé', tone: 'pending', icon: 'schedule' },
-        processing: { label: 'Traitement', tone: 'processing', spinner: true },
-        partial: { label: 'Partiellement disponible', tone: 'partial', icon: 'task_alt' },
-        available: { label: 'Disponible', tone: 'available', icon: 'download_done' },
-        blocked: { label: 'Bloqué', tone: 'blocked', icon: 'cancel' },
-        offline: { label: 'Seerr hors ligne', tone: 'error', icon: 'cloud_off', retry: true },
-        error: { label: 'Erreur', tone: 'error', icon: 'error', retry: true },
+        request: { label: 'state.request', tone: 'request', icon: 'file_download', acts: 'movie tv' },
+        'request-more': { label: 'state.request-more', tone: 'request', icon: 'file_download', acts: 'tv' },
+        'request-missing': { label: 'state.request-missing', tone: 'partial', icon: 'file_download', acts: 'tv' },
+        sending: { label: 'state.sending', tone: 'request', spinner: true },
+        pending: { label: 'state.pending', tone: 'pending', icon: 'pending' },
+        requested: { label: 'state.requested', tone: 'pending', icon: 'schedule' },
+        processing: { label: 'state.processing', tone: 'processing', spinner: true },
+        partial: { label: 'state.partial', tone: 'partial', icon: 'task_alt' },
+        available: { label: 'state.available', tone: 'available', icon: 'download_done' },
+        blocked: { label: 'state.blocked', tone: 'blocked', icon: 'cancel' },
+        offline: { label: 'state.offline', tone: 'error', icon: 'cloud_off', retry: true },
+        error: { label: 'state.error', tone: 'error', icon: 'error', retry: true },
         'user-not-found': {
-            label: 'Utilisateur non trouvé',
+            label: 'state.user-not-found',
             tone: 'error',
             icon: 'person_off',
-            hint: 'Ce compte n\'existe pas dans Seerr : l\'administrateur doit l\'importer depuis Jellyfin.'
+            hint: 'state.user-not-found.hint'
         },
         forbidden: {
-            label: 'Pas de permission pour faire des demandes',
+            label: 'state.forbidden',
             tone: 'error',
             icon: 'error',
-            hint: 'Ce compte Seerr n\'a pas le droit de faire des demandes, ou son quota est atteint.'
+            hint: 'state.forbidden.hint'
         }
     };
 
     // État d'une saison dans le choix des saisons, avec les libellés de Jellyfin Enhanced.
     var SEASON_STATES = {
-        'not-requested': 'Non demandé',
-        requested: 'Demandé',
-        processing: 'Traitement',
-        partial: 'Partiel',
-        available: 'Disponible',
-        blocked: 'Bloqué'
+        'not-requested': 'season.not-requested',
+        requested: 'season.requested',
+        processing: 'season.processing',
+        partial: 'season.partial',
+        available: 'season.available',
+        blocked: 'season.blocked'
     };
+
+    /*
+     * Textes visibles du script, en français et en anglais. La langue vient de l'attribut
+     * `lang` de <html>, où jellyfin-web met la culture effective : `fr` (avec ou sans région)
+     * ou attribut absent = français, comportement d'origine ; toute autre langue = anglais.
+     * Chaque clé doit exister dans les deux tables, un test le vérifie. Les arguments se
+     * glissent dans {0}, {1}… Les titres de rangées par défaut viennent du serveur
+     * (PluginConfiguration) ; les clés `fb.*` ne servent que s'il n'en envoie pas.
+     */
+    var L10N = {
+        fr: {
+            'rank.absent': 'Absent de la bibliothèque',
+            'rank.aria': 'Numéro {0} : {1}',
+            'rank.absentSuffix': ' — absent de la bibliothèque',
+            'seerr.aria': '{0} : {1}',
+            'state.request': 'Demander',
+            'state.request-more': 'Demander plus',
+            'state.request-missing': 'Demander manquant',
+            'state.sending': 'Demande en cours',
+            'state.pending': 'En attente d\'approbation',
+            'state.requested': 'Demandé',
+            'state.processing': 'Traitement',
+            'state.partial': 'Partiellement disponible',
+            'state.available': 'Disponible',
+            'state.blocked': 'Bloqué',
+            'state.offline': 'Seerr hors ligne',
+            'state.error': 'Erreur',
+            'state.user-not-found': 'Utilisateur non trouvé',
+            'state.user-not-found.hint': 'Ce compte n\'existe pas dans Seerr : l\'administrateur doit l\'importer depuis Jellyfin.',
+            'state.forbidden': 'Pas de permission pour faire des demandes',
+            'state.forbidden.hint': 'Ce compte Seerr n\'a pas le droit de faire des demandes, ou son quota est atteint.',
+            'season.not-requested': 'Non demandé',
+            'season.requested': 'Demandé',
+            'season.processing': 'Traitement',
+            'season.partial': 'Partiel',
+            'season.available': 'Disponible',
+            'season.blocked': 'Bloqué',
+            'season.special': 'Épisodes spéciaux',
+            'season.n': 'Saison {0}',
+            'info.aria': 'Fiche : {0}',
+            'info.title': 'Fiche',
+            'dialog.tv': 'Demander une série',
+            'dialog.movie': 'Demander un film',
+            'dialog.send': 'Demander',
+            'details.choose': 'Choisir les saisons',
+            'seasons.loading': 'Chargement des saisons…',
+            'seasons.failed': 'Impossible de charger les informations de saison',
+            'seasons.all': 'Sélectionner toutes les saisons',
+            'seasons.episodes': '{0} ép.',
+            'seasons.none': 'Toutes les saisons sont déjà demandées ou disponibles.',
+            'seasons.pick': 'Sélectionne au moins une saison',
+            'advanced': 'Options avancées',
+            'field.server': 'Serveur de destination',
+            'field.profile': 'Profil de qualité',
+            'field.folder': 'Dossier racine',
+            'cancel': 'Annuler',
+            'close': 'Fermer',
+            'loading': 'Chargement…',
+            'sending': 'Demande en cours…',
+            'toast.seasons': 'Demandé {0} saison(s) de « {1} »',
+            'request.failedSeasons': 'Échec de la demande de saisons',
+            'details.none': 'Pas de résumé disponible.',
+            'details.failed': 'Le résumé n\'a pas pu être chargé.',
+            'link.seerr': 'Voir sur Seerr',
+            'link.tmdb': 'Voir sur TMDB',
+            'type.tv': 'Série',
+            'type.movie': 'Film',
+            'genre.failed': 'Les titres n\'ont pas pu être chargés.',
+            'genre.empty': 'Aucun titre dans ce genre.',
+            'fb.because': 'Parce que tu as regardé {0}',
+            'fb.local': 'Top 10 sur ce serveur',
+            'fb.alltime': 'Les plus regardés de tous les temps',
+            'fb.movies': 'Top 10 des films',
+            'fb.series': 'Top 10 des séries',
+            'fb.global': 'Top 10 mondial',
+            'fb.returning': 'De retour cette semaine',
+            'fb.never': 'Jamais vu',
+            'fb.studio': 'Par studio',
+            'prefs.open': 'Personnaliser mes rangées',
+            'prefs.title': 'Mes rangées',
+            'prefs.hint': 'Ces choix ne valent que pour ce compte. « Réinitialiser » les efface et te ramène aux réglages du serveur.',
+            'prefs.show': 'Afficher : {0}',
+            'prefs.up': 'Monter : {0}',
+            'prefs.down': 'Descendre : {0}',
+            'prefs.color': 'Couleur d’accentuation',
+            'prefs.scale': 'Taille du chiffre',
+            'prefs.hide': 'Masquer les sections de Jellyfin',
+            'prefs.save': 'Enregistrer',
+            'prefs.reset': 'Réinitialiser',
+            'row.local': 'Top du serveur',
+            'row.alltime': 'Les plus regardés de tous les temps',
+            'row.global': 'Top mondial',
+            'row.returning': 'De retour cette semaine',
+            'row.neverplayed': 'Jamais vu',
+            'row.because': 'Parce que tu as regardé…',
+            'row.studios': 'Par studio',
+            'row.genres': 'Par genre',
+            'row.native:smalllibrarytiles': 'Jellyfin — Mes médias',
+            'row.native:librarybuttons': 'Jellyfin — Mes médias (petit)',
+            'row.native:activerecordings': 'Jellyfin — Enregistrements actifs',
+            'row.native:resume': 'Jellyfin — Continuer de regarder',
+            'row.native:resumeaudio': 'Jellyfin — Reprendre l’écoute',
+            'row.native:resumebook': 'Jellyfin — Reprendre la lecture',
+            'row.native:livetv': 'Jellyfin — TV en direct',
+            'row.native:nextup': 'Jellyfin — À suivre',
+            'row.native:latestmedia': 'Jellyfin — Médias récemment ajoutés'
+        },
+        en: {
+            'rank.absent': 'Not in library',
+            'rank.aria': 'Number {0}: {1}',
+            'rank.absentSuffix': ' — not in library',
+            'seerr.aria': '{0}: {1}',
+            'state.request': 'Request',
+            'state.request-more': 'Request more',
+            'state.request-missing': 'Request missing',
+            'state.sending': 'Requesting',
+            'state.pending': 'Pending approval',
+            'state.requested': 'Requested',
+            'state.processing': 'Processing',
+            'state.partial': 'Partially available',
+            'state.available': 'Available',
+            'state.blocked': 'Blocked',
+            'state.offline': 'Seerr offline',
+            'state.error': 'Error',
+            'state.user-not-found': 'User not found',
+            'state.user-not-found.hint': 'This account does not exist in Seerr: the administrator must import it from Jellyfin.',
+            'state.forbidden': 'No permission to make requests',
+            'state.forbidden.hint': 'This Seerr account is not allowed to make requests, or its quota is reached.',
+            'season.not-requested': 'Not requested',
+            'season.requested': 'Requested',
+            'season.processing': 'Processing',
+            'season.partial': 'Partial',
+            'season.available': 'Available',
+            'season.blocked': 'Blocked',
+            'season.special': 'Specials',
+            'season.n': 'Season {0}',
+            'info.aria': 'Details: {0}',
+            'info.title': 'Details',
+            'dialog.tv': 'Request a series',
+            'dialog.movie': 'Request a movie',
+            'dialog.send': 'Request',
+            'details.choose': 'Choose seasons',
+            'seasons.loading': 'Loading seasons…',
+            'seasons.failed': 'Could not load season information',
+            'seasons.all': 'Select all seasons',
+            'seasons.episodes': '{0} ep.',
+            'seasons.none': 'All seasons are already requested or available.',
+            'seasons.pick': 'Please select at least one season',
+            'advanced': 'Advanced options',
+            'field.server': 'Destination server',
+            'field.profile': 'Quality profile',
+            'field.folder': 'Root folder',
+            'cancel': 'Cancel',
+            'close': 'Close',
+            'loading': 'Loading…',
+            'sending': 'Requesting…',
+            'toast.seasons': 'Requested {0} season(s) of "{1}"',
+            'request.failedSeasons': 'Season request failed',
+            'details.none': 'No overview available.',
+            'details.failed': 'The overview could not be loaded.',
+            'link.seerr': 'View on Seerr',
+            'link.tmdb': 'View on TMDB',
+            'type.tv': 'Series',
+            'type.movie': 'Movie',
+            'genre.failed': 'The titles could not be loaded.',
+            'genre.empty': 'No titles in this genre.',
+            'fb.because': 'Because you watched {0}',
+            'fb.local': 'Top 10 on this server',
+            'fb.alltime': 'Most watched of all time',
+            'fb.movies': 'Top 10 movies',
+            'fb.series': 'Top 10 series',
+            'fb.global': 'Global top 10',
+            'fb.returning': 'Back this week',
+            'fb.never': 'Never watched',
+            'fb.studio': 'By studio',
+            'prefs.open': 'Customize my rows',
+            'prefs.title': 'My rows',
+            'prefs.hint': 'These choices only apply to this account. "Reset" clears them and returns you to the server settings.',
+            'prefs.show': 'Show: {0}',
+            'prefs.up': 'Move up: {0}',
+            'prefs.down': 'Move down: {0}',
+            'prefs.color': 'Accent color',
+            'prefs.scale': 'Number size',
+            'prefs.hide': 'Hide Jellyfin sections',
+            'prefs.save': 'Save',
+            'prefs.reset': 'Reset',
+            'row.local': 'Server top',
+            'row.alltime': 'Most watched of all time',
+            'row.global': 'Global top',
+            'row.returning': 'Back this week',
+            'row.neverplayed': 'Never watched',
+            'row.because': 'Because you watched…',
+            'row.studios': 'By studio',
+            'row.genres': 'By genre',
+            'row.native:smalllibrarytiles': 'Jellyfin — My Media',
+            'row.native:librarybuttons': 'Jellyfin — My Media (small)',
+            'row.native:activerecordings': 'Jellyfin — Active Recordings',
+            'row.native:resume': 'Jellyfin — Continue Watching',
+            'row.native:resumeaudio': 'Jellyfin — Continue Listening',
+            'row.native:resumebook': 'Jellyfin — Continue Reading',
+            'row.native:livetv': 'Jellyfin — Live TV',
+            'row.native:nextup': 'Jellyfin — Next Up',
+            'row.native:latestmedia': 'Jellyfin — Recently Added Media'
+        }
+    };
+
+    /** Roue dessinée : un emoji change d'aspect d'un téléphone à l'autre. Suit la couleur du texte. */
+    var GEAR_ICON = '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor" aria-hidden="true" focusable="false">'
+        + '<path d="M19.14 12.94c.04-.3.06-.61.06-.94s-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.48.48 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.48.48 0 0 0-.59.22L2.74 8.87a.48.48 0 0 0 .12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2z"/></svg>';
+
+    function uiLanguage() {
+        var tag = (document.documentElement.getAttribute('lang') || '').toLowerCase();
+        return !tag || tag.split(/[-_]/)[0] === 'fr' ? 'fr' : 'en';
+    }
+
+    /** Texte d'interface dans la langue du client ; `args` remplace {0}, {1}… */
+    function t(key, args) {
+        var table = L10N[uiLanguage()];
+        var text = has(table, key) ? table[key] : (has(L10N.fr, key) ? L10N.fr[key] : key);
+
+        return args ? text.replace(/\{(\d+)\}/g, function (match, index) {
+            return args[index] === undefined ? match : String(args[index]);
+        }) : text;
+    }
 
     // Taille maximale d'un lot côté serveur : au-delà, les titres sont répartis en plusieurs.
     var SEERR_BATCH = 20;
@@ -1080,11 +1460,25 @@
             return '';
         }
 
-        return '<div class="mc-seerr-zone" data-state="loading">'
-            + '<button type="button" class="mc-seerr" data-state="loading" data-tone="request"'
+        // À la télécommande, le bouton n'est pas un arrêt à part : c'est sa carte qui l'est.
+        var tvOnly = layoutCardClass() === ' show-focus' ? ' tabindex="-1"' : '';
+
+        // La fiche n'a pas de place à la télécommande, où la carte entière est le bouton :
+        // la fenêtre de demande y montre le synopsis (hors télécommande, c'est le « i » qui le donne).
+        var info = tvOnly
+            ? ''
+            : '<button type="button" class="mc-info" aria-haspopup="dialog" aria-label="' + escapeHtml(t('info.aria', [entry.Name || '']))
+                + '" title="' + escapeHtml(t('info.title')) + '" data-media="' + entry.MediaType
+                + '" data-tmdb="' + tmdbId + '" data-name="' + escapeHtml(entry.Name || '') + '">i</button>';
+
+        return '<div class="mc-seerr-zone" data-state="loading">' + info
+            + '<button type="button" class="mc-seerr" data-state="loading" data-tone="request"' + tvOnly
             + ' aria-disabled="true" data-media="' + entry.MediaType + '" data-tmdb="' + tmdbId + '"'
             + ' data-name="' + escapeHtml(entry.Name || '') + '"></button></div>';
     }
+
+    /** États d'un titre déjà demandé : la fiche s'ouvre à la télécommande, faute de bouton « i ». */
+    var DETAILS_STATES = { pending: true, requested: true, processing: true, partial: true };
 
     function seerrActs(button, state) {
         var spec = has(SEERR_STATES, state) ? SEERR_STATES[state] : null;
@@ -1109,13 +1503,13 @@
 
         // L'icône vient de la police Material de jellyfin-web, comme dans tout le client.
         button.innerHTML = (spec.icon ? '<span class="material-icons ' + spec.icon + '" aria-hidden="true"></span>' : '')
-            + '<span class="mc-seerr-label">' + escapeHtml(spec.label) + '</span>'
+            + '<span class="mc-seerr-label">' + escapeHtml(spec.label ? t(spec.label) : '') + '</span>'
             + (spec.spinner ? '<span class="mc-seerr-spinner" aria-hidden="true"></span>' : '');
 
         // `aria-disabled` et non `disabled` : un bouton désactivé perd le focus, et la
         // télécommande qui venait de le presser ne serait plus nulle part.
         button.setAttribute('aria-disabled', acts ? 'false' : 'true');
-        button.setAttribute('aria-label', spec.label ? spec.label + ' : ' + name : name);
+        button.setAttribute('aria-label', spec.label ? t('seerr.aria', [t(spec.label), name]) : name);
 
         // Une série ouvre le choix des saisons : le bouton l'annonce, et le montre par un ▼,
         // comme chez Jellyfin Enhanced.
@@ -1126,7 +1520,7 @@
         }
 
         if (spec.hint) {
-            button.setAttribute('title', spec.hint);
+            button.setAttribute('title', t(spec.hint));
         } else {
             button.removeAttribute('title');
         }
@@ -1147,10 +1541,10 @@
         });
     }
 
-    function seerrPost(action, body) {
+    function seerrPost(action, body, params) {
         return window.ApiClient.ajax({
             type: 'POST',
-            url: window.ApiClient.getUrl('MediaCarousel/Seerr/' + action),
+            url: window.ApiClient.getUrl('MediaCarousel/Seerr/' + action, params),
             data: JSON.stringify(body),
             contentType: 'application/json',
             dataType: 'json'
@@ -1280,11 +1674,21 @@
         });
     }
 
+    /** Vrai si le compte a demandé à réduire les animations. */
+    function prefersReducedMotion() {
+        try {
+            return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+        } catch (error) {
+            return false;
+        }
+    }
+
     /** Message bref en bas de l'écran, comme les confirmations de Jellyfin Enhanced. */
     function showToast(text) {
         var toast = document.querySelector('.mc-toast');
+        var fresh = !toast;
 
-        if (!toast) {
+        if (fresh) {
             toast = document.createElement('div');
             toast.className = 'mc-toast';
             toast.setAttribute('role', 'status');
@@ -1292,28 +1696,58 @@
             document.body.appendChild(toast);
         }
 
-        toast.textContent = text;
-        toast.classList.add('mc-toast-visible');
+        // Une région vive annonce ce qui change APRÈS son insertion : créée et remplie dans le
+        // même tour, elle restait muette pour les lecteurs d'écran.
+        var write = function () {
+            toast.textContent = text;
+            toast.classList.add('mc-toast-visible');
+        };
+
+        if (fresh) {
+            window.setTimeout(write, 60);
+        } else {
+            write();
+        }
+
         window.clearTimeout(toastTimer);
         toastTimer = window.setTimeout(function () {
             toast.classList.remove('mc-toast-visible');
-        }, TOAST_DELAY);
+        }, TOAST_DELAY + (fresh ? 60 : 0));
     }
 
-    function closeSeasonDialog() {
+    function closeSeasonDialog(reopen) {
         var open = document.querySelector('.mc-seerr-backdrop');
 
         if (!open) {
             return;
         }
 
+        // Retour (historique) pendant qu'une de nos listes est dépliée : elle seule se ferme.
+        if (reopen && reopen.type === 'popstate') {
+            if (open.mcIgnorePop) {
+                open.mcIgnorePop = false;
+                return;
+            }
+
+            if (open.mcCloseList) {
+                open.mcCloseList(true);
+                return;
+            }
+        }
+
         var origin = open.mcOrigin;
         open.parentNode.removeChild(open);
 
+        if (reopen !== true) {
+            unmarkDialogInHistory();
+        }
+
         // Le focus revient au bouton qui a ouvert la fenêtre : la télécommande reprend là où
         // elle en était, au lieu de repartir du haut de la page.
+        // À la télécommande, c'est la carte qui porte le focus, pas son bouton.
         if (origin && document.body.contains(origin)) {
-            origin.focus();
+            var card = origin.closest('.card.focusable');
+            (card || origin).focus();
         }
     }
 
@@ -1322,7 +1756,7 @@
             return season.Name;
         }
 
-        return season.Number === 0 ? 'Épisodes spéciaux' : 'Saison ' + season.Number;
+        return season.Number === 0 ? t('season.special') : t('season.n', [season.Number]);
     }
 
     /** Espace libre d'un dossier, écrit comme chez Jellyfin Enhanced : « 3.98 TB ». */
@@ -1359,8 +1793,8 @@
      * sans pouvoir être changés ; les épisodes spéciaux n'apparaissent que si Seerr les accepte.
      */
     function openRequestDialog(button) {
-        closeSeasonDialog();
-        closePreferences();
+        closeSeasonDialog(true);
+        closePreferences(true);
 
         var mediaType = button.getAttribute('data-media');
         var isTv = mediaType === 'tv';
@@ -1373,27 +1807,28 @@
 
         backdrop.className = 'mc-seerr-backdrop';
         backdrop.mcOrigin = button;
-        backdrop.innerHTML = '<div class="mc-seerr-dialog" role="dialog" aria-modal="true"'
+        backdrop.innerHTML = '<div class="mc-seerr-dialog mc-seerr-request focuscontainer" role="dialog" aria-modal="true"'
             + ' aria-labelledby="' + id + '-title" tabindex="-1">'
             + '<div class="mc-seerr-head">'
             + '<h2 id="' + id + '-title" class="mc-seerr-title">'
-            + (isTv ? 'Demander une série' : 'Demander un film') + '</h2>'
+            + t(isTv ? 'dialog.tv' : 'dialog.movie') + '</h2>'
             + '<p class="mc-seerr-subtitle">' + escapeHtml(name) + '</p></div>'
             + '<div class="mc-seerr-body">'
+            + '<p class="mc-seerr-overview" hidden></p>'
             + (isTv ? '<div class="mc-seerr-seasons" aria-busy="true">'
-                + '<p class="mc-seerr-note">Chargement des saisons…</p></div>' : '')
-            + (seerrAdvanced ? '<div class="mc-seerr-advanced" hidden><h3>Options avancées</h3>'
+                + '<p class="mc-seerr-note">' + t('seasons.loading') + '</p></div>' : '')
+            + (seerrAdvanced ? '<div class="mc-seerr-advanced" hidden><h3>' + t('advanced') + '</h3>'
                 + '<div class="mc-seerr-row">'
-                + advancedField(id + '-server', 'Serveur de destination', 'mc-seerr-server')
-                + advancedField(id + '-profile', 'Profil de qualité', 'mc-seerr-profile')
+                + advancedField(id + '-server', t('field.server'), 'mc-seerr-server')
+                + advancedField(id + '-profile', t('field.profile'), 'mc-seerr-profile')
                 + '</div><div class="mc-seerr-row">'
-                + advancedField(id + '-folder', 'Dossier racine', 'mc-seerr-folder')
+                + advancedField(id + '-folder', t('field.folder'), 'mc-seerr-folder')
                 + '</div></div>' : '')
             + '<p class="mc-seerr-message" role="alert"></p>'
             + '</div>'
             + '<div class="mc-seerr-foot">'
-            + '<button type="button" class="mc-seerr-cancel">Annuler</button>'
-            + '<button type="button" class="mc-seerr-send"' + (isTv ? ' disabled' : '') + '>Demander</button>'
+            + '<button type="button" class="mc-seerr-cancel">' + t('cancel') + '</button>'
+            + '<button type="button" class="mc-seerr-send"' + (isTv ? ' disabled' : '') + '>' + t('dialog.send') + '</button>'
             + '</div></div>';
 
         // L'affiche du titre sert de fond à l'en-tête, sous le même voile sombre que chez
@@ -1403,9 +1838,13 @@
         }
 
         document.body.appendChild(backdrop);
+        markDialogInHistory(backdrop);
         wireRequestDialog(backdrop, button, mediaType, tmdbId, name);
+        enhanceSelectsForTv(backdrop);
         backdrop.querySelector('.mc-seerr-dialog').focus();
 
+        // Pas de synopsis ici : le bouton « i » de la carte le donne, et à la télécommande la fiche
+        // qui précède cette fenêtre. Le répéter serait un doublon.
         if (isTv) {
             loads.push(loadSeasons(backdrop, tmdbId));
         }
@@ -1421,17 +1860,225 @@
         });
     }
 
+    /** Langue d'affichage du compte, au format que le serveur accepte (« fr », « pt-BR »). */
+    function displayLanguage() {
+        var raw = '';
+
+        try {
+            raw = window.localStorage.getItem(window.ApiClient.getCurrentUserId() + '-language') || '';
+        } catch (error) {
+            raw = '';
+        }
+
+        raw = raw || navigator.language || '';
+        var parts = String(raw).split('-');
+        var language = parts[0].toLowerCase();
+
+        if (!/^[a-z]{2}$/.test(language)) {
+            return undefined;
+        }
+
+        return /^[A-Za-z]{2}$/.test(parts[1] || '') ? language + '-' + parts[1].toUpperCase() : language;
+    }
+
+    /** Un lien n'est posé que s'il est une adresse http(s) : le serveur le garantit, le client le vérifie. */
+    function safeLink(url, label) {
+        if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) {
+            return '';
+        }
+
+        return '<a class="mc-seerr-link" href="' + escapeHtml(url) + '" target="_blank"'
+            + ' rel="noopener noreferrer">' + escapeHtml(label) + '</a>';
+    }
+
+    /**
+     * Écrit le synopsis (et, dans la fiche seule, les liens) d'un titre absent.
+     *
+     * Une panne de Seerr ne coûte que le texte : la fenêtre sert d'abord à demander.
+     */
+    function loadDetails(backdrop, mediaType, tmdbId, withLinks) {
+        var language = displayLanguage();
+
+        return seerrPost('Details', { MediaType: mediaType, TmdbId: tmdbId },
+            language ? { language: language } : undefined).then(function (details) {
+            if (!backdrop.parentNode || !details) {
+                return;
+            }
+
+            var overview = backdrop.querySelector('.mc-seerr-overview');
+            var links = backdrop.querySelector('.mc-seerr-links');
+
+            if (overview) {
+                overview.textContent = details.Overview || (withLinks ? t('details.none') : '');
+                overview.hidden = !overview.textContent;
+                makeOverviewReadable(backdrop);
+            }
+
+            // Pas de lien externe à la télécommande : sur Android TV et Tizen il s'ouvre dans une page
+            // cachée (essai du 2026-11-14), sans rien montrer ni rendre la main.
+            if (links && withLinks && layoutCardClass() !== ' show-focus') {
+                links.innerHTML = safeLink(details.SeerrUrl, t('link.seerr')) + safeLink(details.TmdbUrl, t('link.tmdb'));
+            }
+        }, function () {
+            var overview = backdrop.querySelector('.mc-seerr-overview');
+
+            if (withLinks && overview && backdrop.parentNode) {
+                overview.textContent = t('details.failed');
+                overview.hidden = false;
+            }
+        });
+    }
+
+    /**
+     * À la télécommande, un synopsis plus haut que la fenêtre prend le focus et fait défiler le corps
+     * par pages sur Bas/Haut : le texte n'a ni lien ni bouton où poser le focus, donc rien d'autre ne
+     * le faisait défiler. En bout de course, la touche passe à la navigation de Jellyfin.
+     */
+    function makeOverviewReadable(backdrop) {
+        var overview = backdrop.querySelector('.mc-seerr-overview');
+        var body = backdrop.querySelector('.mc-seerr-body');
+
+        if (!overview || !body || layoutCardClass() !== ' show-focus') {
+            return;
+        }
+
+        if (overview.hidden || body.scrollHeight <= body.clientHeight + 1) {
+            overview.removeAttribute('tabindex');
+            return;
+        }
+
+        overview.setAttribute('tabindex', '0');
+        overview.classList.add('focusable');
+
+        if (overview.mcReadable) {
+            return;
+        }
+
+        overview.mcReadable = true;
+        overview.addEventListener('keydown', function (event) {
+            var down = event.keyCode === 40;
+            var max = body.scrollHeight - body.clientHeight;
+
+            if ((!down && event.keyCode !== 38) || (down ? body.scrollTop >= max - 1 : body.scrollTop <= 0)) {
+                return;
+            }
+
+            overview.mcMoved = true;
+            event.preventDefault();
+            event.stopPropagation();
+            body.scrollTop = Math.max(0, Math.min(max, body.scrollTop
+                + (down ? 1 : -1) * Math.max(40, Math.round(body.clientHeight * 0.8))));
+            backdrop.mcKeep = body.scrollTop;
+        });
+    }
+
+    /** Fenêtre « fiche » d'un titre absent : affiche, résumé, liens. Ne demande rien. */
+    function openDetailsDialog(info, withNext) {
+        closeSeasonDialog(true);
+        closePreferences(true);
+
+        var mediaType = info.getAttribute('data-media');
+        var name = info.getAttribute('data-name') || '';
+        var tmdbId = parseInt(info.getAttribute('data-tmdb'), 10);
+        var id = 'mc-seerr-' + (++sequence);
+        var poster = info.closest('.cardScalable').querySelector('.cardImageContainer');
+        var backdrop = document.createElement('div');
+
+        backdrop.className = 'mc-seerr-backdrop';
+        backdrop.mcOrigin = info;
+        backdrop.innerHTML = '<div class="mc-seerr-dialog focuscontainer" role="dialog" aria-modal="true"'
+            + ' aria-labelledby="' + id + '-title" tabindex="-1">'
+            + '<div class="mc-seerr-head">'
+            + '<h2 id="' + id + '-title" class="mc-seerr-title">' + escapeHtml(name) + '</h2>'
+            + '<p class="mc-seerr-subtitle">' + t(mediaType === 'tv' ? 'type.tv' : 'type.movie') + '</p></div>'
+            + '<div class="mc-seerr-body">'
+            + '<p class="mc-seerr-overview" aria-busy="true">' + t('loading') + '</p>'
+            + '<p class="mc-seerr-links"></p>'
+            + '</div>'
+            + '<div class="mc-seerr-foot">'
+            + '<button type="button" class="mc-seerr-cancel">' + t('close') + '</button>'
+            + (withNext ? '<button type="button" class="mc-seerr-next">'
+                + t(mediaType === 'tv' ? 'details.choose' : 'dialog.send') + '</button>' : '')
+            + '</div></div>';
+
+        if (poster && poster.style.backgroundImage) {
+            backdrop.querySelector('.mc-seerr-head').style.backgroundImage = poster.style.backgroundImage;
+        }
+
+        document.body.appendChild(backdrop);
+        markDialogInHistory(backdrop);
+        wireRequestDialog(backdrop, info, mediaType, tmdbId, name);
+
+        if (withNext) {
+            backdrop.addEventListener('click', function (event) {
+                if (event.target.classList && event.target.classList.contains('mc-seerr-next')) {
+                    if (mediaType === 'tv' || seerrAdvanced) {
+                        openRequestDialog(info).catch(function (error) {
+                            log('fenêtre de demande impossible', error);
+                        });
+                    } else {
+                        // Film sans options avancées : « Demander » envoie, comme le bouton de la carte.
+                        closeSeasonDialog();
+                        requestMovie(info).catch(function (error) {
+                            log('demande à Seerr impossible', error);
+                        });
+                    }
+                }
+            });
+        }
+        backdrop.querySelector('.mc-seerr-dialog').focus();
+
+        loadDetails(backdrop, mediaType, tmdbId, true).then(function () {
+            var overview = backdrop.querySelector('.mc-seerr-overview');
+
+            if (overview) {
+                overview.removeAttribute('aria-busy');
+            }
+
+            if (backdrop.parentNode) {
+                focusFirst(backdrop);
+            }
+        });
+    }
+
     /** Premier contrôle visible et actif de la fenêtre, pour le clavier et la télécommande. */
     function focusFirst(backdrop) {
-        var candidates = backdrop.querySelectorAll('.mc-seerr-body input:not([disabled]),'
-            + ' .mc-seerr-body select, .mc-seerr-send:not([disabled]), .mc-seerr-cancel');
+        var candidates = backdrop.querySelectorAll('.mc-seerr-overview[tabindex], .mc-seerr-body input:not([disabled]),'
+            + ' .mc-seerr-body select, .mc-seerr-link, .mc-seerr-send:not([disabled]), .mc-seerr-cancel');
 
         for (var i = 0; i < candidates.length; i++) {
             if (candidates[i].offsetParent !== null) {
-                candidates[i].focus();
+                // Un synopsis plus haut que le corps : focus() le ferait défiler vers sa fin ; on lit depuis le haut.
+                if (candidates[i].classList.contains('mc-seerr-overview')) {
+                    holdAtTop(candidates[i]);
+                } else {
+                    candidates[i].focus();
+                }
+
                 return;
             }
         }
+    }
+
+    /**
+     * Donne le focus au synopsis sans le faire défiler vers sa fin : sur la Freebox, jellyfin-web ramène
+     * le corps au bas du synopsis à l'image suivante (essai du 2026-11-21). On remet donc le haut tant
+     * que personne n'a fait défiler.
+     */
+    function holdAtTop(overview) {
+        var body = overview.parentNode;
+        var reset = function () {
+            if (!overview.mcMoved) {
+                body.scrollTop = 0;
+            }
+        };
+
+        overview.focus({ preventScroll: true });
+        reset();
+        window.requestAnimationFrame(function () {
+            reset();
+            window.setTimeout(reset, 150);
+        });
     }
 
     function loadSeasons(backdrop, tmdbId) {
@@ -1448,7 +2095,7 @@
                 var list = backdrop.querySelector('.mc-seerr-seasons');
                 list.removeAttribute('aria-busy');
                 list.innerHTML = '<p class="mc-seerr-note">' + (failure === 'offline'
-                    ? 'Seerr hors ligne' : 'Impossible de charger les informations de saison') + '</p>';
+                    ? t('state.offline') : t('seasons.failed')) + '</p>';
             });
         });
     }
@@ -1464,7 +2111,7 @@
         if (partial && requestable.length) {
             html += '<label class="mc-seerr-season mc-seerr-all-row">'
                 + '<input type="checkbox" class="mc-seerr-toggle mc-seerr-all">'
-                + '<span class="mc-seerr-all-label">Sélectionner toutes les saisons</span></label>';
+                + '<span class="mc-seerr-all-label">' + t('seasons.all') + '</span></label>';
         }
 
         seasons.forEach(function (season) {
@@ -1482,15 +2129,15 @@
                 + '<span class="mc-seerr-season-name">' + escapeHtml(seasonLabel(season)) + '</span>'
                 + (season.Year ? '<span class="mc-seerr-season-year">' + escapeHtml(season.Year) + '</span>' : '')
                 + '</span>'
-                + '<span class="mc-seerr-season-episodes">' + parseInt(season.Episodes, 10) + ' ép.</span>'
+                + '<span class="mc-seerr-season-episodes">' + t('seasons.episodes', [parseInt(season.Episodes, 10)]) + '</span>'
                 + '<span class="mc-seerr-season-state" data-state="' + state + '">'
-                + SEASON_STATES[state] + '</span></label>';
+                + t(SEASON_STATES[state]) + '</span></label>';
         });
 
         if (!seasons.length) {
-            html = '<p class="mc-seerr-note">Impossible de charger les informations de saison</p>';
+            html = '<p class="mc-seerr-note">' + t('seasons.failed') + '</p>';
         } else if (!requestable.length) {
-            html += '<p class="mc-seerr-note">Toutes les saisons sont déjà demandées ou disponibles.</p>';
+            html += '<p class="mc-seerr-note">' + t('seasons.none') + '</p>';
         }
 
         list.removeAttribute('aria-busy');
@@ -1592,7 +2239,56 @@
         all.indeterminate = checked > 0 && checked < boxes.length;
     }
 
+    /**
+     * À la télécommande, le focus ne doit pas quitter la fenêtre. tvfocus.js (appli Android TV) envoie sur
+     * la barre du haut tout Haut qui ne déplace pas le focus, sauf depuis un dialogue de jellyfin, ce que
+     * notre fenêtre n'est pas (essai du 2026-11-21 : Haut depuis le haut de la fiche tombait sur les onglets).
+     * Un focus qui arrive hors de la fenêtre, et hors d'un dialogue de jellyfin, revient au dernier
+     * contrôle de la fenêtre. Le garde s'efface avec la fenêtre.
+     */
+    function keepFocusInside(backdrop) {
+        if (layoutCardClass() !== ' show-focus') {
+            return;
+        }
+
+        var last = null;
+        var top = 0;
+        var body = backdrop.querySelector('.mc-seerr-body');
+        // Le défilement du corps au moment de la touche : l'aller-retour du focus ne doit pas le déplacer.
+        var restore = function () {
+            if (body) {
+                body.scrollTop = backdrop.mcKeep != null ? backdrop.mcKeep : top;
+            }
+        };
+        var guard = function (event) {
+            if (!backdrop.parentNode) {
+                document.removeEventListener('focusin', guard, true);
+                return;
+            }
+
+            if (backdrop.contains(event.target)) {
+                last = event.target;
+            } else if (last && !(event.target.closest && event.target.closest('.dialogContainer, .dialog'))) {
+                last.focus({ preventScroll: true });
+                restore();
+                window.requestAnimationFrame(function () {
+                    restore();
+                    window.setTimeout(restore, 150);
+                });
+            }
+        };
+
+        backdrop.addEventListener('keydown', function () {
+            top = body ? body.scrollTop : 0;
+            backdrop.mcKeep = null;
+        }, true);
+
+        document.addEventListener('focusin', guard, true);
+    }
+
     function wireRequestDialog(backdrop, button, mediaType, tmdbId, name) {
+        keepFocusInside(backdrop);
+
         backdrop.addEventListener('click', function (event) {
             // Un clic hors de la fenêtre la ferme, comme n'importe quelle boîte de dialogue.
             if (event.target === backdrop || event.target.classList.contains('mc-seerr-cancel')) {
@@ -1621,10 +2317,177 @@
         });
 
         backdrop.addEventListener('keydown', function (event) {
-            if (event.key === 'Escape') {
+            if (isCloseKey(event)) {
+                event.preventDefault();
+
+                if (backdrop.mcCloseList) {
+                    backdrop.mcCloseList(false);
+                    return;
+                }
+
                 closeSeasonDialog();
+                return;
+            }
+
+            toggleOnEnter(event);
+        });
+    }
+
+    /**
+     * À la télécommande, la liste déroulante native est la liste système d'Android : blanche,
+     * impossible à colorer par le CSS (essai du 2026-11-15 sur une Freebox Pop). Chaque liste du
+     * serveur, du profil et du dossier est donc doublée d'un bouton et d'une liste aux couleurs de
+     * la fenêtre ; le select d'origine reste dans la page, caché, et garde la valeur choisie.
+     */
+    function enhanceSelectsForTv(backdrop) {
+        if (layoutCardClass() !== ' show-focus') {
+            return;
+        }
+
+        Array.prototype.forEach.call(backdrop.querySelectorAll('.mc-seerr-field select'), function (select) {
+            tvSelect(backdrop, select);
+        });
+    }
+
+    function tvSelect(backdrop, select) {
+        var field = select.parentNode;
+        var title = field.querySelector('label');
+        var button = document.createElement('button');
+        var list = document.createElement('div');
+
+        button.type = 'button';
+        button.className = 'mc-seerr-choice';
+        button.setAttribute('aria-haspopup', 'listbox');
+        button.setAttribute('aria-expanded', 'false');
+        list.className = 'mc-seerr-choices';
+        list.setAttribute('role', 'listbox');
+        list.hidden = true;
+        select.setAttribute('tabindex', '-1');
+        select.setAttribute('aria-hidden', 'true');
+        field.appendChild(button);
+        field.appendChild(list);
+
+        function sync() {
+            var current = select.options[select.selectedIndex];
+
+            button.textContent = current ? current.text : '';
+            button.setAttribute('aria-label', (title ? title.textContent + ' : ' : '') + button.textContent);
+        }
+
+        function close(fromHistory) {
+            if (list.hidden) {
+                return;
+            }
+
+            list.hidden = true;
+            button.setAttribute('aria-expanded', 'false');
+            backdrop.mcCloseList = null;
+
+            // Fermée autrement que par Retour : on rend l'étape d'historique prise à l'ouverture.
+            if (fromHistory !== true) {
+                try {
+                    if (window.history.state && window.history.state.mcList) {
+                        backdrop.mcIgnorePop = true;
+                        window.history.back();
+                    }
+                } catch (error) {
+                    backdrop.mcIgnorePop = false;
+                }
+            }
+
+            if (document.activeElement && list.contains(document.activeElement)) {
+                button.focus();
+            }
+        }
+
+        function open() {
+            var options = Array.prototype.slice.call(select.options);
+
+            if (!options.length) {
+                return;
+            }
+
+            list.innerHTML = '';
+            options.forEach(function (option, index) {
+                var item = document.createElement('button');
+
+                item.type = 'button';
+                item.className = 'mc-seerr-opt';
+                item.setAttribute('role', 'option');
+                item.setAttribute('aria-selected', index === select.selectedIndex ? 'true' : 'false');
+                item.setAttribute('data-index', String(index));
+                item.textContent = option.text;
+                list.appendChild(item);
+            });
+
+            if (backdrop.mcCloseList) {
+                backdrop.mcCloseList(false);
+            }
+
+            list.hidden = false;
+            button.setAttribute('aria-expanded', 'true');
+            backdrop.mcCloseList = close;
+
+            try {
+                var copy = {};
+                var state = window.history.state;
+
+                for (var key in state || {}) {
+                    if (has(state, key)) {
+                        copy[key] = state[key];
+                    }
+                }
+
+                copy.mcDialog = true;
+                copy.mcList = true;
+                window.history.pushState(copy, '');
+            } catch (error) {
+                // Sans historique, Retour et Échap ferment toujours la liste par le clavier.
+            }
+
+            (list.querySelector('[aria-selected="true"]') || list.firstChild).focus();
+        }
+
+        button.addEventListener('click', function () {
+            if (list.hidden) {
+                open();
+            } else {
+                close(false);
             }
         });
+
+        list.addEventListener('click', function (event) {
+            var item = event.target.closest ? event.target.closest('.mc-seerr-opt') : null;
+
+            if (!item) {
+                return;
+            }
+
+            select.selectedIndex = parseInt(item.getAttribute('data-index'), 10);
+            select.dispatchEvent(new Event('change', { bubbles: true }));
+            sync();
+            close(false);
+            button.focus();
+        });
+
+        // Le focus qui quitte la liste (en descendant vers « Demander », par exemple) la referme.
+        list.addEventListener('focusout', function (event) {
+            var next = event.relatedTarget;
+
+            if (next && (list.contains(next) || next === button)) {
+                return;
+            }
+
+            close(false);
+        });
+
+        select.addEventListener('change', sync);
+
+        if (window.MutationObserver) {
+            new MutationObserver(sync).observe(select, { childList: true });
+        }
+
+        sync();
     }
 
     function sendRequest(backdrop, button, mediaType, tmdbId, name) {
@@ -1640,7 +2503,7 @@
                 .map(function (box) { return parseInt(box.value, 10); });
 
             if (!seasons.length) {
-                message.textContent = 'Veuillez sélectionner au moins une saison';
+                message.textContent = t('seasons.pick');
                 return;
             }
 
@@ -1655,7 +2518,7 @@
 
         message.textContent = '';
         send.disabled = true;
-        send.textContent = 'Demande en cours…';
+        send.textContent = t('sending');
 
         seerrPost('Request', body).then(function (answer) {
             var state = answer && answer.State;
@@ -1665,7 +2528,7 @@
             closeSeasonDialog();
 
             if (seasons) {
-                showToast('Demandé ' + seasons.length + ' saison(s) de « ' + name + ' »');
+                showToast(t('toast.seasons', [seasons.length, name]));
             }
         }, function (response) {
             return seerrFailure(response).then(function (failure) {
@@ -1674,18 +2537,107 @@
                 }
 
                 message.textContent = failure === 'user-not-found' || failure === 'forbidden' || failure === 'offline'
-                    ? SEERR_STATES[failure].label
-                    : (seasons ? 'Échec de la demande de saisons' : 'Erreur');
+                    ? t(SEERR_STATES[failure].label)
+                    : t(seasons ? 'request.failedSeasons' : 'state.error');
                 send.disabled = false;
-                send.textContent = 'Demander';
+                send.textContent = t('dialog.send');
             });
         }).catch(function (error) {
             log('demande impossible', error);
         });
     }
 
+    // Touche Retour des télécommandes : Tizen (Samsung), webOS (LG).
+    var TV_BACK_KEYS = [10009, 461];
+
+    /**
+     * Échap, ou Retour d'une télécommande. Sans cela, Retour sur une fenêtre ouverte passait
+     * à Jellyfin, qui quittait la page derrière elle ; `preventDefault` le lui retire, son
+     * écouteur ignorant les touches déjà traitées.
+     */
+    function isCloseKey(event) {
+        return event.key === 'Escape' || TV_BACK_KEYS.indexOf(event.keyCode) !== -1;
+    }
+
+    /**
+     * Une fenêtre ouverte prend une étape dans l'historique, comme les fenêtres de Jellyfin
+     * (`dialogHelper`). Dans une appli Android TV, la touche Retour n'arrive jamais à la page
+     * comme une touche : l'appli revient en arrière dans l'historique, ou se ferme quand il
+     * n'y a plus rien. Mesuré sur une box Freebox Pop : Retour laissait la fenêtre ouverte,
+     * puis quittait l'appli. Avec cette étape, il la ferme (écouteur `popstate` de watch()).
+     * L'état du routeur de Jellyfin est recopié tel quel : il ne voit aucun changement.
+     *
+     * L'appli Android ne revient en arrière que si `appRouter.canGoBack()` l'y autorise ; sur
+     * l'accueil, il ne le fait que si un `.dialogContainer` existe (lu dans jellyfin-web 12.1),
+     * sinon l'appli se ferme. La fenêtre en porte donc un, vide et caché : les autres usages de
+     * cette classe chez Jellyfin cherchent un `.dialog.opened` dedans et ne le voient pas.
+     */
+    function markDialogInHistory(backdrop) {
+        var marker = document.createElement('div');
+        marker.className = 'dialogContainer';
+        marker.setAttribute('aria-hidden', 'true');
+        marker.style.setProperty('display', 'none', 'important');
+        backdrop.appendChild(marker);
+
+        try {
+            var state = window.history.state;
+
+            if (state && state.mcDialog) {
+                return;
+            }
+
+            var copy = {};
+            for (var key in state || {}) {
+                if (has(state, key)) {
+                    copy[key] = state[key];
+                }
+            }
+
+            copy.mcDialog = true;
+            window.history.pushState(copy, '');
+        } catch (error) {
+            // Sans historique, Échap et le Retour d'une télécommande ferment toujours.
+        }
+    }
+
+    /**
+     * Fermée autrement que par Retour (Échap, Retour d'une TV Samsung, un bouton), la fenêtre
+     * rend son étape : sinon le Retour suivant tomberait dans le vide.
+     */
+    function unmarkDialogInHistory() {
+        try {
+            if (window.history.state && window.history.state.mcDialog) {
+                window.history.back();
+            }
+        } catch (error) {
+            // Rien à rendre.
+        }
+    }
+
+    /**
+     * OK de la télécommande sur une case à cocher : la coche, comme les cases de Jellyfin.
+     * Un navigateur ne coche qu'à la barre d'espace ; la télécommande n'envoie qu'Entrée.
+     */
+    function toggleOnEnter(event) {
+        var target = event.target;
+
+        if (event.keyCode === 13 && target.tagName === 'INPUT' && target.type === 'checkbox') {
+            event.preventDefault();
+            target.click();
+        }
+    }
+
     function wireSeerr(section) {
         section.addEventListener('click', function (event) {
+            var info = event.target.closest ? event.target.closest('.mc-info') : null;
+
+            if (info) {
+                event.preventDefault();
+                event.stopPropagation();
+                openDetailsDialog(info);
+                return;
+            }
+
             var button = event.target.closest ? event.target.closest('.mc-seerr') : null;
 
             if (!button) {
@@ -1698,11 +2650,22 @@
             event.stopPropagation();
 
             if (!seerrActs(button, button.getAttribute('data-state'))) {
+                // À la télécommande, il n'y a pas de bouton « i » (il ne serait pas atteint) : OK sur
+                // un titre déjà demandé ouvre la fiche, en lecture seule. Un titre disponible reste inerte.
+                if (layoutCardClass() === ' show-focus' && has(DETAILS_STATES, button.getAttribute('data-state'))) {
+                    openDetailsDialog(button);
+                }
+
                 return;
             }
 
-            // Une série ouvre toujours la fenêtre ; un film, seulement avec les options avancées.
-            if (button.getAttribute('data-media') === 'tv' || seerrAdvanced) {
+            // Une série ouvre toujours la fenêtre ; un film, avec les options avancées ou à la
+            // télécommande (où rien ne part sans avoir pu lire le synopsis, et sans OK accidentel).
+            if (layoutCardClass() === ' show-focus') {
+                // À la télécommande, un titre à demander s'ouvre en deux étapes : le synopsis d'abord
+                // (rien ne part), puis les saisons ou les options seules, ou l'envoi direct d'un film.
+                openDetailsDialog(button, true);
+            } else if (button.getAttribute('data-media') === 'tv' || seerrAdvanced) {
                 openRequestDialog(button).catch(function (error) {
                     log('fenêtre de demande impossible', error);
                 });
@@ -1723,6 +2686,9 @@
         var headingId = 'mc-row-title-' + (++sequence);
 
         section.className = 'verticalSection ' + ROW_CLASS + (onLightBackground ? ' mc-on-light' : '');
+        // Un nom accessible n'est lu que sur un élément qui a un rôle : sans lui, `aria-labelledby`
+        // d'un simple <div> est ignoré.
+        section.setAttribute('role', 'group');
         section.setAttribute('aria-labelledby', headingId);
 
         section.innerHTML =
@@ -1754,6 +2720,7 @@
         }
 
         wireArrows(section);
+        wireCardLinks(section);
         watchImages(section.querySelector('.mc-strip'));
         return section;
     }
@@ -1764,6 +2731,50 @@
 
     function resumeNothing() {
         return Promise.resolve();
+    }
+
+    /**
+     * Ouvre les cartes par le routeur de Jellyfin, comme ses propres cartes.
+     *
+     * Nos liens sont relatifs (`#/details?…`). Dans un navigateur, la page vient de
+     * `/web/` et le lien reste sur elle. Dans l'appli d'une TV, la page est
+     * `file:///www/index.html` et le lien se résout en `file:///www/#/details…`, une autre
+     * adresse : mesuré sur une TV Samsung, l'appli quittait sa page et restait sur un écran
+     * vide, sans retour possible. Jellyfin passe toujours par `appRouter.show`, que le client
+     * expose sous `Emby.Page` ; un clic modifié (nouvel onglet) garde le lien.
+     */
+    function wireCardLinks(section) {
+        section.addEventListener('click', function (event) {
+            var link = event.target.closest ? event.target.closest('a.itemAction') : null;
+            var router = window.Emby && window.Emby.Page;
+
+            if (!link || !router || typeof router.show !== 'function' || event.defaultPrevented
+                || event.button || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) {
+                return;
+            }
+
+            event.preventDefault();
+            router.show(link.getAttribute('href'));
+        });
+
+        // OK de la télécommande sur une carte focalisée : ouvre son lien, comme un clic.
+        section.addEventListener('keydown', function (event) {
+            var card = event.target;
+
+            // OK maintenu : seul l'appui initial agit, sinon chaque répétition rouvre la fenêtre.
+            if (event.repeat || event.keyCode !== 13 || !card.classList || !card.classList.contains('focusable')
+                || !card.classList.contains('card')) {
+                return;
+            }
+
+            // Le lien de la carte, ou à défaut son bouton de demande à Seerr.
+            var target = card.querySelector('a.itemAction') || card.querySelector('.mc-seerr');
+
+            if (target) {
+                event.preventDefault();
+                target.click();
+            }
+        });
     }
 
     function wireArrows(section) {
@@ -1781,7 +2792,9 @@
 
             // Les moteurs anciens exposent scrollBy(x, y) sans accepter d'objet d'options :
             // passer un objet y produirait un défilement NaN plutôt qu'une erreur.
-            if (supportsSmoothScroll) {
+            // Un défilement animé ignore la règle CSS `scroll-behavior` dès qu'on le demande par
+            // script : on respecte donc ici la préférence « réduire les animations ».
+            if (supportsSmoothScroll && !prefersReducedMotion()) {
                 strip.scrollBy({ left: amount, behavior: 'smooth' });
             } else {
                 strip.scrollLeft += amount;
@@ -2327,12 +3340,13 @@
     // ------------------------------------------------------------------
 
     function loadOptions() {
-        if (options) {
+        if (options && Date.now() - optionsTime < CACHE_TTL) {
             return Promise.resolve(options);
         }
 
         return getJson('MediaCarousel/ClientOptions').then(function (result) {
             options = result || {};
+            optionsTime = Date.now();
             return options;
         });
     }
@@ -2341,8 +3355,11 @@
         return getJson(path, params).then(function (result) {
             return (result && result.Items) || [];
         }, function () {
-            // Une section indisponible ne doit pas empêcher les autres de s'afficher.
-            return [];
+            // Une section indisponible ne doit pas empêcher les autres de s'afficher. La liste
+            // vide porte `failed` : une panne ne doit pas se lire comme « aucun titre ».
+            var empty = [];
+            empty.failed = true;
+            return empty;
         });
     }
 
@@ -2370,11 +3387,63 @@
     }
 
     /**
+     * Interroge /Items en se restreignant aux bibliothèques publiées par le serveur.
+     *
+     * `LibraryIds` n'est rempli que si l'administrateur exclut des bibliothèques : sans
+     * restriction, une seule requête. Sinon une requête par bibliothèque (`ParentId`, seul
+     * filtre d'ancêtre de /Items), fusionnées : triées par `compare` s'il est fourni, sinon
+     * alternées pour que chaque bibliothèque soit représentée.
+     */
+    function loadScopedItems(params, compare) {
+        var libraries = (options && options.LibraryIds) || [];
+
+        if (!libraries.length) {
+            return loadCached('Items', params);
+        }
+
+        return Promise.all(libraries.map(function (id) {
+            var scoped = {};
+            Object.keys(params).forEach(function (key) {
+                scoped[key] = params[key];
+            });
+            scoped.ParentId = id;
+            return loadCached('Items', scoped);
+        })).then(function (lists) {
+            var merged = [];
+
+            if (compare) {
+                merged = Array.prototype.concat.apply([], lists).sort(compare);
+            } else {
+                for (var round = 0; merged.length < params.Limit; round++) {
+                    var added = false;
+                    for (var i = 0; i < lists.length; i++) {
+                        if (round < lists[i].length) {
+                            merged.push(lists[i][round]);
+                            added = true;
+                        }
+                    }
+                    if (!added) {
+                        break;
+                    }
+                }
+            }
+
+            return merged.slice(0, params.Limit);
+        });
+    }
+
+    function lastPlayedTime(item) {
+        var date = item && item.UserData && item.UserData.LastPlayedDate;
+        var time = date ? Date.parse(date) : NaN;
+        return isNaN(time) ? 0 : time;
+    }
+
+    /**
      * Charge les titres d'un genre depuis l'API native de Jellyfin : requête indexée,
      * paginée et déjà filtrée selon les droits de l'utilisateur courant.
      */
     function loadCachedGenreItems(genreId, limit) {
-        return loadCached('Items', {
+        return loadScopedItems({
             UserId: window.ApiClient.getCurrentUserId(),
             GenreIds: genreId,
             IncludeItemTypes: 'Movie,Series',
@@ -2388,28 +3457,59 @@
     }
 
     /**
-     * Repère le dernier film terminé par l'utilisateur courant.
+     * Repère le dernier film ou épisode terminé par l'utilisateur courant.
      *
-     * Volontairement limité aux films : Jellyfin ne considère une série lue que si tous ses
-     * épisodes le sont, si bien qu'une série entamée puis abandonnée passerait pour le
-     * dernier titre regardé. Le tri par DatePlayed exige un utilisateur, qui est bien fourni.
+     * On part du film ou de l'épisode, jamais de la série : Jellyfin ne considère une série lue
+     * que si tous ses épisodes le sont, si bien qu'une série entamée puis abandonnée passerait
+     * pour le dernier titre regardé. Un épisode ne porte pas de genres : on remonte alors à sa
+     * série, qui sert de point de départ. Le tri par DatePlayed exige un utilisateur, qui est
+     * bien fourni.
      */
     function loadLastWatched() {
-        return loadCached('Items', {
+        // Les données utilisateur portent la date de lecture : sous restriction, c'est elle
+        // qui départage les bibliothèques.
+        return loadScopedItems({
             UserId: window.ApiClient.getCurrentUserId(),
-            IncludeItemTypes: 'Movie',
+            IncludeItemTypes: 'Movie,Episode',
             IsPlayed: true,
             Recursive: true,
             Limit: 1,
             SortBy: 'DatePlayed',
             SortOrder: 'Descending',
-            Fields: 'Genres',
+            Fields: 'Genres,SeriesId',
             EnableImages: false,
-            EnableUserData: false,
+            EnableUserData: true,
             EnableTotalRecordCount: false
+        }, function (a, b) {
+            return lastPlayedTime(b) - lastPlayedTime(a);
         }).then(function (items) {
             var item = items[0];
+
+            if (item && item.Type === 'Episode') {
+                return item.SeriesId ? loadSeriesSeed(item.SeriesId) : null;
+            }
+
             return item && item.Genres && item.Genres.length ? item : null;
+        });
+    }
+
+    /**
+     * Charge la série d'un épisode regardé, pour ses genres. Passe par la même restriction de
+     * bibliothèques que les autres requêtes : une série hors des bibliothèques autorisées ne
+     * sert pas de point de départ.
+     */
+    function loadSeriesSeed(seriesId) {
+        return loadScopedItems({
+            UserId: window.ApiClient.getCurrentUserId(),
+            Ids: seriesId,
+            Recursive: true,
+            Limit: 1,
+            Fields: 'Genres',
+            EnableImages: false,
+            EnableTotalRecordCount: false
+        }).then(function (items) {
+            var series = items[0];
+            return series && series.Genres && series.Genres.length ? series : null;
         });
     }
 
@@ -2417,13 +3517,17 @@
      * Charge d'autres titres partageant les genres du film indiqué.
      *
      * Deux genres au plus : au-delà, le filtre devient si large qu'il ne recommande plus
-     * rien de particulier. Le film de départ est exclu de sa propre rangée.
+     * rien de particulier. Le titre de départ est exclu de sa propre rangée, et ne sont
+     * proposés que des titres pas encore vus : une recommandation de ce qu'on a déjà regardé
+     * n'en est pas une. Une série entamée reste proposée, Jellyfin ne la comptant lue que
+     * lorsque tous ses épisodes le sont.
      */
     function loadBecauseItems(seed, limit) {
-        return loadCached('Items', {
+        return loadScopedItems({
             UserId: window.ApiClient.getCurrentUserId(),
             Genres: seed.Genres.slice(0, 2).join('|'),
             ExcludeItemIds: seed.Id,
+            IsPlayed: false,
             IncludeItemTypes: 'Movie,Series',
             Recursive: true,
             Limit: limit,
@@ -2439,7 +3543,7 @@
      * Un gabarit sans {0} est laissé tel quel.
      */
     function becauseTitle(template, name) {
-        var pattern = template || 'Parce que tu as regardé {0}';
+        var pattern = template || t('fb.because');
         return pattern.indexOf('{0}') === -1 ? pattern : pattern.replace('{0}', name);
     }
 
@@ -2456,6 +3560,22 @@
      * Les rangées de genre sont remplies quand elles approchent du champ de vision,
      * pour ne pas déclencher toutes les requêtes au chargement de la page.
      */
+    /* Observateurs des rangées de genre pas encore chargées. Une rangée retirée avant d'avoir
+       été vue gardait le sien, jamais déconnecté : sur une longue session TV, ils
+       s'accumulaient. Ceux des rangées disparues sont relâchés au rendu suivant : une
+       rangée neuve n'est pas encore dans la page quand son observateur est créé. */
+    var genreObservers = [];
+
+    function releaseDetachedGenreObservers() {
+        genreObservers = genreObservers.filter(function (entry) {
+            if (entry.section.isConnected) {
+                return true;
+            }
+            entry.observer.disconnect();
+            return false;
+        });
+    }
+
     function deferGenreRow(section, genre, limit) {
         var loaded = false;
 
@@ -2466,7 +3586,9 @@
             loaded = true;
 
             loadCachedGenreItems(genre.Id, limit).then(function (items) {
-                fillRow(section, items.map(buildPlainCard).join(''), 'Aucun titre dans ce genre.');
+                fillRow(section, items.map(buildPlainCard).join(''), items.failed
+                    ? t('genre.failed')
+                    : t('genre.empty'));
             });
         }
 
@@ -2479,6 +3601,7 @@
             for (var i = 0; i < entries.length; i++) {
                 if (entries[i].isIntersecting) {
                     observer.disconnect();
+                    genreObservers = genreObservers.filter(function (entry) { return entry.observer !== observer; });
                     load();
                     return;
                 }
@@ -2486,6 +3609,7 @@
         }, { rootMargin: '400px 0px' });
 
         observer.observe(section);
+        genreObservers.push({ section: section, observer: observer });
     }
 
     // ------------------------------------------------------------------
@@ -2557,26 +3681,26 @@
             // configuration, plus du code.
             var builders = {
                 local: function () {
-                    addRanked(results[0], opts.LocalRowTitle || 'Top 10 sur ce serveur');
+                    addRanked(results[0], opts.LocalRowTitle || t('fb.local'));
                 },
                 alltime: function () {
-                    addRanked(results[1], opts.AllTimeRowTitle || 'Les plus regardés de tous les temps');
+                    addRanked(results[1], opts.AllTimeRowTitle || t('fb.alltime'));
                 },
                 // Séparés, films et séries restent une seule rangée pour l'ordre et pour le
                 // panneau de personnalisation : ils se suivent, films d'abord.
                 global: function () {
                     if (globalSplit) {
-                        addRanked(results[2], opts.GlobalMoviesRowTitle || 'Top 10 des films');
-                        addRanked(results[8], opts.GlobalSeriesRowTitle || 'Top 10 des séries');
+                        addRanked(results[2], opts.GlobalMoviesRowTitle || t('fb.movies'));
+                        addRanked(results[8], opts.GlobalSeriesRowTitle || t('fb.series'));
                     } else {
-                        addRanked(results[2], opts.GlobalRowTitle || 'Top 10 mondial');
+                        addRanked(results[2], opts.GlobalRowTitle || t('fb.global'));
                     }
                 },
                 returning: function () {
-                    addPlain(results[3], opts.ReturningRowTitle || 'De retour cette semaine');
+                    addPlain(results[3], opts.ReturningRowTitle || t('fb.returning'));
                 },
                 neverplayed: function () {
-                    addPlain(results[4], opts.NeverPlayedRowTitle || 'Jamais vu');
+                    addPlain(results[4], opts.NeverPlayedRowTitle || t('fb.never'));
                 },
                 // Rangée personnalisée : absente tant que l'utilisateur n'a terminé aucun
                 // film, ou si aucun autre titre ne partage ses genres.
@@ -2590,7 +3714,7 @@
                 studios: function () {
                     if (results[5].length) {
                         rows.push(buildRow(
-                            opts.StudioRowTitle || 'Par studio',
+                            opts.StudioRowTitle || t('fb.studio'),
                             results[5].map(buildTileCard).join('')));
                     }
                 },
@@ -2643,13 +3767,11 @@
         'native:livetv', 'native:nextup', 'native:latestmedia'
     ];
 
-    /* Ce que Jellyfin place dans homesection{i} quand l'utilisateur n'a rien choisi.
-       Doit rester aligné sur DEFAULT_SECTIONS de jellyfin-web. */
-    /* Ordre par défaut du compte, repris de DEFAULT_SECTIONS
-       (jellyfin-web/src/types/homeSectionType.ts). */
+    /* Ce que Jellyfin place dans homesection{i} quand l'utilisateur n'a rien choisi : les
+       dix entrées de DEFAULT_SECTIONS (jellyfin-web 12.1, src/constants/homeSectionType.ts). */
     var NATIVE_DEFAULT_LAYOUT = [
         'smalllibrarytiles', 'resume', 'resumeaudio', 'resumebook',
-        'livetv', 'nextup', 'latestmedia', 'none'
+        'livetv', 'nextup', 'latestmedia', 'none', 'none', 'none'
     ];
 
     /* jellyfin-web rend DIX sections (`userSectionCount = 10` dans homesections.js),
@@ -2744,25 +3866,11 @@
     // ce qui est affiché ; « Réinitialiser » efface tout et rend le compte au serveur.
     // ------------------------------------------------------------------
 
-    var ROW_LABELS = {
-        local: 'Top du serveur',
-        alltime: 'Les plus regardés de tous les temps',
-        global: 'Top mondial',
-        returning: 'De retour cette semaine',
-        neverplayed: 'Jamais vu',
-        because: 'Parce que tu as regardé…',
-        studios: 'Par studio',
-        genres: 'Par genre',
-        'native:smalllibrarytiles': 'Jellyfin — Mes médias',
-        'native:librarybuttons': 'Jellyfin — Mes médias (petit)',
-        'native:activerecordings': 'Jellyfin — Enregistrements actifs',
-        'native:resume': 'Jellyfin — Continuer de regarder',
-        'native:resumeaudio': 'Jellyfin — Reprendre l’écoute',
-        'native:resumebook': 'Jellyfin — Reprendre la lecture',
-        'native:livetv': 'Jellyfin — TV en direct',
-        'native:nextup': 'Jellyfin — À suivre',
-        'native:latestmedia': 'Jellyfin — Médias récemment ajoutés'
-    };
+    // Libellés des rangées dans le panneau : clés `row.<id>` de L10N.
+    function rowLabel(id) {
+        return has(L10N.fr, 'row.' + id) ? t('row.' + id) : id;
+    }
+
 
     /* Rangée du plugin -> champ de ClientOptions qui décide de son affichage. Les entrées
        natives n'y figurent pas : leur visibilité ne dépend pas de nous. */
@@ -2822,10 +3930,24 @@
         render();
     }
 
-    function closePreferences() {
+    function closePreferences(reopen) {
         var open = document.querySelector('.mc-prefs-backdrop');
         if (open) {
+            // Le focus était dans le panneau : il revient sur le bouton qui l'a ouvert. Sans
+            // cela, il tombait dans le vide, et la télécommande ne déplaçait plus rien.
+            var hadFocus = open.contains(document.activeElement);
             open.parentNode.removeChild(open);
+
+            if (reopen !== true) {
+                unmarkDialogInHistory();
+            }
+            var opener = hadFocus
+                ? (document.querySelector('.mc-prefs-tile') || document.querySelector('.mc-prefs-open'))
+                : null;
+
+            if (opener) {
+                opener.focus();
+            }
         }
     }
 
@@ -2833,19 +3955,25 @@
      * Construit le panneau à partir des valeurs effectives du compte.
      */
     function openPreferences(opts) {
-        closePreferences();
+        closePreferences(true);
 
-        var order = rowOrder(opts.RowOrder, opts.ManageNativeSections === true);
+        // Seules les rangées que le serveur affiche se proposent : une rangée coupée par
+        // l'administrateur n'est plus recalculée, et le serveur refuse de la rallumer. Un
+        // serveur plus ancien, sans cette liste, laisse tout proposer comme avant.
+        var serverRows = opts.ServerRows;
+        var order = rowOrder(opts.RowOrder, opts.ManageNativeSections === true).filter(function (id) {
+            var toggle = ROW_TOGGLES[id];
+            return !toggle || !serverRows || serverRows.indexOf(toggle) !== -1;
+        });
         var backdrop = document.createElement('div');
-        var html = '<div class="mc-prefs" role="dialog" aria-modal="true"'
+        var html = '<div class="mc-prefs focuscontainer" role="dialog" aria-modal="true"'
             + ' aria-labelledby="mc-prefs-title" tabindex="-1">'
-            + '<h2 id="mc-prefs-title">Mes rangées</h2>'
-            + '<p class="mc-prefs-hint">Ces choix ne valent que pour ce compte.'
-            + ' « Réinitialiser » les efface et vous rend aux réglages du serveur.</p>'
+            + '<h2 id="mc-prefs-title">' + t('prefs.title') + '</h2>'
+            + '<p class="mc-prefs-hint">' + t('prefs.hint') + '</p>'
             + '<ul>';
 
         order.forEach(function (id, index) {
-            var label = ROW_LABELS[id] || id;
+            var label = rowLabel(id);
             var toggle = ROW_TOGGLES[id];
             // Une section native est déplaçable mais pas masquable ici : c'est Jellyfin
             // qui décide de sa présence, dans les préférences du compte.
@@ -2855,54 +3983,68 @@
                 + '<label>'
                 + '<input type="checkbox"' + (checked ? ' checked' : '')
                 + (toggle ? '' : ' disabled')
-                + ' aria-label="' + escapeHtml('Afficher : ' + label) + '">'
+                + ' aria-label="' + escapeHtml(t('prefs.show', [label])) + '">'
                 + '<span>' + escapeHtml(label) + '</span>'
                 + '</label>'
                 + '<button type="button" class="mc-prefs-move mc-prefs-up"'
-                + ' aria-label="' + escapeHtml('Monter : ' + label) + '"'
+                + ' aria-label="' + escapeHtml(t('prefs.up', [label])) + '"'
                 + (index === 0 ? ' disabled' : '') + '>&#9650;</button>'
                 + '<button type="button" class="mc-prefs-move mc-prefs-down"'
-                + ' aria-label="' + escapeHtml('Descendre : ' + label) + '"'
+                + ' aria-label="' + escapeHtml(t('prefs.down', [label])) + '"'
                 + (index === order.length - 1 ? ' disabled' : '') + '>&#9660;</button>'
                 + '</li>';
         });
 
         html += '</ul>'
             + '<div class="mc-prefs-field">'
-            + '<label for="mc-prefs-color">Couleur d’accentuation</label>'
+            + '<label for="mc-prefs-color">' + t('prefs.color') + '</label>'
             + '<input type="color" id="mc-prefs-color" value="'
             + escapeHtml(safeAccent(opts.HighlightColor)) + '">'
             + '</div>'
             + '<div class="mc-prefs-field">'
-            + '<label for="mc-prefs-scale">Taille du chiffre</label>'
+            + '<label for="mc-prefs-scale">' + t('prefs.scale') + '</label>'
             // `normalizeRankScale` rend une FRACTION (1 pour 100 %) : donnée telle quelle à
             // un curseur borné à partir de 25, elle était ramenée à 25, et enregistrer le
             // panneau sans y toucher réduisait le chiffre au plancher. Les bornes sont
             // celles du rendu : au-delà, le curseur bougeait sans rien changer.
-            + '<input type="range" id="mc-prefs-scale" min="40" max="100" step="5" value="'
+            // `focusable` : Jellyfin écarte les curseurs de sa navigation à la télécommande ;
+            // avec cette classe, il s'y arrête, et gauche/droite en changent la valeur.
+            + '<input type="range" id="mc-prefs-scale" class="focusable" min="40" max="100" step="5" value="'
             + Math.round(normalizeRankScale(opts.RankNumberScale) * 100) + '">'
             + '</div>'
             + '<div class="mc-prefs-field">'
-            + '<label for="mc-prefs-hide">Masquer les sections de Jellyfin</label>'
+            + '<label for="mc-prefs-hide">' + t('prefs.hide') + '</label>'
             + '<input type="checkbox" id="mc-prefs-hide"'
             + (opts.HideNativeSections ? ' checked' : '') + '>'
             + '</div>'
             + '<div class="mc-prefs-actions">'
-            + '<button type="button" class="mc-prefs-save">Enregistrer</button>'
-            + '<button type="button" class="mc-prefs-reset">Réinitialiser</button>'
-            + '<button type="button" class="mc-prefs-close">Fermer</button>'
+            + '<button type="button" class="mc-prefs-save">' + t('prefs.save') + '</button>'
+            + '<button type="button" class="mc-prefs-reset">' + t('prefs.reset') + '</button>'
+            + '<button type="button" class="mc-prefs-close">' + t('close') + '</button>'
             + '</div>'
             + '</div>';
 
         backdrop.className = 'mc-prefs-backdrop';
         backdrop.innerHTML = html;
         document.body.appendChild(backdrop);
+        markDialogInHistory(backdrop);
 
         wirePreferences(backdrop, order);
 
         var dialog = backdrop.querySelector('.mc-prefs');
         if (dialog) {
             dialog.focus();
+
+            // À la télécommande, la navigation de Jellyfin part de l'élément focalisé : posée
+            // sur le panneau entier, elle ne trouvait rien à atteindre et les flèches ne
+            // faisaient plus rien (mesuré sur une TV Samsung). Le focus va au premier réglage.
+            var first = layoutCardClass() === ' show-focus'
+                ? dialog.querySelector('input:not([type="range"]):not([disabled]), button:not([disabled])')
+                : null;
+
+            if (first) {
+                first.focus();
+            }
         }
     }
 
@@ -2951,9 +4093,13 @@
         });
 
         backdrop.addEventListener('keydown', function (event) {
-            if (event.key === 'Escape') {
+            if (isCloseKey(event)) {
+                event.preventDefault();
                 closePreferences();
+                return;
             }
+
+            toggleOnEnter(event);
         });
 
         // `order` n'est utile qu'à la construction ; le DOM porte l'ordre courant ensuite.
@@ -2997,9 +4143,10 @@
     /**
      * Lit le panneau et en fait des préférences.
      *
-     * Tout ce que le panneau montre devient un choix EXPLICITE : le compte cesse de suivre
-     * l'administrateur sur ces points-là, et le reste — titres, tailles, source externe —
-     * continue de le suivre. C'est « Réinitialiser » qui rend le compte au serveur.
+     * Ordre, couleur et taille deviennent des choix EXPLICITES. Une rangée, elle, ne
+     * s'enregistre que masquée : cochée, elle suit le serveur. Enregistrées toutes à vrai,
+     * une rangée que l'administrateur coupait puis rallumait plus tard ne revenait jamais
+     * chez ce compte. C'est « Réinitialiser » qui rend le compte au serveur.
      */
     function collectPreferences(backdrop) {
         var items = backdrop.querySelectorAll('.mc-prefs li');
@@ -3017,8 +4164,8 @@
 
             ids.push(id);
 
-            if (toggle) {
-                preferences[toggle] = items[i].querySelector('input[type=checkbox]').checked;
+            if (toggle && !items[i].querySelector('input[type=checkbox]').checked) {
+                preferences[toggle] = false;
             }
         }
 
@@ -3035,21 +4182,62 @@
     function attachPreferencesButton(row, opts) {
         var header = row && row.querySelector('.mc-row-header');
 
-        if (!header || header.querySelector('.mc-prefs-open')) {
+        if (!header) {
+            return;
+        }
+
+        if (header.querySelector('.mc-prefs-open')) {
+            // La bande a pu être remplie à nouveau : la tuile de fin de rangée revient.
+            var filled = row.querySelector('.mc-strip');
+
+            if (filled && layoutCardClass() === ' show-focus') {
+                attachPreferencesTile(filled, opts);
+            }
+
             return;
         }
 
         var button = document.createElement('button');
         button.type = 'button';
         button.className = 'mc-prefs-open';
-        button.title = 'Personnaliser mes rangées';
-        button.setAttribute('aria-label', 'Personnaliser mes rangées');
-        button.innerHTML = '&#9881;';
+        button.title = t('prefs.open');
+        button.setAttribute('aria-label', t('prefs.open'));
+        button.innerHTML = GEAR_ICON;
         button.addEventListener('click', function () {
             openPreferences(opts);
         });
 
         header.appendChild(button);
+
+        // À la télécommande, le petit bouton de l'en-tête attrapait le focus en descendant
+        // depuis les bibliothèques (mesuré sur une box Android TV et une TV Samsung). Il sort
+        // du parcours, et le panneau s'ouvre depuis une tuile au bout de la rangée, atteinte
+        // en allant vers la droite comme n'importe quelle carte. Une rangée sans bande (toutes
+        // masquées) garde le bouton : c'est alors le seul accès au panneau.
+        var strip = row.querySelector('.mc-strip');
+
+        if (strip && layoutCardClass() === ' show-focus') {
+            button.setAttribute('tabindex', '-1');
+            attachPreferencesTile(strip, opts);
+        }
+    }
+
+    /** Tuile « Personnaliser mes rangées » au bout d'une bande, pour la télécommande. */
+    function attachPreferencesTile(strip, opts) {
+        if (strip.querySelector('.mc-prefs-tile')) {
+            return;
+        }
+
+        var tile = document.createElement('button');
+        tile.type = 'button';
+        tile.className = 'mc-prefs-tile';
+        tile.innerHTML = '<span class="mc-prefs-tile-icon" aria-hidden="true">' + GEAR_ICON + '</span>'
+            + '<span>' + t('prefs.open') + '</span>';
+        tile.addEventListener('click', function () {
+            openPreferences(opts);
+        });
+
+        strip.appendChild(tile);
     }
 
     /**
@@ -3092,7 +4280,7 @@
         section.className = 'verticalSection ' + ROW_CLASS + ' mc-prefs-only';
         section.innerHTML = '<div class="sectionTitleContainer sectionTitleContainer-cards'
             + ' padded-left mc-row-header">'
-            + '<h2 class="sectionTitle sectionTitle-cards">Mes rangées</h2></div>';
+            + '<h2 class="sectionTitle sectionTitle-cards">' + t('prefs.title') + '</h2></div>';
 
         var library = findLibrarySection(container);
         container.insertBefore(section, library ? library.nextSibling : container.firstChild);
@@ -3103,6 +4291,8 @@
         if (rendering || !ready()) {
             return Promise.resolve();
         }
+
+        releaseDetachedGenreObservers();
 
         scopeMemoryToUser();
 
@@ -3208,6 +4398,41 @@
         scheduled = window.setTimeout(render, 250);
     }
 
+    function holdsHome(node) {
+        return node.nodeType === 1
+            && (node.classList.contains(HOME_CONTAINER_CLASS) || !!node.querySelector('.' + HOME_CONTAINER_CLASS));
+    }
+
+    /**
+     * Vrai si une rafale de mutations concerne l'accueil : dans ses sections, ou en ajoutant
+     * ou retirant le conteneur lui-même.
+     *
+     * L'observateur suit tout le document : sans ce tri, chaque mise à jour de l'affichage
+     * pendant une vidéo relançait un rendu, qui lit `offsetParent` et force un calcul de mise
+     * en page — un coût réel sur une TV modeste. Le tri lui-même ne lit aucune géométrie.
+     */
+    function touchesHome(mutations) {
+        for (var i = 0; i < mutations.length; i++) {
+            var mutation = mutations[i];
+            var target = mutation.target;
+
+            if (target.nodeType === 1 && target.closest('.' + HOME_CONTAINER_CLASS)) {
+                return true;
+            }
+
+            var lists = [mutation.addedNodes, mutation.removedNodes];
+            for (var l = 0; l < lists.length; l++) {
+                for (var n = 0; n < lists[l].length; n++) {
+                    if (holdsHome(lists[l][n])) {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
+    }
+
     /** Un nouvel affichage a droit à son essai, quel qu'ait été le sort du précédent. */
     function onNavigation() {
         emptyUntil = 0;
@@ -3222,7 +4447,11 @@
         // Jellyfin reconstruit entièrement `.homeSectionsContainer` à chaque affichage
         // de l'accueil : on réagit aux mutations plutôt qu'à un évènement de navigation
         // dont le nom change selon les versions.
-        var observer = new MutationObserver(schedule);
+        var observer = new MutationObserver(function (mutations) {
+            if (touchesHome(mutations)) {
+                schedule();
+            }
+        });
         observer.observe(document.body, { childList: true, subtree: true });
 
         window.addEventListener('hashchange', onNavigation);

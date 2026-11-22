@@ -490,6 +490,18 @@ UserPreferenceRules.Apply(serveur, new UserRowPreferences { HighlightColor = "#0
 Check("PREFS: couleur et echelle sont reprises",
     serveur.HighlightColor == "#000000" && serveur.RankNumberScale == 55);
 
+// AUDIT 2026-10-24 — une rangee coupee par l'administrateur n'est plus recalculee : un compte
+// qui la rallumait recevait son dernier classement, fige.
+var coupee = new ClientOptionsDto { EnableHomeRows = true, ShowLocalRow = true, ShowGlobalRow = false };
+UserPreferenceRules.Apply(coupee, new UserRowPreferences { ShowGlobalRow = true, ShowLocalRow = false });
+Check("PREFS: un compte ne rallume pas une rangee coupee par l'administrateur", !coupee.ShowGlobalRow);
+Check("PREFS: mais il peut masquer une rangee affichee", !coupee.ShowLocalRow);
+Check("PREFS: le panneau connait les rangees du serveur, avant les choix du compte",
+    coupee.ServerRows.SequenceEqual(new[] { "ShowLocalRow" }));
+var accueilCoupe = new ClientOptionsDto { EnableHomeRows = false };
+UserPreferenceRules.Apply(accueilCoupe, new UserRowPreferences { EnableHomeRows = true });
+Check("PREFS: rangees coupees sur tout le serveur, un compte ne les rallume pas", !accueilCoupe.EnableHomeRows);
+
 // Le fichier des preferences peut porter une valeur enregistree sous les anciennes bornes.
 var avecAncienneEchelle = new ClientOptionsDto { RankNumberScale = 100 };
 UserPreferenceRules.Apply(avecAncienneEchelle, new UserRowPreferences { RankNumberScale = 25 });
@@ -498,6 +510,158 @@ Check("PREFS: un 25 deja enregistre n'est plus applique, le serveur reprend la m
 UserPreferenceRules.Apply(avecAncienneEchelle, new UserRowPreferences { RankNumberScale = 150 });
 Check("PREFS: un 150 deja enregistre est ramene au plafond du rendu",
     avecAncienneEchelle.RankNumberScale == 100);
+
+// DELAI — constate a l'audit du 2026-10-24 : une source muette deux fois de suite levait une
+// annulation, prise pour un arret demande ; tout le recalcul s'arretait sans rien noter.
+var essaisSource = 0;
+var relances = 0;
+Exception? echecDelai = null;
+try
+{
+    await TrendingFetch.WithRetryAsync<int>(
+        async token => { essaisSource++; await Task.Delay(Timeout.Infinite, token); return 0; },
+        TimeSpan.FromMilliseconds(50), TimeSpan.FromMilliseconds(1), _ => relances++, CancellationToken.None);
+}
+catch (Exception ex)
+{
+    echecDelai = ex;
+}
+Check("DELAI: deux delais depasses deviennent un echec ordinaire, pas un arret",
+    echecDelai is TimeoutException && echecDelai is not OperationCanceledException);
+Check("DELAI: deux essais, une seule relance", essaisSource == 2 && relances == 1);
+
+var reponseApresRelance = await TrendingFetch.WithRetryAsync(
+    async token =>
+    {
+        if (++essaisSource == 3)
+        {
+            await Task.Delay(Timeout.Infinite, token);
+        }
+
+        return 42;
+    },
+    TimeSpan.FromMilliseconds(50), TimeSpan.FromMilliseconds(1), null, CancellationToken.None);
+Check("DELAI: un premier delai depasse puis une reponse, la reponse est rendue", reponseApresRelance == 42);
+
+using var arretDemande = new CancellationTokenSource();
+arretDemande.Cancel();
+Exception? echecArret = null;
+try
+{
+    await TrendingFetch.WithRetryAsync<int>(
+        async token => { await Task.Delay(Timeout.Infinite, token); return 0; },
+        TimeSpan.FromSeconds(5), TimeSpan.FromMilliseconds(1), null, arretDemande.Token);
+}
+catch (Exception ex)
+{
+    echecArret = ex;
+}
+Check("DELAI: un arret demande reste un arret", echecArret is OperationCanceledException);
+
+// Un 401/403/404 donne la meme reponse trois secondes plus tard ; un 429 annonce son attente.
+var essais401 = 0;
+Exception? echec401 = null;
+try
+{
+    await TrendingFetch.WithRetryAsync<int>(
+        _ => { essais401++; throw new TrendingHttpException(System.Net.HttpStatusCode.Unauthorized, null); },
+        TimeSpan.FromSeconds(5), TimeSpan.FromMilliseconds(1), null, CancellationToken.None);
+}
+catch (Exception ex)
+{
+    echec401 = ex;
+}
+Check("RETRY: un 401 n'est pas relance", essais401 == 1 && echec401 is TrendingHttpException);
+foreach (var code in new[] { System.Net.HttpStatusCode.Forbidden, System.Net.HttpStatusCode.NotFound })
+{
+    var essaisCode = 0;
+    try
+    {
+        await TrendingFetch.WithRetryAsync<int>(
+            _ => { essaisCode++; throw new TrendingHttpException(code, null); },
+            TimeSpan.FromSeconds(5), TimeSpan.FromMilliseconds(1), null, CancellationToken.None);
+    }
+    catch (TrendingHttpException)
+    {
+    }
+
+    Check("RETRY: un " + (int)code + " n'est pas relance", essaisCode == 1);
+}
+
+var essais500 = 0;
+try
+{
+    await TrendingFetch.WithRetryAsync<int>(
+        _ => { essais500++; throw new TrendingHttpException(System.Net.HttpStatusCode.BadGateway, null); },
+        TimeSpan.FromSeconds(5), TimeSpan.FromMilliseconds(1), null, CancellationToken.None);
+}
+catch (TrendingHttpException)
+{
+}
+
+Check("RETRY: un 502 est relance une fois", essais500 == 2);
+var quota = new TrendingHttpException(System.Net.HttpStatusCode.TooManyRequests, TimeSpan.FromSeconds(10));
+Check("RETRY: Retry-After plus long que le delai par defaut est respecte",
+    TrendingFetch.DelayFor(quota, TimeSpan.FromSeconds(3)) == TimeSpan.FromSeconds(10));
+Check("RETRY: Retry-After plus court laisse le delai par defaut",
+    TrendingFetch.DelayFor(quota, TimeSpan.FromSeconds(20)) == TimeSpan.FromSeconds(20));
+Check("RETRY: Retry-After est plafonne",
+    TrendingFetch.DelayFor(new TrendingHttpException(System.Net.HttpStatusCode.TooManyRequests, TimeSpan.FromHours(1)), TimeSpan.FromSeconds(3)) == TrendingFetch.MaxRetryAfter);
+using (var reponse429 = new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.TooManyRequests))
+{
+    reponse429.Headers.RetryAfter = new System.Net.Http.Headers.RetryConditionHeaderValue(TimeSpan.FromSeconds(7));
+    TrendingHttpException? lue = null;
+    try
+    {
+        TrendingFetch.EnsureSuccess(reponse429);
+    }
+    catch (TrendingHttpException ex)
+    {
+        lue = ex;
+    }
+
+    Check("RETRY: EnsureSuccess lit le Retry-After d'un 429", lue?.RetryAfter == TimeSpan.FromSeconds(7));
+}
+
+// Fiche d'un titre absent : synopsis, langue, liens.
+Check("FICHE: le synopsis est lu", SeerrRules.ReadOverview("{\"overview\":\"  Un film.  \"}") == "Un film.");
+Check("FICHE: un synopsis vide est absent", SeerrRules.ReadOverview("{\"overview\":\"  \"}") is null);
+Check("FICHE: un synopsis absent est absent", SeerrRules.ReadOverview("{\"title\":\"x\"}") is null);
+Check("FICHE: un synopsis qui n'est pas du texte est absent", SeerrRules.ReadOverview("{\"overview\":12}") is null);
+var longSynopsis = SeerrRules.ReadOverview("{\"overview\":\"" + new string('a', 5000) + "\"}");
+Check("FICHE: le synopsis est borne", longSynopsis is not null && longSynopsis.Length <= SeerrRules.MaxOverviewLength + 1 && longSynopsis.EndsWith('…'));
+Check("FICHE: langue fr acceptee", SeerrRules.NormalizeLanguage("fr") == "fr");
+Check("FICHE: langue pt-BR acceptee", SeerrRules.NormalizeLanguage("pt-BR") == "pt-BR");
+Check("FICHE: langue avec injection refusee", SeerrRules.NormalizeLanguage("fr&x=1") is null);
+Check("FICHE: langue vide refusee", SeerrRules.NormalizeLanguage("") is null && SeerrRules.NormalizeLanguage(null) is null);
+Check("FICHE: langue en majuscules refusee", SeerrRules.NormalizeLanguage("FR") is null);
+Check("FICHE: lien Seerr d'un film", SeerrRules.PublicTitleUrl("https://seer.bmeouchi.fr/", "movie", 603) == "https://seer.bmeouchi.fr/movie/603");
+Check("FICHE: lien Seerr d'une serie", SeerrRules.PublicTitleUrl("https://seer.bmeouchi.fr", "tv", 1399) == "https://seer.bmeouchi.fr/tv/1399");
+Check("FICHE: sans adresse publique, pas de lien Seerr", SeerrRules.PublicTitleUrl("", "movie", 603) is null);
+Check("FICHE: adresse publique non http, pas de lien Seerr", SeerrRules.PublicTitleUrl("javascript:alert(1)", "movie", 603) is null);
+Check("FICHE: type inconnu, pas de lien Seerr", SeerrRules.PublicTitleUrl("https://seer.bmeouchi.fr", "person", 603) is null);
+Check("FICHE: lien TMDB d'un film", SeerrRules.TmdbTitleUrl("movie", 603) == "https://www.themoviedb.org/movie/603");
+Check("FICHE: identifiant invalide, pas de lien TMDB", SeerrRules.TmdbTitleUrl("tv", 0) is null);
+
+
+
+Check("VIDE: TMDB sans prochaines sorties de series, le vide est normal", TrendingFetch.EmptyIsExpected(true, true, true));
+Check("VIDE: une liste de tendances vide est une panne", !TrendingFetch.EmptyIsExpected(true, false, true));
+Check("VIDE: des films a venir absents est une panne", !TrendingFetch.EmptyIsExpected(true, true, false));
+Check("VIDE: Trakt vide est une panne", !TrendingFetch.EmptyIsExpected(false, true, true));
+
+// LANGUE — reprise des metadonnees de Jellyfin depuis la 4.5.0 : plus de champ a saisir.
+Check("LANGUE: la langue et le pays de Jellyfin donnent fr-FR", MetadataLanguage.Resolve("fr", "FR", "en-US") == "fr-FR");
+Check("LANGUE: une forme complete est gardee telle quelle", MetadataLanguage.Resolve("pt-BR", "FR", null) == "pt-BR");
+Check("LANGUE: sans pays, la langue seule", MetadataLanguage.Resolve("de", "", null) == "de");
+Check("LANGUE: sans langue chez Jellyfin, l'ancien reglage du plugin", MetadataLanguage.Resolve(null, "FR", "it-IT") == "it-IT");
+Check("LANGUE: sans rien, l'anglais", MetadataLanguage.Resolve(" ", null, "") == "en-US");
+
+// SEERR — les demandes suivent le Top mondial : eteint, ou limite aux titres presents, rien a demander.
+Check("SEERR: demandes proposees avec le Top mondial et ses titres absents", SeerrRules.RequestsApply(true, true, false));
+Check("SEERR: Top mondial eteint, plus de demandes", !SeerrRules.RequestsApply(true, false, false));
+Check("SEERR: titres presents seulement, plus de demandes", !SeerrRules.RequestsApply(true, true, true));
+Check("SEERR: case decochee, plus de demandes", !SeerrRules.RequestsApply(false, true, false));
 
 // SEERR — association des comptes, etats calques sur Jellyfin Enhanced, choix des saisons.
 var jellyfinId = Guid.Parse("22ae9f6f-970a-4447-a5f7-02ae3fbeb896");
@@ -718,6 +882,21 @@ Check("SECOURS: et les series de meme",
 Check("SECOURS: une liste deja calculee est servie telle quelle",
     ReferenceEquals(GlobalTopFallback.For(TopListKind.Global, Lire), stock[TopListKind.Global]));
 
+// Titres du Top mondial deja dans la bibliotheque : on mesure les listes que l'accueil montre,
+// sans additionner la liste melee et les listes separees (un reste du reglage precedent).
+var dejaLa = new TopListEntry { Rank = 1, Name = "Present", MediaType = "movie", ItemId = Guid.NewGuid() };
+var pasLa = new TopListEntry { Rank = 2, Name = "Absent", MediaType = "movie" };
+var couverture = new Dictionary<TopListKind, TopListSnapshot>
+{
+    [TopListKind.Global] = new(TopListKind.Global, "Tmdb", new[] { dejaLa, pasLa, pasLa }),
+    [TopListKind.GlobalMovies] = new(TopListKind.GlobalMovies, "Tmdb", new[] { dejaLa, pasLa }),
+    [TopListKind.GlobalSeries] = new(TopListKind.GlobalSeries, "Tmdb", new[] { dejaLa })
+};
+Check("COUVERTURE: liste melee, ses titres seulement", GlobalTopCoverage.Measure(false, k => couverture[k]) == (1, 3));
+Check("COUVERTURE: listes separees, films et series sans la melee", GlobalTopCoverage.Measure(true, k => couverture[k]) == (2, 3));
+Check("COUVERTURE: listes separees pas encore calculees, la melee en attendant",
+    GlobalTopCoverage.Measure(true, k => k == TopListKind.Global ? couverture[k] : TopListSnapshot.Empty(k)) == (1, 3));
+
 stock[TopListKind.GlobalMovies] = filmsTires;
 stock[TopListKind.Global] = TopListSnapshot.Empty(TopListKind.Global);
 Check("SECOURS: au retour a la liste melee, elle est refaite des deux moities",
@@ -739,6 +918,57 @@ Check("REGLAGES: les identifiants de collection ne comptent pas comme un changem
 reglages["GlobalTopSplitByType"] = true;
 Check("REGLAGES: cocher la case separee compte comme un changement",
     SettingsSignature.Of(reglages) != empreinte);
+
+// Un reglage d'affichage (couleur, titres de rangee, Seerr) n'alimente aucun calcul : le
+// modifier ne doit pas relancer un recalcul complet. Un reglage lu par un calcul, si.
+var complets = new System.Text.Json.Nodes.JsonObject
+{
+    ["HighlightColor"] = "#775BF4",
+    ["LocalRowTitle"] = "Top 10 sur ce serveur",
+    ["SeerrUrl"] = "",
+    ["RowOrder"] = "local,global",
+    ["GlobalTopSize"] = 10,
+    ["ExcludeChannelContent"] = true
+};
+var empreinteComplete = SettingsSignature.Of(complets);
+var affichage = (System.Text.Json.Nodes.JsonObject)complets.DeepClone();
+affichage["HighlightColor"] = "#FF0000";
+affichage["LocalRowTitle"] = "Autre titre";
+affichage["SeerrUrl"] = "http://seerr";
+affichage["RowOrder"] = "global,local";
+Check("REGLAGES: couleur, titres, ordre et Seerr ne relancent pas le recalcul",
+    SettingsSignature.Of(affichage) == empreinteComplete);
+var reglageCalcule = (System.Text.Json.Nodes.JsonObject)complets.DeepClone();
+reglageCalcule["GlobalTopSize"] = 20;
+Check("REGLAGES: la taille du Top mondial relance le recalcul",
+    SettingsSignature.Of(reglageCalcule) != empreinteComplete);
+var sansChaines = (System.Text.Json.Nodes.JsonObject)complets.DeepClone();
+sansChaines["ExcludeChannelContent"] = false;
+Check("REGLAGES: l'exclusion des chaines relance le recalcul",
+    SettingsSignature.Of(sansChaines) != empreinteComplete);
+
+// Purge du cache d'affiches : un fichier qui ne se supprime pas (verrouille, droits) ne doit pas
+// arreter la purge des autres.
+var dossierPurge = Path.Combine(Path.GetTempPath(), "mc-purge-" + Guid.NewGuid().ToString("N"));
+Directory.CreateDirectory(dossierPurge);
+foreach (var nom in new[] { "a.jpg", "b.jpg", "c.jpg" })
+{
+    var fichier = Path.Combine(dossierPurge, nom);
+    File.WriteAllText(fichier, "x");
+    File.SetLastAccessTimeUtc(fichier, DateTime.UtcNow.AddDays(-60));
+}
+
+var fichierRecent = Path.Combine(dossierPurge, "recent.jpg");
+File.WriteAllText(fichierRecent, "x");
+var purges = PosterCacheFile.PurgeOlderThan(
+    dossierPurge,
+    DateTime.UtcNow.AddDays(-30),
+    f => { if (Path.GetFileName(f) == "a.jpg") { throw new IOException("verrouille"); } File.Delete(f); });
+Check("PURGE: un fichier verrouille n'arrete pas la purge des suivants",
+    purges == 2 && File.Exists(Path.Combine(dossierPurge, "a.jpg"))
+    && !File.Exists(Path.Combine(dossierPurge, "b.jpg")) && !File.Exists(Path.Combine(dossierPurge, "c.jpg")));
+Check("PURGE: un fichier recent est garde", File.Exists(fichierRecent));
+Directory.Delete(dossierPurge, true);
 
 // ---------------------------------------------------------------------------
 // Top du serveur d'apres les vraies lectures (Playback Reporting). Les cas rejouent la
@@ -772,6 +1002,14 @@ Check("VRAIES LECTURES: deux spectateurs passent devant un seul",
 Check("VRAIES LECTURES: entre spectateurs uniques, le temps passe departage, pas la recence",
     reel[1].TitleId == Id(2) && reel[2].TitleId == Id(3));
 Check("VRAIES LECTURES: la taille est respectee", PlaybackTop.Rank(vues, 2).Count == 2);
+
+// Chiffres de la page de reglages : la meme regle que le classement (5 minutes par compte
+// et par titre), sur les memes lectures.
+var activite = PlaybackTop.Summarize(vues);
+Check("ACTIVITE: les comptes qui ont vraiment regarde, chacun une fois (3)", activite.Viewers == 3);
+Check("ACTIVITE: un visionnage par compte et par titre, les courts et les nuls ecartes (5)", activite.Views == 5);
+Check("ACTIVITE: le temps des seuls visionnages comptes", activite.Seconds == 349860);
+Check("ACTIVITE: aucune lecture, aucun chiffre", PlaybackTop.Summarize(new List<PlaybackView>()) == new PlaybackActivity(0, 0, 0));
 
 // Fichier remplace apres lecture : l'episode est retrouve par serie, saison et numero,
 // lus dans le nom que Playback Reporting enregistre (noms releves sur la prod).
@@ -883,6 +1121,305 @@ Check("DESCRIPTION: l'anglais sans langue connue, ni pour un code qui commence s
     PluginDescription.For(null) == PluginDescription.English
     && PluginDescription.For("") == PluginDescription.English
     && PluginDescription.For("fri") == PluginDescription.English);
+
+// AUDIT 2026-11 : corrections relevees par l'audit de la 4.5.1.
+var bibA = Guid.NewGuid();
+var bibB = Guid.NewGuid();
+var portee = LibraryScope.Allowed(new[] { bibA, bibB, bibA, Guid.Empty }, new HashSet<Guid> { bibB });
+Check("AUDIT: la portee des requetes retire les bibliotheques exclues", portee.Length == 1 && portee[0] == bibA);
+Check("AUDIT: tout exclu donne une portee vide", LibraryScope.Allowed(new[] { bibA }, new HashSet<Guid> { bibA }).Length == 0);
+
+Check("AUDIT: rallumer les rangees relance l'integration", ScriptTag.NeedsReintegration(false, true));
+Check("AUDIT: couper les rangees relance l'integration", ScriptTag.NeedsReintegration(true, false));
+Check("AUDIT: sans changement, pas de relance", !ScriptTag.NeedsReintegration(true, true));
+
+// Regression EXG-009 : avec File Transformation, la transformation reste enregistree jusqu'au
+// redemarrage et seul le rappel decide. Il inserait la balise sans lire l'interrupteur :
+// couper les rangees ne retirait rien.
+ScriptTag.BaseUrl = string.Empty;
+var avecBalise = ScriptTag.Apply(html);
+IndexHtmlTransformer.RowsEnabled = () => false;
+Check("FT: rangees coupees, le rappel n'insere pas la balise",
+    !IndexHtmlTransformer.InjectScript(new FileTransformationPayload { Contents = html }).Contains("media-carousel.js", StringComparison.Ordinal));
+Check("FT: rangees coupees, le rappel retire une balise deja la",
+    !IndexHtmlTransformer.InjectScript(new FileTransformationPayload { Contents = avecBalise }).Contains("media-carousel.js", StringComparison.Ordinal));
+IndexHtmlTransformer.RowsEnabled = () => true;
+Check("FT: rangees rallumees, le rappel insere la balise",
+    IndexHtmlTransformer.InjectScript(new FileTransformationPayload { Contents = html }) == avecBalise);
+
+// Regression : desinstalle sans File Transformation, le plugin laissait sa balise dans
+// index.html, et chaque page demandait ensuite un script disparu (404).
+var webTemp = Directory.CreateTempSubdirectory("mc-web-");
+try
+{
+    var indexPath = Path.Combine(webTemp.FullName, "index.html");
+    File.WriteAllText(indexPath, avecBalise);
+    var reecrit = IndexHtmlFile.Uninstall(webTemp.FullName, webTemp.FullName);
+    Check("DESINSTALLATION: la balise est retiree du disque",
+        reecrit == indexPath && File.ReadAllText(indexPath) == html);
+    Check("DESINSTALLATION: le rappel File Transformation n'insere plus rien",
+        !IndexHtmlTransformer.InjectScript(new FileTransformationPayload { Contents = html }).Contains("media-carousel.js", StringComparison.Ordinal));
+    Check("DESINSTALLATION: un second passage ne reecrit rien",
+        IndexHtmlFile.Uninstall(webTemp.FullName, webTemp.FullName) is null && Directory.GetFiles(webTemp.FullName, "*.tmp").Length == 0);
+
+    // Regression : la tache et la desinstallation reecrivaient index.html sans verrou, par le
+    // meme fichier temporaire. Deux reecritures simultanees perdaient l'une des deux, ou
+    // echouaient sur le deplacement du temporaire deja deplace par l'autre.
+    File.WriteAllText(indexPath, string.Empty);
+    var echecsConcurrents = 0;
+    Parallel.For(0, 200, new ParallelOptions { MaxDegreeOfParallelism = 8 }, _ =>
+    {
+        try
+        {
+            IndexHtmlFile.Update(indexPath, contenu => contenu + "x");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Les deux exceptions que la tache et la desinstallation attrapent.
+            Interlocked.Increment(ref echecsConcurrents);
+        }
+    });
+    Check("CONCURRENCE: aucune reecriture simultanee n'echoue (" + echecsConcurrents + ")", echecsConcurrents == 0);
+    Check("CONCURRENCE: aucune reecriture simultanee n'est perdue", File.ReadAllText(indexPath).Length == 200);
+    Check("CONCURRENCE: aucun fichier temporaire ne reste", Directory.GetFiles(webTemp.FullName, "*.tmp").Length == 0);
+}
+finally
+{
+    webTemp.Delete(recursive: true);
+    IndexHtmlTransformer.RowsEnabled = () => true;
+}
+
+Check("AUDIT: une collection renommee dans les reglages est renommee", CollectionNaming.NeedsRename("A", "B"));
+Check("AUDIT: meme nom, pas de renommage", !CollectionNaming.NeedsRename("Top 10", " Top 10 "));
+Check("AUDIT: nom vide, pas de renommage", !CollectionNaming.NeedsRename("Top 10", "  "));
+
+Check("AUDIT: un compte restreint ne recoit aucun titre absent", !GlobalTopFallback.ShowsAbsentEntries(true));
+Check("AUDIT: un compte sans restriction recoit les titres absents", GlobalTopFallback.ShowsAbsentEntries(false));
+
+Check("AUDIT: le nom d'affiche est compare avec sa casse", !PosterProxy.IsSameFile("abc.jpg", "ABC.jpg"));
+Check("AUDIT: le meme nom d'affiche est reconnu", PosterProxy.IsSameFile("abc.jpg", "abc.jpg"));
+
+// VISIBILITE : `IsVisible` ne pese que la classification et les etiquettes, pas l'acces a la
+// bibliotheque. Un compte limite a « Films » recevait les titres des autres bibliotheques
+// (banc, suite `droits`, 2026-11-01). Les droits de Jellyfin ne se simulent pas hors serveur :
+// ce controle porte sur le code, et refuse tout appel a `IsVisible(` hors commentaire.
+var racine = new DirectoryInfo(AppContext.BaseDirectory);
+while (racine is not null && !File.Exists(Path.Combine(racine.FullName, "JellyfinCarouselPlugin.csproj")))
+{
+    racine = racine.Parent;
+}
+
+var appelsIsVisible = new List<string>();
+if (racine is not null)
+{
+    foreach (var dossier in new[] { "Api", "Services", "ScheduledTasks" })
+    {
+        foreach (var fichier in Directory.GetFiles(Path.Combine(racine.FullName, dossier), "*.cs"))
+        {
+            var lignes = File.ReadAllLines(fichier);
+            for (var i = 0; i < lignes.Length; i++)
+            {
+                var code = lignes[i].TrimStart();
+                if (!code.StartsWith("//", StringComparison.Ordinal)
+                    && System.Text.RegularExpressions.Regex.IsMatch(code, @"\.IsVisible\("))
+                {
+                    appelsIsVisible.Add(Path.GetFileName(fichier) + ":" + (i + 1));
+                }
+            }
+        }
+    }
+}
+
+Check("VISIBILITE: sources du plugin trouvees", racine is not null);
+Check("VISIBILITE: aucun IsVisible( (acces aux bibliotheques ignore) : " + string.Join(", ", appelsIsVisible), appelsIsVisible.Count == 0);
+
+// INTEGRATION : l'interrupteur lu par le rappel File Transformation et par la tache ne se
+// branche que dans le serveur. Sans la ligne de Plugin, la valeur par defaut (toujours vrai)
+// ramenait EXG-009 sans qu'aucun test ne bouge ; et la tache, qui relisait les reglages
+// elle-meme, remettait la balise sur le disque apres une desinstallation.
+string CodeSansCommentaires(string relatif) => racine is null
+    ? string.Empty
+    : string.Join('\n', File.ReadAllLines(Path.Combine(racine.FullName, relatif))
+        .Where(ligne => !ligne.TrimStart().StartsWith("//", StringComparison.Ordinal)));
+
+var codePlugin = CodeSansCommentaires("Plugin.cs");
+var codeTache = CodeSansCommentaires(Path.Combine("ScheduledTasks", "ScriptInjectionTask.cs"));
+Check("INTEGRATION: Plugin branche l'interrupteur sur ses reglages",
+    codePlugin.Contains("IndexHtmlTransformer.RowsEnabled = () => Configuration.EnableHomeRows;", StringComparison.Ordinal));
+Check("INTEGRATION: la tache lit le meme interrupteur que le rappel",
+    codeTache.Contains("IndexHtmlTransformer.RowsEnabled()", StringComparison.Ordinal)
+    && !codeTache.Contains("EnableHomeRows", StringComparison.Ordinal));
+
+// DROITS : audit du 2026-11-02. Le relais d'affiches est anonyme et le nom de fichier public
+// chez TMDB : relayer un titre present repondait 200 a qui demandait si un titre en tendance
+// est sur le serveur (GlobalTopLibraryOnly, actif par defaut, ne garde que ceux-la).
+const string afficheTmdb = "https://image.tmdb.org/t/p/w500/abc123.jpg";
+Check("DROITS: l'affiche d'un titre absent est relayee",
+    PosterProxy.IsRelayed(new TopListEntry { PosterUrl = afficheTmdb }, "abc123.jpg"));
+Check("DROITS: l'affiche d'un titre present n'est pas relayee",
+    !PosterProxy.IsRelayed(new TopListEntry { ItemId = Guid.NewGuid(), PosterUrl = afficheTmdb }, "abc123.jpg"));
+Check("DROITS: un autre nom n'est pas relaye",
+    !PosterProxy.IsRelayed(new TopListEntry { PosterUrl = afficheTmdb }, "autre.jpg"));
+
+// Catalogue agrege avant la ventilation : le total du serveur etait publie a tout compte,
+// studio d'une bibliotheque interdite compris.
+var bibliothequeVue = Guid.NewGuid();
+var ancienneEntree = new CatalogEntry { Name = "Studio", ItemCount = 7 };
+var ventilee = new CatalogEntry
+{
+    Name = "Studio",
+    ItemCount = 7,
+    CountsByLibrary = new Dictionary<Guid, int> { [bibliothequeVue] = 2, [Guid.NewGuid()] = 5 }
+};
+Check("DROITS: entree sans ventilation, compte filtre : rien",
+    CatalogVisibility.Count(ancienneEntree, new[] { bibliothequeVue }) == 0);
+Check("DROITS: entree sans ventilation, sans filtrage : total",
+    CatalogVisibility.Count(ancienneEntree, null) == 7);
+Check("DROITS: entree ventilee, compte filtre : ses bibliotheques seules",
+    CatalogVisibility.Count(ventilee, new[] { bibliothequeVue }) == 2);
+
+// Les routes Seerr suivent la regle du classement : aucun titre absent pour un compte
+// restreint. Les droits ne se simulent pas hors serveur : le controle porte sur le code.
+var codeSeerr = CodeSansCommentaires(Path.Combine("Api", "SeerrController.cs"));
+Check("DROITS: Status refuse un compte restreint",
+    System.Text.RegularExpressions.Regex.Matches(codeSeerr, @"if \(!ShowsAbsentTitles\(\)\)").Count == 1);
+Check("DROITS: Seasons, Details, Request et Options refusent un compte restreint, avant le titre",
+    System.Text.RegularExpressions.Regex.Matches(codeSeerr, @"SeerrRules\.RefusalStatus\(\s*ShowsAbsentTitles\(\)").Count == 4);
+
+// R3 : un Seerr muet n'est pas reinterroge a chaque titre pendant OfflineMemory.
+var memoire = new OfflineMemory(TimeSpan.FromSeconds(45));
+var t0 = new DateTime(2026, 11, 8, 12, 0, 0, DateTimeKind.Utc);
+Check("HORS-LIGNE: rien de retenu au depart", !memoire.IsOffline("http://seerr", t0));
+memoire.RecordFailure("http://seerr", t0);
+Check("HORS-LIGNE: apres un echec, les lectures suivantes echouent aussitot", memoire.IsOffline("http://seerr", t0.AddSeconds(1)));
+Check("HORS-LIGNE: le souvenir expire", !memoire.IsOffline("http://seerr", t0.AddSeconds(45)));
+Check("HORS-LIGNE: une autre adresse repart de zero", !memoire.IsOffline("http://autre", t0.AddSeconds(1)));
+memoire.Clear();
+Check("HORS-LIGNE: une reponse efface le souvenir", !memoire.IsOffline("http://seerr", t0.AddSeconds(1)));
+var codeClientSeerr = CodeSansCommentaires(Path.Combine("Services", "SeerrClient.cs"));
+Check("HORS-LIGNE: la lecture d'etat et celle du synopsis consultent la memoire et la nourrissent",
+    System.Text.RegularExpressions.Regex.Matches(codeClientSeerr, @"_offline\.IsOffline\(baseUrl").Count == 2
+    && System.Text.RegularExpressions.Regex.Matches(codeClientSeerr, @"NoteReachability\(baseUrl, failure\)").Count == 2);
+
+// Accessibilite du script (audit F3 a F7). Le script ne se charge pas hors navigateur : le
+// controle porte sur son texte. Les comportements sont aussi eprouves dans home-rows.test.mjs.
+var scriptAccueil = File.ReadAllText(Path.Combine("Web", "media-carousel.js"));
+var corpsDefilement = CorpsEntre(scriptAccueil, "function scrollBy(direction)", "previous.addEventListener");
+Check("A11Y: le defilement par fleche respecte prefers-reduced-motion",
+    corpsDefilement.Contains("!prefersReducedMotion()", StringComparison.Ordinal)
+    && scriptAccueil.Contains("(prefers-reduced-motion: reduce)", StringComparison.Ordinal));
+Check("A11Y: une rangee nommee par aria-labelledby a le role group",
+    scriptAccueil.Contains("section.setAttribute('role', 'group');", StringComparison.Ordinal));
+var corpsToast = CorpsEntre(scriptAccueil, "function showToast(text)", "function closeSeasonDialog");
+Check("A11Y: la region vive du message est remplie apres son insertion",
+    corpsToast.Contains("window.setTimeout(write, 60)", StringComparison.Ordinal));
+Check("A11Y: une panne de liste ne se lit pas comme « aucun titre »",
+    scriptAccueil.Contains("empty.failed = true;", StringComparison.Ordinal)
+    && scriptAccueil.Contains("items.failed", StringComparison.Ordinal));
+Check("A11Y: le bouton i a une zone tactile elargie",
+    scriptAccueil.Contains(".mc-row .mc-info::after{content:\"\";position:absolute;left:-7px", StringComparison.Ordinal));
+Check("A11Y: le bouton de personnalisation a une zone tactile elargie",
+    scriptAccueil.Contains(".mc-prefs-open::after{content:\"\";position:absolute;left:-12px", StringComparison.Ordinal));
+
+// EXG-071 : la fiche n'est servie que pour un titre du Top publie, et un compte restreint est
+// refuse AVANT l'examen du titre (sinon le 400 lui apprendrait le contenu du Top).
+var publies = new HashSet<string> { SeerrRules.TitleKey("movie", 603), SeerrRules.TitleKey("tv", 1399) };
+Check("FICHE-PUBLIE: un film du Top est publie", SeerrRules.IsPublished(publies, "movie", 603));
+Check("FICHE-PUBLIE: une serie du Top est publiee", SeerrRules.IsPublished(publies, "tv", 1399));
+Check("FICHE-PUBLIE: un titre hors Top est rejete", !SeerrRules.IsPublished(publies, "movie", 604));
+Check("FICHE-PUBLIE: le type compte (movie:1399 n'est pas tv:1399)", !SeerrRules.IsPublished(publies, "movie", 1399));
+Check("FICHE-PUBLIE: un type inconnu est rejete", !SeerrRules.IsPublished(publies, "person", 603));
+
+// Un compte restreint ne doit rien apprendre du Top publie : le refus 403 passe avant l'examen
+// de la demande, que le titre soit publie ou non (Details, Request, Seasons, Options).
+Check("REFUS: compte restreint et titre publie, 403",
+    SeerrRules.RefusalStatus(showsAbsentTitles: false, requestIsValid: true) == 403);
+Check("REFUS: compte restreint et titre inconnu, 403 et non 400",
+    SeerrRules.RefusalStatus(showsAbsentTitles: false, requestIsValid: false) == 403);
+Check("REFUS: compte ordinaire et titre inconnu, 400",
+    SeerrRules.RefusalStatus(showsAbsentTitles: true, requestIsValid: false) == 400);
+Check("REFUS: compte ordinaire et titre publie, aucun refus",
+    SeerrRules.RefusalStatus(showsAbsentTitles: true, requestIsValid: true) is null);
+Check("FICHE-PUBLIE: un type absent est rejete", !SeerrRules.IsPublished(publies, null, 603));
+Check("FICHE-PUBLIE: un identifiant nul ou negatif est rejete",
+    !SeerrRules.IsPublished(publies, "movie", 0) && !SeerrRules.IsPublished(publies, "movie", -603));
+string CorpsEntre(string code, string depuis, string jusqua)
+{
+    var a = code.IndexOf(depuis, StringComparison.Ordinal);
+    var b = a < 0 ? -1 : code.IndexOf(jusqua, a + depuis.Length, StringComparison.Ordinal);
+    return b < 0 ? string.Empty : code[a..b];
+}
+
+var corpsFiche = CorpsEntre(codeSeerr, "GetDetails(", "[HttpPost(\"Test\")]");
+var iRestreint = corpsFiche.IndexOf("RefusalStatus(ShowsAbsentTitles()", StringComparison.Ordinal);
+var iNonPublie = corpsFiche.IndexOf("IsPublished(PublishedTitles(), item)", StringComparison.Ordinal);
+Check("FICHE-PUBLIE: Details refuse un titre non publie (400)",
+    iNonPublie >= 0 && corpsFiche.IndexOf("BadRequest()", iNonPublie, StringComparison.Ordinal) > iNonPublie);
+Check("FICHE-PUBLIE: Details refuse le compte restreint (403) avant d'examiner le titre",
+    iRestreint >= 0 && iNonPublie > iRestreint);
+
+// EXG-073 : Top/Refresh repond 409 quand un recalcul tourne, avant de lancer quoi que ce soit.
+// Le controleur ne se simule pas hors serveur : le controle porte sur le code, comme DROITS.
+var codeRecalcul = CodeSansCommentaires(Path.Combine("Api", "TopListsController.cs"));
+var corpsRecalcul = CorpsEntre(codeRecalcul, "ActionResult RefreshTopLists()", "private TopListResponseDto BuildResponse");
+var iOccupe = corpsRecalcul.IndexOf("_refreshService.IsRefreshing", StringComparison.Ordinal);
+var iConflit = corpsRecalcul.IndexOf("return Conflict();", StringComparison.Ordinal);
+var iLancement = corpsRecalcul.IndexOf("Task.Run(", StringComparison.Ordinal);
+Check("REFRESH: un recalcul en cours donne 409 avant tout lancement",
+    iOccupe >= 0 && iConflit > iOccupe && iLancement > iConflit);
+Check("REFRESH: le 409 est annonce au contrat de la route",
+    codeRecalcul.Contains("StatusCodes.Status409Conflict", StringComparison.Ordinal));
+
+// EXG-057 : le jeton prime sur le parametre `userId`. L'inverse laissait un compte standard
+// demander le classement d'un administrateur et recevoir ses bibliotheques.
+var compteJeton = Guid.NewGuid();
+var compteDemande = Guid.NewGuid();
+Check("DROITS: le jeton prime sur userId",
+    RequestUser.Choose(compteJeton.ToString(), compteDemande) == compteJeton);
+Check("DROITS: sans jeton de compte (cle d'API), userId choisit le point de vue",
+    RequestUser.Choose(null, compteDemande) == compteDemande);
+Check("DROITS: un jeton au compte vide ne vaut pas un compte",
+    RequestUser.Choose(Guid.Empty.ToString(), compteDemande) == compteDemande);
+Check("DROITS: ni jeton ni userId : aucun compte",
+    RequestUser.Choose(null, Guid.Empty) is null && RequestUser.Choose(null, null) is null);
+var codeTop = CodeSansCommentaires(Path.Combine("Api", "TopListsController.cs"));
+Check("DROITS: le classement passe par RequestUser.Choose",
+    codeTop.Contains("RequestUser.Choose(claim, userId)", StringComparison.Ordinal));
+
+// EXG-056 : l'etat du plugin et le recalcul sont reserves aux administrateurs. Le controle
+// d'acces vit dans le serveur : le test porte sur les attributs du code.
+var codeStatus = CodeSansCommentaires(Path.Combine("Api", "StatusController.cs"));
+Check("DROITS: StatusController reserve aux administrateurs",
+    System.Text.RegularExpressions.Regex.IsMatch(codeStatus,
+        @"\[Authorize\(Policy = ""RequiresElevation""\)\]\s*(\[[^\]]*\]\s*)*public class StatusController"));
+Check("DROITS: Top/Refresh reserve aux administrateurs",
+    System.Text.RegularExpressions.Regex.IsMatch(codeTop,
+        @"\[HttpPost\(""Top/Refresh""\)\]\s*\[Authorize\(Policy = ""RequiresElevation""\)\]"));
+
+// R1 : l'horodatage de date d'acces ne doit jamais priver l'appelant de l'image.
+Check("ROBUSTESSE: TryTouch absorbe UnauthorizedAccessException",
+    PosterCacheFile.TryTouch("x", (_, _) => throw new UnauthorizedAccessException()) == false);
+Check("ROBUSTESSE: TryTouch absorbe IOException",
+    PosterCacheFile.TryTouch("x", (_, _) => throw new IOException()) == false);
+Check("ROBUSTESSE: TryTouch rend vrai quand l'horodatage est pose",
+    PosterCacheFile.TryTouch("x", (_, _) => { }));
+
+{
+    // Le catch par compte de LocalTopListBuilder appelle RecordFailure pendant le passage :
+    // l'echec doit figurer dans le bilan fige, et BeginRun doit repartir d'un bilan vide.
+    var health = new RefreshHealth();
+    health.BeginRun();
+    health.RecordFailure("Top du serveur", new InvalidOperationException("compte en erreur"));
+    health.EndRun();
+    var report = health.Snapshot().Report;
+    Check("ROBUSTESSE: un echec par compte figure dans le bilan",
+        report.Failures.Count == 1 && report.Failures[0].Section == "Top du serveur"
+        && report.Failures[0].Message == "compte en erreur");
+    health.BeginRun();
+    health.EndRun();
+    Check("ROBUSTESSE: le passage suivant repart sans echec",
+        health.Snapshot().Report.Failures.Count == 0);
+}
 
 Console.WriteLine(failed == 0 ? "\nTous les tests passent." : $"\n{failed} echec(s).");
 return failed;
