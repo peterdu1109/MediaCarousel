@@ -1,4 +1,4 @@
-<h1 align="center">Media Carousel — Jellyfin 12</h1>
+<h1 align="center">Media Carousel (Jellyfin 12)</h1>
 
 <p align="center">
   <b>This branch builds Media Carousel for Jellyfin 12.</b><br>
@@ -14,15 +14,15 @@
 
 ---
 
-Same plugin, same features as the Jellyfin 10.11 build — a separate branch only because one binary cannot target both versions at once.
+With a remote control, the request window, its lists and the synopsis card can be used on Android TV, in an app that loads the server's web interface.
 
-*Même plugin, mêmes fonctionnalités que la version Jellyfin 10.11 — une branche séparée uniquement parce qu'un même binaire ne peut pas viser les deux à la fois.*
+*À la télécommande, la fenêtre de demande, ses listes et la fiche avec le synopsis s'utilisent sur Android TV, dans une appli qui charge l'interface web du serveur.*
 
 ## Repository / Dépôt
 
-One repository for every Jellyfin version: Jellyfin picks the build made for it (4.x on Jellyfin 12). Add it in **Dashboard → Plugins → Repositories**, then install **Media Carousel** from the catalog.
+Add the repository in **Dashboard → Plugins → Repositories**, then install **Media Carousel** from the catalog.
 
-*Un seul dépôt pour toutes les versions de Jellyfin : Jellyfin choisit lui-même la version faite pour lui (4.x sur Jellyfin 12). À ajouter dans **Tableau de bord → Extensions → Dépôts**, puis installez **Media Carousel** depuis le catalogue.*
+*Ajoutez le dépôt dans **Tableau de bord → Extensions → Dépôts**, puis installez **Media Carousel** depuis le catalogue.*
 
 ```
 https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/manifest.json
@@ -35,8 +35,8 @@ https://raw.githubusercontent.com/peterdu1109/MediaCarousel/main/manifest.json
 
 ## 📖 Documentation
 
-Everything else — features, rows, configuration, troubleshooting — is in the main README, kept in one place on purpose.
+Everything else (features, rows, configuration, troubleshooting) is in the main README, kept in one place on purpose.
 
-*Tout le reste — fonctionnalités, rangées, configuration, dépannage — se trouve dans le README principal, maintenu à un seul endroit délibérément.*
+*Tout le reste (fonctionnalités, rangées, configuration, dépannage) se trouve dans le README principal, maintenu à un seul endroit volontairement.*
 
 **→ [github.com/peterdu1109/MediaCarousel](https://github.com/peterdu1109/MediaCarousel#readme)**
