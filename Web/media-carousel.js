@@ -723,43 +723,82 @@
             '.mc-row .mc-prefs-tile:focus{outline:3px solid #fff;outline-offset:2px;',
             'background:rgba(255,255,255,.18);}',
 
-            '.mc-prefs-backdrop{position:fixed;left:0;right:0;top:0;bottom:0;z-index:10000;',
-            'background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;',
+            /* Même langage visuel que la fenêtre de demande à Seerr : voile bleu nuit flouté, carte en
+               dégradé, en-tête teinté par l'accent, cartes de réglage, pied à trois boutons. */
+            '.mc-prefs-backdrop{position:fixed;left:0;right:0;top:0;bottom:0;z-index:10000;box-sizing:border-box;',
+            'background:rgba(0,10,20,.85);display:flex;align-items:center;justify-content:center;',
             '-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);padding:1em;}',
             '.layout-tv .mc-prefs-backdrop{-webkit-backdrop-filter:none;backdrop-filter:none;}',
-            '.mc-prefs{background:#1c1c1f;color:#fff;border-radius:16px;padding:1.2em;',
-            'width:100%;max-width:420px;max-height:86vh;overflow-y:auto;',
-            'box-shadow:0 12px 40px rgba(0,0,0,.6);}',
-            '.mc-prefs h2{margin:0 0 .2em;font-size:1.2em;}',
-            '.mc-prefs .mc-prefs-hint{margin:0 0 1em;opacity:.7;font-size:.85em;line-height:1.35;}',
-            '.mc-prefs ul{list-style:none;margin:0 0 1em;padding:0;}',
-            '.mc-prefs li{display:flex;align-items:center;padding:.3em 0;}',
-            '.mc-prefs li label{flex:1 1 auto;display:flex;align-items:center;cursor:pointer;',
+            '.mc-prefs{display:flex;flex-direction:column;box-sizing:border-box;color:#e2e8f0;border-radius:16px;',
+            'width:100%;max-width:560px;max-height:88vh;overflow:hidden;',
+            'background:linear-gradient(145deg,#1e293b 0%,#0f172a 100%);border:1px solid rgba(148,163,184,.1);',
+            'box-shadow:0 25px 80px rgba(0,0,0,.8),0 0 0 1px rgba(148,163,184,.05);}',
+            '.mc-prefs:focus{outline:none;}',
+            '.mc-prefs-head{flex:0 0 auto;box-sizing:border-box;padding:20px 24px;padding:20px min(24px,5vw);',
+            'background:linear-gradient(rgba(0,0,0,.8),rgba(0,0,0,.8)),var(--mc-accent);}',
+            '.mc-prefs h2{margin:0 0 6px;font-size:1.8rem;font-weight:700;line-height:1.2;color:var(--mc-accent);}',
+            '.mc-prefs .mc-prefs-hint{margin:0;font-size:.9rem;line-height:1.4;color:rgba(255,255,255,.85);}',
+            '.mc-prefs-body{flex:1 1 auto;overflow-y:auto;padding:16px 24px;padding:16px min(24px,5vw);}',
+            '.mc-prefs h3{margin:18px 0 8px;font-size:.75rem;font-weight:700;letter-spacing:.5px;',
+            'text-transform:uppercase;color:#94a3b8;}',
+            '.mc-prefs h3:first-child{margin-top:0;}',
+            '.mc-prefs ul{list-style:none;margin:0;padding:0;}',
+            /* Une carte par rangée et par réglage, comme une saison dans la fenêtre Seerr. */
+            '.mc-prefs li,.mc-prefs .mc-prefs-field{box-sizing:border-box;border-radius:12px;',
+            'background:rgba(30,41,59,.4);border:1px solid rgba(51,65,85,.3);}',
+            '.mc-prefs li{display:flex;align-items:center;margin-bottom:4px;padding:8px 12px;}',
+            '.mc-prefs .mc-prefs-field{margin-bottom:8px;padding:12px 16px;}',
+            '.mc-prefs li label,.mc-prefs .mc-prefs-switch{flex:1 1 auto;display:flex;align-items:center;cursor:pointer;',
             'min-width:0;}',
-            '.mc-prefs li label span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}',
-            '.mc-prefs li input[type=checkbox]{margin:0 .6em 0 0;flex:0 0 auto;}',
-            '.mc-prefs .mc-prefs-move{flex:0 0 auto;margin-left:.3em;border:0;border-radius:4px;',
-            'background:rgba(255,255,255,.12);color:#fff;cursor:pointer;width:2em;height:2em;',
-            'line-height:1;}',
+            '.mc-prefs li label span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;}',
+            '.mc-prefs .mc-prefs-switch span{font-weight:600;}',
+            '.mc-prefs-field-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;',
+            'font-weight:600;}',
+            '.mc-prefs-field-head output{color:#94a3b8;font-weight:500;}',
+            /* Interrupteur : celui de la fenêtre Seerr, anneau clair éteint pour rester visible. */
+            '.mc-prefs-toggle{-webkit-appearance:none;appearance:none;position:relative;box-sizing:border-box;',
+            'flex:0 0 auto;width:40px;min-width:40px;height:22px;margin:0 12px 0 0;border:0;border-radius:999px;',
+            'cursor:pointer;background:rgba(71,85,105,.6);box-shadow:inset 0 0 0 2px #94a3b8;',
+            'transition:background-color .2s ease;}',
+            '.mc-prefs-toggle::before{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;',
+            'border-radius:50%;background:#fff;transition:transform .2s ease;}',
+            '.mc-prefs-toggle:checked{background:var(--mc-accent);box-shadow:none;}',
+            '.mc-prefs-toggle:checked::before{transform:translateX(18px);}',
+            '.mc-prefs-toggle:disabled{opacity:.4;cursor:default;}',
+            '.mc-prefs .mc-prefs-move{flex:0 0 auto;margin-left:6px;width:40px;height:34px;padding:0;',
+            'border:1px solid rgba(148,163,184,.2);border-radius:8px;background:rgba(71,85,105,.8);color:#e2e8f0;',
+            'cursor:pointer;font-size:.8rem;line-height:1;}',
+            '.mc-prefs .mc-prefs-move:hover:not([disabled]){background:rgba(71,85,105,1);}',
             '.mc-prefs .mc-prefs-move[disabled]{opacity:.3;cursor:default;}',
-            '.mc-prefs .mc-prefs-field{display:flex;align-items:center;',
-            'justify-content:space-between;margin-bottom:.8em;}',
-            '.mc-prefs .mc-prefs-field input[type=color]{width:3em;height:2em;padding:0;border:0;',
-            'background:transparent;}',
-            '.mc-prefs .mc-prefs-actions{display:flex;flex-wrap:wrap;margin-top:1.2em;}',
-            '.mc-prefs .mc-prefs-actions button{margin-right:.5em;margin-top:.4em;border:0;',
-            'border-radius:4px;padding:.55em 1em;cursor:pointer;font-size:.95em;}',
-            '.mc-prefs .mc-prefs-save{background:var(--mc-accent);color:var(--mc-on-accent);}',
-            '.mc-prefs .mc-prefs-reset,.mc-prefs .mc-prefs-close{',
-            'background:rgba(255,255,255,.12);color:#fff;}',
-            '.mc-prefs .mc-prefs-actions button:focus{outline:2px solid var(--mc-accent);',
-            'outline-offset:2px;}',
-            /* À la télécommande, le réglage sélectionné doit se voir de loin. Mesuré sur une TV
-               Samsung : les cases, les flèches, la couleur et le curseur n'avaient que le trait
-               bleu d'un pixel du navigateur, et le cadre violet d'« Enregistrer » se fondait
-               dans son fond violet. Un cadre blanc épais partout, et la ligne de la rangée
-               choisie éclairée. Même chose dans la fenêtre de demande à Seerr. */
-            '.layout-tv .mc-prefs li:focus-within{background:rgba(255,255,255,.12);border-radius:4px;}',
+            /* Pas de `gap` (Tizen) : des marges. */
+            '.mc-prefs-swatches{display:flex;flex-wrap:wrap;align-items:center;}',
+            '.mc-prefs-swatch{position:relative;box-sizing:border-box;flex:0 0 auto;width:34px;height:34px;',
+            'margin:0 12px 8px 0;padding:0;border:0;border-radius:50%;cursor:pointer;font:inherit;',
+            'box-shadow:inset 0 0 0 2px rgba(255,255,255,.25);}',
+            '.mc-prefs-swatch[aria-pressed="true"]{box-shadow:0 0 0 2px #0f172a,0 0 0 4px #fff;}',
+            '.mc-prefs-swatch[aria-pressed="true"]::after{content:"\\2713";position:absolute;left:0;right:0;top:0;',
+            'bottom:0;line-height:34px;text-align:center;font-weight:700;}',
+            '.mc-prefs .mc-prefs-swatches input[type=color]{width:34px;height:34px;margin:0 0 8px;padding:0;',
+            'border:0;border-radius:50%;background:transparent;cursor:pointer;}',
+            '.layout-tv .mc-prefs .mc-prefs-swatches input[type=color]{display:none;}',
+            '.mc-prefs input[type=range]{display:block;width:100%;margin:0;accent-color:var(--mc-accent);}',
+            '.mc-prefs-foot{flex:0 0 auto;display:flex;flex-wrap:wrap;justify-content:flex-end;padding:16px 24px;',
+            'padding:16px min(24px,5vw);background:rgba(15,23,42,.3);border-top:1px solid rgba(51,65,85,.3);}',
+            '.mc-prefs-foot button{min-width:100px;margin:4px 0 4px 12px;padding:12px 20px;border-radius:8px;',
+            'font:inherit;font-size:.875rem;font-weight:600;cursor:pointer;color:#e2e8f0;',
+            'background:rgba(71,85,105,.8);border:1px solid rgba(148,163,184,.2);}',
+            '.mc-prefs-foot button:hover{background:rgba(71,85,105,1);}',
+            '.mc-prefs-foot .mc-prefs-reset{margin-left:0;margin-right:auto;}',
+            '.mc-prefs-foot .mc-prefs-save{background:var(--mc-accent);color:var(--mc-on-accent);',
+            'border-color:transparent;box-shadow:0 4px 12px rgba(0,0,0,.3);}',
+            '.mc-prefs-foot .mc-prefs-save:hover{box-shadow:inset 0 0 0 999px rgba(0,0,0,.18),0 4px 12px rgba(0,0,0,.3);}',
+            '.mc-prefs button:focus,.mc-prefs input:focus{outline:2px solid var(--mc-accent);outline-offset:2px;}',
+            /* À la télécommande, le réglage sélectionné doit se voir de loin : cadre blanc épais
+               (règle plus bas) et carte du réglage éclairée. Mesuré sur une TV Samsung : le trait
+               bleu d'un pixel du navigateur ne se voyait pas, et le cadre violet d'« Enregistrer »
+               se fondait dans son fond violet. */
+            '.layout-tv .mc-prefs li:focus-within,.layout-tv .mc-prefs .mc-prefs-field:focus-within{',
+            'background:rgba(255,255,255,.12);}',
             /* TV : la télécommande ne fait pas défiler la fenêtre. Un titre long passe sur deux
                lignes (l'en-tête grandit au besoin). */
             '.layout-tv .mc-seerr-head{height:auto;min-height:8em;}',
@@ -1305,6 +1344,18 @@
             'prefs.hide': 'Masquer les sections de Jellyfin',
             'prefs.save': 'Enregistrer',
             'prefs.reset': 'Réinitialiser',
+            'prefs.rows': 'Rangées',
+            'prefs.look': 'Apparence',
+            'prefs.custom': 'Couleur personnalisée',
+            'prefs.color.current': 'Couleur actuelle',
+            'prefs.color.violet': 'Violet',
+            'prefs.color.blue': 'Bleu',
+            'prefs.color.cyan': 'Turquoise',
+            'prefs.color.green': 'Vert',
+            'prefs.color.amber': 'Ambre',
+            'prefs.color.orange': 'Orange',
+            'prefs.color.red': 'Rouge',
+            'prefs.color.pink': 'Rose',
             'row.local': 'Top du serveur',
             'row.alltime': 'Les plus regardés de tous les temps',
             'row.global': 'Top mondial',
@@ -1402,6 +1453,18 @@
             'prefs.hide': 'Hide Jellyfin sections',
             'prefs.save': 'Save',
             'prefs.reset': 'Reset',
+            'prefs.rows': 'Rows',
+            'prefs.look': 'Appearance',
+            'prefs.custom': 'Custom color',
+            'prefs.color.current': 'Current color',
+            'prefs.color.violet': 'Violet',
+            'prefs.color.blue': 'Blue',
+            'prefs.color.cyan': 'Teal',
+            'prefs.color.green': 'Green',
+            'prefs.color.amber': 'Amber',
+            'prefs.color.orange': 'Orange',
+            'prefs.color.red': 'Red',
+            'prefs.color.pink': 'Pink',
             'row.local': 'Server top',
             'row.alltime': 'Most watched of all time',
             'row.global': 'Global top',
@@ -2270,7 +2333,7 @@
 
         var last = null;
         var top = 0;
-        var body = backdrop.querySelector('.mc-seerr-body');
+        var body = backdrop.querySelector('.mc-seerr-body, .mc-prefs-body');
         // Le défilement du corps au moment de la touche : l'aller-retour du focus ne doit pas le déplacer.
         var restore = function () {
             if (body) {
@@ -4047,10 +4110,15 @@
             return !toggle || !serverRows || serverRows.indexOf(toggle) !== -1;
         });
         var backdrop = document.createElement('div');
+        var current = safeAccent(opts.HighlightColor);
         var html = '<div class="mc-prefs focuscontainer" role="dialog" aria-modal="true"'
             + ' aria-labelledby="mc-prefs-title" tabindex="-1">'
+            + '<div class="mc-prefs-head">'
             + '<h2 id="mc-prefs-title">' + t('prefs.title') + '</h2>'
             + '<p class="mc-prefs-hint">' + t('prefs.hint') + '</p>'
+            + '</div>'
+            + '<div class="mc-prefs-body">'
+            + '<h3>' + t('prefs.rows') + '</h3>'
             + '<ul>';
 
         order.forEach(function (id, index) {
@@ -4060,9 +4128,10 @@
             // qui décide de sa présence, dans les préférences du compte.
             var checked = toggle ? (opts[toggle] !== false) : true;
 
-            html += '<li data-row="' + escapeHtml(id) + '">'
+            // `mc-prefs-band` : une ligne d'arrêts de la télécommande (voir `wirePrefsKeys`).
+            html += '<li class="mc-prefs-band" data-row="' + escapeHtml(id) + '">'
                 + '<label>'
-                + '<input type="checkbox"' + (checked ? ' checked' : '')
+                + '<input type="checkbox" class="mc-prefs-toggle"' + (checked ? ' checked' : '')
                 + (toggle ? '' : ' disabled')
                 + ' aria-label="' + escapeHtml(t('prefs.show', [label])) + '">'
                 + '<span>' + escapeHtml(label) + '</span>'
@@ -4076,14 +4145,35 @@
                 + '</li>';
         });
 
+        // Une couleur déjà choisie hors de la liste (page de configuration, autre appareil) garde
+        // sa pastille : sans elle, la télécommande ne la montrerait plus.
+        var swatches = ACCENT_PRESETS.slice();
+        if (!ACCENT_PRESETS.some(function (preset) { return sameColor(preset.hex, current); })) {
+            swatches.unshift({ hex: current, key: 'prefs.color.current' });
+        }
+
         html += '</ul>'
+            + '<h3>' + t('prefs.look') + '</h3>'
             + '<div class="mc-prefs-field">'
-            + '<label for="mc-prefs-color">' + t('prefs.color') + '</label>'
-            + '<input type="color" id="mc-prefs-color" value="'
-            + escapeHtml(safeAccent(opts.HighlightColor)) + '">'
+            + '<div class="mc-prefs-field-head"><label for="mc-prefs-color">' + t('prefs.color') + '</label></div>'
+            + '<div class="mc-prefs-swatches mc-prefs-band" role="group" aria-label="' + escapeHtml(t('prefs.color')) + '">'
+            + swatches.map(function (swatch) {
+                var name = t(swatch.key);
+
+                return '<button type="button" class="mc-prefs-swatch" data-color="' + escapeHtml(swatch.hex) + '"'
+                    + ' style="background-color:' + escapeHtml(swatch.hex) + ';color:' + onAccent(swatch.hex) + '"'
+                    + ' aria-label="' + escapeHtml(name) + '" title="' + escapeHtml(name) + '"'
+                    + ' aria-pressed="' + (sameColor(swatch.hex, current) ? 'true' : 'false') + '"></button>';
+            }).join('')
+            // Le sélecteur du navigateur : un réglage à la souris. Une télécommande n'en tire rien.
+            + '<input type="color" id="mc-prefs-color" title="' + escapeHtml(t('prefs.custom')) + '"'
+            + ' aria-label="' + escapeHtml(t('prefs.custom')) + '" value="' + escapeHtml(colorInputValue(current)) + '">'
             + '</div>'
-            + '<div class="mc-prefs-field">'
-            + '<label for="mc-prefs-scale">' + t('prefs.scale') + '</label>'
+            + '</div>'
+            + '<div class="mc-prefs-field mc-prefs-band">'
+            // La valeur s'affiche hors de l'étiquette : elle reste le nom du champ.
+            + '<div class="mc-prefs-field-head"><label for="mc-prefs-scale">' + t('prefs.scale') + '</label>'
+            + '<output id="mc-prefs-scale-value" for="mc-prefs-scale"></output></div>'
             // `normalizeRankScale` rend une FRACTION (1 pour 100 %) : donnée telle quelle à
             // un curseur borné à partir de 25, elle était ramenée à 25, et enregistrer le
             // panneau sans y toucher réduisait le chiffre au plancher. Les bornes sont
@@ -4093,26 +4183,31 @@
             + '<input type="range" id="mc-prefs-scale" class="focusable" min="40" max="100" step="5" value="'
             + Math.round(normalizeRankScale(opts.RankNumberScale) * 100) + '">'
             + '</div>'
-            + '<div class="mc-prefs-field">'
-            + '<label for="mc-prefs-hide">' + t('prefs.hide') + '</label>'
-            + '<input type="checkbox" id="mc-prefs-hide"'
+            + '<div class="mc-prefs-field mc-prefs-band">'
+            + '<label class="mc-prefs-switch">'
+            + '<input type="checkbox" class="mc-prefs-toggle" id="mc-prefs-hide"'
             + (opts.HideNativeSections ? ' checked' : '') + '>'
+            + '<span>' + t('prefs.hide') + '</span>'
+            + '</label>'
             + '</div>'
-            + '<div class="mc-prefs-actions">'
-            + '<button type="button" class="mc-prefs-save">' + t('prefs.save') + '</button>'
+            + '</div>'
+            + '<div class="mc-prefs-foot mc-prefs-band">'
             + '<button type="button" class="mc-prefs-reset">' + t('prefs.reset') + '</button>'
             + '<button type="button" class="mc-prefs-close">' + t('close') + '</button>'
+            + '<button type="button" class="mc-prefs-save">' + t('prefs.save') + '</button>'
             + '</div>'
             + '</div>';
 
         backdrop.className = 'mc-prefs-backdrop';
-        // Sans ce garde, Haut depuis la première case envoie le focus derrière le panneau (tvfocus.js).
-        keepFocusInside(backdrop);
         backdrop.innerHTML = html;
         document.body.appendChild(backdrop);
         markDialogInHistory(backdrop);
+        // Sans ce garde, Haut depuis la première case envoie le focus derrière le panneau (tvfocus.js).
+        keepFocusInside(backdrop);
 
         wirePreferences(backdrop, order);
+        wirePrefsKeys(backdrop);
+        showScale(backdrop);
 
         var dialog = backdrop.querySelector('.mc-prefs');
         if (dialog) {
@@ -4132,6 +4227,147 @@
     }
 
     /**
+     * Couleurs proposées : la télécommande n'a pas de sélecteur de couleur, donc des pastilles.
+     * Le violet est la valeur par défaut du plugin.
+     */
+    var ACCENT_PRESETS = [
+        { hex: '#775BF4', key: 'prefs.color.violet' },
+        { hex: '#3B82F6', key: 'prefs.color.blue' },
+        { hex: '#06B6D4', key: 'prefs.color.cyan' },
+        { hex: '#22C55E', key: 'prefs.color.green' },
+        { hex: '#F59E0B', key: 'prefs.color.amber' },
+        { hex: '#F97316', key: 'prefs.color.orange' },
+        { hex: '#EF4444', key: 'prefs.color.red' },
+        { hex: '#EC4899', key: 'prefs.color.pink' }
+    ];
+
+    /**
+     * `input[type=color]` n'accepte que `#rrggbb` : `safeAccent` laisse passer `#abc` et `#rrggbbaa`,
+     * que le sélecteur ramenait à noir.
+     */
+    function colorInputValue(hex) {
+        var value = String(hex).toLowerCase();
+
+        if (value.length === 4) {
+            return '#' + value.charAt(1) + value.charAt(1) + value.charAt(2) + value.charAt(2)
+                + value.charAt(3) + value.charAt(3);
+        }
+
+        return value.length >= 7 ? value.slice(0, 7) : DEFAULT_ACCENT.toLowerCase();
+    }
+
+    function sameColor(a, b) {
+        return colorInputValue(a) === colorInputValue(b);
+    }
+
+    /** La valeur du curseur, en clair à côté de son nom. */
+    function showScale(backdrop) {
+        var range = backdrop.querySelector('#mc-prefs-scale');
+        var output = backdrop.querySelector('#mc-prefs-scale-value');
+
+        if (range && output) {
+            output.textContent = range.value + ' %';
+        }
+    }
+
+    /**
+     * Choisit une couleur : le sélecteur (lu à l'enregistrement), les pastilles et l'aperçu — le
+     * panneau prend la couleur tout de suite, comme le fera le reste de la page à l'enregistrement.
+     */
+    function pickAccent(backdrop, hex) {
+        var value = colorInputValue(hex);
+        var input = backdrop.querySelector('#mc-prefs-color');
+        var buttons = backdrop.querySelectorAll('.mc-prefs-swatch');
+
+        if (input) {
+            input.value = value;
+        }
+
+        for (var i = 0; i < buttons.length; i++) {
+            buttons[i].setAttribute('aria-pressed', sameColor(buttons[i].getAttribute('data-color'), value) ? 'true' : 'false');
+        }
+
+        backdrop.style.setProperty('--mc-accent', value);
+        backdrop.style.setProperty('--mc-on-accent', onAccent(value));
+    }
+
+    /**
+     * Les arrêts du panneau à la télécommande, par bandes : une rangée de la liste, les pastilles,
+     * le curseur, la case « Masquer », le pied. La navigation géométrique de jellyfin-web sautait
+     * des bandes entières (mesuré sur une box Android TV : Bas depuis « Top mondial » tombait sur
+     * Enregistrer, car la couleur, le curseur et la case, plus étroits et décalés à droite, étaient
+     * moins proches que le pied). Haut et Bas passent donc à la bande voisine et choisissent
+     * dedans l'arrêt le plus proche à l'horizontale ; Gauche et Droite se déplacent dans la bande.
+     * Seule exception, le curseur : Gauche et Droite y changent la valeur.
+     */
+    function wirePrefsKeys(backdrop) {
+        if (layoutCardClass() !== ' show-focus') {
+            return;
+        }
+
+        var stops = function (band) {
+            return Array.prototype.filter.call(band.querySelectorAll('input, button'), function (el) {
+                return !el.disabled && el.type !== 'color' && el.offsetParent !== null;
+            });
+        };
+        var centre = function (el) {
+            var box = el.getBoundingClientRect();
+            return box.left + box.width / 2;
+        };
+
+        backdrop.addEventListener('keydown', function (event) {
+            var key = event.key;
+            var code = event.keyCode;
+            var dir = key === 'ArrowUp' || code === 38 ? 'up'
+                : key === 'ArrowDown' || code === 40 ? 'down'
+                : key === 'ArrowLeft' || code === 37 ? 'left'
+                : key === 'ArrowRight' || code === 39 ? 'right' : '';
+            var from = event.target;
+
+            if (!dir || event.altKey || event.ctrlKey || event.metaKey || (from.type === 'range' && (dir === 'left' || dir === 'right'))) {
+                return;
+            }
+
+            var bands = Array.prototype.filter.call(backdrop.querySelectorAll('.mc-prefs-band'), function (band) {
+                return stops(band).length > 0;
+            });
+            var at = -1;
+
+            for (var i = 0; i < bands.length; i++) {
+                if (bands[i].contains(from)) {
+                    at = i;
+                }
+            }
+
+            if (at === -1) {
+                return;
+            }
+
+            // Rien ne sort du panneau, aux extrémités non plus.
+            event.preventDefault();
+            event.stopPropagation();
+
+            var target = null;
+            var items = stops(bands[at]);
+
+            if (dir === 'left' || dir === 'right') {
+                target = items[items.indexOf(from) + (dir === 'left' ? -1 : 1)];
+            } else if (bands[at + (dir === 'up' ? -1 : 1)]) {
+                var next = stops(bands[at + (dir === 'up' ? -1 : 1)]);
+                var x = centre(from);
+
+                target = next.reduce(function (best, el) {
+                    return !best || Math.abs(centre(el) - x) < Math.abs(centre(best) - x) ? el : best;
+                }, null);
+            }
+
+            if (target) {
+                target.focus();
+            }
+        });
+    }
+
+    /**
      * Un seul écouteur sur le panneau : les lignes sont réordonnées par déplacement de
      * nœuds, des écouteurs posés par bouton survivraient mal à ce remaniement.
      */
@@ -4147,6 +4383,13 @@
 
             if (move && !move.disabled) {
                 moveRow(backdrop, move);
+                return;
+            }
+
+            var swatch = event.target.closest ? event.target.closest('.mc-prefs-swatch') : null;
+
+            if (swatch) {
+                pickAccent(backdrop, swatch.getAttribute('data-color'));
                 return;
             }
 
@@ -4180,6 +4423,14 @@
                 }, function (error) {
                     log('enregistrement impossible', error);
                 });
+            }
+        });
+
+        backdrop.addEventListener('input', function (event) {
+            if (event.target.id === 'mc-prefs-color') {
+                pickAccent(backdrop, event.target.value);
+            } else if (event.target.id === 'mc-prefs-scale') {
+                showScale(backdrop);
             }
         });
 

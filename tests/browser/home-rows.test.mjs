@@ -2381,6 +2381,79 @@ const retourAndroid = await tvPrefs.evaluate(() => ({
   hash: location.hash
 }));
 
+// Panneau « Mes rangees » a la telecommande. Constat sur une box Android TV : depuis « Top mondial »,
+// Bas tombait sur Enregistrer, la couleur, le curseur et la case « Masquer » etaient sautes (navigation
+// geometrique de jellyfin-web, champs decales a droite). Haut/Bas visitent donc chaque bande dans l'ordre,
+// Gauche/Droite se deplacent dans la bande, et rien ne sort du panneau.
+const tvNav = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+tvNav.on('pageerror', e => errors.push('pageerror(tv nav): ' + e.message));
+await enTv(tvNav);
+await tvNav.addInitScript(() => { window.__allowPrefs = true; });
+await tvNav.goto('file://' + path.join(here, 'home.html'));
+await tvNav.evaluate(() => document.documentElement.classList.add('layout-tv'));
+await tvNav.evaluate(stub);
+await tvNav.evaluate(script);
+await tvNav.waitForSelector('.mc-prefs-tile');
+await tvNav.focus('.mc-prefs-tile');
+await tvNav.keyboard.press('Enter');
+await tvNav.waitForSelector('.mc-prefs');
+const arret = () => tvNav.evaluate(() => {
+  const a = document.activeElement;
+  if (!a || a === document.body) return 'corps';
+  if (a.id) return a.id;
+  if (a.classList.contains('mc-prefs-swatch')) return 'pastille';
+  if (a.closest('.mc-prefs-foot')) return a.className.replace(/^mc-prefs-/, 'pied:');
+  const li = a.closest('.mc-prefs li');
+  if (li) return 'rangee:' + li.dataset.row + ':' + (a.type === 'checkbox' ? 'case' : /up/.test(a.className) ? 'haut' : 'bas');
+  return a.className || a.tagName;
+});
+const nbRangees = await tvNav.evaluate(() => document.querySelectorAll('.mc-prefs li').length);
+const descente = [await arret()];
+for (let i = 0; i < nbRangees + 3; i++) { await tvNav.keyboard.press('ArrowDown'); descente.push(await arret()); }
+const montee = [];
+for (let i = 0; i < 4; i++) { await tvNav.keyboard.press('ArrowUp'); montee.push(await arret()); }
+// Gauche/Droite dans la bande des pastilles, sans en sortir.
+await tvNav.focus('.mc-prefs-swatch');
+const nbPastilles = await tvNav.evaluate(() => document.querySelectorAll('.mc-prefs-swatch').length);
+const droite = [];
+for (let i = 0; i < nbPastilles + 1; i++) {
+  await tvNav.keyboard.press('ArrowRight');
+  droite.push(await tvNav.evaluate(() => Array.from(document.querySelectorAll('.mc-prefs-swatch')).indexOf(document.activeElement)));
+}
+await tvNav.keyboard.press('ArrowLeft');
+const gaucheIdx = await tvNav.evaluate(() => Array.from(document.querySelectorAll('.mc-prefs-swatch')).indexOf(document.activeElement));
+// OK sur une pastille la choisit ; Gauche/Droite sur le curseur changent sa valeur sans quitter le champ.
+await tvNav.focus('.mc-prefs-swatch:nth-of-type(2)');
+await tvNav.keyboard.press('Enter');
+const pastille = await tvNav.evaluate(() => {
+  const p = document.activeElement;
+  return {
+    pressee: p.getAttribute('aria-pressed'), couleur: document.getElementById('mc-prefs-color').value,
+    accent: getComputedStyle(document.querySelector('.mc-prefs')).getPropertyValue('--mc-accent').trim(), voulue: p.dataset.color,
+    uneSeule: document.querySelectorAll('.mc-prefs-swatch[aria-pressed="true"]').length
+  };
+});
+await tvNav.focus('#mc-prefs-scale');
+const echelleAvant = await tvNav.evaluate(() => document.getElementById('mc-prefs-scale').value);
+await tvNav.keyboard.press('ArrowLeft');
+const echelle = await tvNav.evaluate((avant) => ({
+  avant, apres: document.getElementById('mc-prefs-scale').value, surCurseur: document.activeElement.id,
+  affichee: document.getElementById('mc-prefs-scale-value').textContent
+}), echelleAvant);
+// Aux extremites rien ne s'echappe : Haut depuis la premiere case, Bas depuis le pied.
+await tvNav.focus('.mc-prefs li input[type=checkbox]');
+await tvNav.keyboard.press('ArrowUp');
+const hautBout = await arret();
+await tvNav.focus('.mc-prefs-save');
+await tvNav.keyboard.press('ArrowDown');
+const basBout = await arret();
+// Enregistrer envoie la couleur choisie a la telecommande.
+await tvNav.focus('.mc-prefs-save');
+await tvNav.keyboard.press('Enter');
+await tvNav.waitForFunction(() => (window.__ajax || []).length === 1, { timeout: 4000 });
+const envoye = await tvNav.evaluate(() => window.__ajax[0].body);
+await tvNav.close();
+
 // Sur ordinateur : un clic passe par le routeur, un clic modifie garde le lien.
 const routeur = await browser.newPage({ viewport: { width: 1280, height: 900 } });
 routeur.on('pageerror', e => errors.push('pageerror(routeur): ' + e.message));
@@ -3349,6 +3422,21 @@ check('TV: Retour Samsung rend l etape d historique prise a l ouverture', etapeR
 check('ANDROID TV: Retour (retour d historique) ferme le panneau, focus sur la tuile, page gardee',
   etapePrise === true && retourAndroid.panneau === 0 && retourAndroid.focus && retourAndroid.hash === '',
   { etapePrise, retourAndroid });
+check('TV: Bas depuis la derniere rangee visite pastilles, curseur, case Masquer puis le pied (aucun saut)',
+  descente.slice(-4).join('|') === 'pastille|mc-prefs-scale|mc-prefs-hide|pied:reset'
+    && descente[nbRangees - 1].indexOf('rangee:') === 0 && descente[nbRangees] === 'pastille', descente);
+check('TV: Haut remonte le meme chemin',
+  montee.slice(0, 3).join('|') === 'mc-prefs-hide|mc-prefs-scale|pastille' && montee[3].indexOf('rangee:') === 0, montee);
+check('TV: Gauche/Droite se deplacent entre pastilles sans en sortir',
+  droite.slice(0, nbPastilles - 1).every((v, i) => v === i + 1) && droite[nbPastilles - 1] === nbPastilles - 1 && gaucheIdx === nbPastilles - 2, { droite, gaucheIdx, nbPastilles });
+check('TV: OK sur une pastille la choisit (une seule choisie, couleur et accent suivent)',
+  pastille.pressee === 'true' && pastille.uneSeule === 1 && pastille.couleur.toLowerCase() === pastille.voulue.toLowerCase()
+    && pastille.accent.toLowerCase() === pastille.voulue.toLowerCase(), pastille);
+check('TV: Gauche sur le curseur change la taille, le focus reste dessus',
+  Number(echelle.apres) === Number(echelle.avant) - 5 && echelle.surCurseur === 'mc-prefs-scale' && echelle.affichee.indexOf(echelle.apres) === 0, echelle);
+check('TV: rien ne sort du panneau aux extremites', hautBout.indexOf('rangee:') === 0 && basBout === 'pied:save', { hautBout, basBout });
+check('TV: Enregistrer envoie la couleur choisie a la telecommande',
+  envoye && envoye.HighlightColor.toLowerCase() === pastille.voulue.toLowerCase(), envoye);
 check('TV: la fenetre Seerr garde le focus, OK coche une saison',
   tvFenetre.conteneur && saisonCochee === !tvFenetre.coche, { tvFenetre, saisonCochee });
 check('TV: titre absent, la carte prend le focus et OK ouvre la demande',
